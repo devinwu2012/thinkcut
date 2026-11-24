@@ -1,0 +1,32 @@
+{
+  "version": "local-repeats-v1",
+  "min_tokens": 2,
+  "max_tokens": 16,
+  "max_edited_gap_ms": 2500,
+  "max_phrase_ms": 6500,
+  "keep_before_replacement_ms": 80,
+  "emphasis_phrases": [
+    "真的",
+    "非常",
+    "特别",
+    "一定",
+    "不要",
+    "不行",
+    "没有",
+    "谢谢",
+    "加油"
+  ],
+  "emphasis_context": [
+    "强调",
+    "说三遍",
+    "再说一遍",
+    "重复一遍"
+  ],
+  "max_cross_clause_gap_ms": 1500,
+  "min_cross_clause_tokens": 6,
+  "cross_sentence_prefixes": [
+    "或者",
+    "以及",
+    "自然语音"
+  ]
+}

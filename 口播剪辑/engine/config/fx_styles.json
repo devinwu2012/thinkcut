@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "styles": {
+    "brand_label": {
+      "font": "PingFang SC",
+      "style": "Semibold",
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "font_file": "PingFang.ttc#11",
+      "default_size": 0.0616,
+      "shadow_enabled": true,
+      "shadow": {
+        "rgb": [
+          0,
+          0,
+          0
+        ],
+        "opacity": 0.67,
+        "offset": [
+          0,
+          -0.045
+        ],
+        "softness": 10
+      },
+      "note": "默认标签（2026-11-12 统一到包装系统）：苹方 SC 中粗白字、不加底、柔和投影（黑 67%、下移约 6px、柔化 10≈包装系统的 12px 模糊）。字号 Size 0.0616＝4K 竖版字身 76px，和包装系统“引线标注”同大（架构审查验收：Text+ 主要在实拍里点名部件）。跟随标签、对比标签、实拍里点名部件都默认用它。"
+    },
+    "brand_label_dark": {
+      "font": "PingFang SC",
+      "style": "Medium",
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "font_file": "PingFang.ttc#7",
+      "default_size": 0.0519,
+      "shadow_enabled": false,
+      "background": {
+        "rgb": [
+          0.06274509803921569,
+          0.07058823529411765,
+          0.08627450980392157
+        ],
+        "opacity": 0.66,
+        "extend_horizontal": 0.183,
+        "extend_vertical": 0.108,
+        "level": 1,
+        "round": 0.5
+      },
+      "note": "深色半透明底的标签，只在实拍画面太花、白字＋投影看不清时用（先试挪到画面里暗、空的地方，挪不开再换它）。按包装系统“提示”胶囊做：苹方 SC 中等 64px（Size 0.0519）、底色 #101216 66% 不透明、全圆角，4K 竖版胶囊高 114px、字两边各留 42px。"
+    }
+  },
+  "colors": {
+    "white": [
+      1,
+      1,
+      1
+    ],
+    "accent": [
+      0.39215686274509803,
+      0.6627450980392157,
+      0.9098039215686274
+    ],
+    "note": "花字文字颜色只有这两个（包装系统）：white 白、accent 唯一强调色 #64A9E8。计划里要强调色就写 style.color=\"accent\"；不写就是样式自带的白。计划校验不接受别的文字颜色。"
+  },
+  "motion": {
+    "in_seconds": 0.4,
+    "out_seconds": 0.3,
+    "rise_width_ratio": 0.01296,
+    "note": "2026-11-12 用户看“静态 vs 淡入淡出”对比片后定：Text+ 花字默认按包装系统节奏，0.40 秒缓出淡入＋上移 28px（4K 竖版，按画宽 0.01296 换算），0.30 秒缓入淡出；只做透明度和位移，不做模糊。取代 2026-10-16 的“默认静态”。用户明确说某条要静态时，计划 style.static=true。",
+    "source": "达芬奇 21.1.1 实测：上移用 Text+ 的行偏移 LineOffset（字、投影、底框一起动，0.05＝108px＝画宽单位）；透明度用各着色元素 Opacity1/2/3 的曲线，缓动和包装系统 huazi.py 的 eo/ei 逐帧差 ≤0.004"
+  },
+  "font_files": {
+    "苹方": "PingFang.ttc#11"
+  },
+  "safety": {
+    "edge_short_side_ratio": 0.05,
+    "subtitle_fallback_bottom_ratio": 0.2,
+    "subject_gap_text_height_ratio": 0.5,
+    "measurement_padding_px": 2,
+    "uncalibrated_padding_em": 0.15,
+    "textplus_width_factor": 0.8,
+    "text_reference_width": 1920,
+    "textplus_horizontal_alignment": {
+      "3": "center"
+    },
+    "textplus_vertical_alignment": {
+      "3": "center"
+    },
+    "font_calibration": {
+      "PingFang.ttc#11": {
+        "Text+": {
+          "span_units": 1400,
+          "baseline_units": 330,
+          "border_fill": {
+            "height_ratio": 0.84,
+            "horizontal_padding_ratio": 0.2,
+            "source": "2026-11-12 达芬奇 21.1.1 测试工程 _AI测试_花字包装系统_1112（2160×2880）：Size .06/.0843，“通气阀防臭”“Oatey”“2000 兆”“通气阀 Oatey 防臭”实测。Text+ 里苹方按行高（hhea 1060+340=1400 单位）排字，不是 OS/2 的 1000；字墨四边误差 ≤1px，基线 330 单位。底框高=0.802×Size×画宽（加余量写 0.84），两边各留 0.192×Size×画宽（写 0.2）再加延伸×Size×画宽；仅支持居中单行；2026-11-12 复测 苹方中等 Size .0519：字墨、胶囊（延伸 0/0 和 .183/.108）同样吻合"
+          }
+        }
+      },
+      "PingFang.ttc#7": {
+        "Text+": {
+          "span_units": 1400,
+          "baseline_units": 330,
+          "border_fill": {
+            "height_ratio": 0.84,
+            "horizontal_padding_ratio": 0.2,
+            "source": "苹方 SC 中等（PingFang.ttc#7）和中粗行高一样，用同一组实测值；2026-11-12 达芬奇 21.1.1 在 Size .0519 复测“通气阀防臭”“Oatey”字墨和胶囊"
+          }
+        }
+      }
+    },
+    "minimum_size_ratio": 0.75,
+    "relaxed_edge_short_side_ratio": 0.03,
+    "relaxed_edge_kinds": [
+      "photo_label",
+      "keyword",
+      "compare_label"
+    ],
+    "person_overlap_area_ratio": 0.15,
+    "photo_top_overlap_text_height_ratio": 0.35,
+    "textplus_shadow": {
+      "offset_unit": "Size×画宽",
+      "softness_px_per_width": 0.002,
+      "source": "2026-11-12 同一测试工程实测：Offset3 0.1 在 Size .0843 时移 18px、Size .06 时移 13px（=偏移×Size×画宽）；柔化 2/4/8 向外扩 7/14/24px（2160 宽，约 3–3.5px 每单位，估算按 0.002×画宽 留余量）；Size .0616 和 .0843 时柔化 10 都约等于 12.5px 模糊（和字号无关）"
+    }
+  },
+  "size_source": "brand_label 字号 .0616：苹方 SC 中粗在 Text+ 里字身＝Size×画宽×0.8×1000/1400，4K 竖版 76px，和包装系统引线标注同大；brand_label_dark .0519＝64px，和包装系统提示胶囊同大（2026-11-12 实测）。冬青黑体、#2F7BFF 蓝底已于 2026-11-12 去掉。",
+  "matting": {
+    "enabled": true,
+    "max_coverage": 0.2
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "photo_max_seconds": 5.0,
+  "max_coverage": 1.0,
+  "window_min_seconds": 6.0,
+  "window_max_seconds": 12.0,
+  "min_shot_seconds": 1.0,
+  "scene_threshold": 0.35,
+  "prompt_version": 1
+}

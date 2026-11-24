@@ -1,0 +1,18 @@
+{
+ "说明": "示例：一个 2.6×2.2 米的卫生间。俯视，单位米，x 向右（东）、y 向上（北）；墙写中线，厚度 wall_thickness。rotation=0 表示背面朝北，逆时针转。场景.py 建模只读这个文件。",
+ "wall_thickness": 0.12,
+ "walls": [
+  {"id": "s", "a": [0, 0], "b": [2.6, 0]}, {"id": "n", "a": [0, 2.2], "b": [2.6, 2.2]},
+  {"id": "w", "a": [0, 0], "b": [0, 2.2]}, {"id": "e", "a": [2.6, 0], "b": [2.6, 2.2]}
+ ],
+ "rooms": [{"id": "bath", "name": "卫生间", "rect": [0, 0, 2.6, 2.2]}],
+ "doors": [
+  {"id": "入口门", "wall": "s", "hinge": [0.3, 0], "width": 0.8, "closed": 0, "opened": 90, "kind": "swing"},
+  {"id": "淋浴门", "line": [[1.7, 1.2], [2.4, 1.2]], "width": 0.7, "kind": "sliding"}
+ ],
+ "items": [
+  {"id": "马桶", "kind": "马桶", "room": "bath", "center": [1.35, 1.79], "size": [0.4, 0.7, 0.8], "rotation": 0, "back_wall": "n"},
+  {"id": "洗手台", "kind": "洗手台", "room": "bath", "center": [0.285, 1.6], "size": [0.6, 0.45, 0.85], "rotation": 90, "back_wall": "w"}
+ ],
+ "showers": [{"id": "淋浴间", "rect": [1.6, 1.2, 2.54, 2.14], "head": [2.07, 2.14], "door": "淋浴门", "back_wall": "n", "room": "bath"}]
+}

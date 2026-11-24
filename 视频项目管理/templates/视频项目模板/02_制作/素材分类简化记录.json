@@ -1,0 +1,28 @@
+{
+  "state": "verified",
+  "before": {
+    "schema_version": 1,
+    "items": []
+  },
+  "directory_mapping": {
+    "口播原片": "A roll"
+  },
+  "removed_empty_directories": [
+    "补充画面",
+    "图片资料",
+    "音频素材",
+    "参考资料"
+  ],
+  "after": {
+    "schema_version": 1,
+    "items": []
+  },
+  "verification": {
+    "state": "materials_verified",
+    "files": 0,
+    "categories": []
+  },
+  "media_bytes_unchanged": true,
+  "offline_tests_passed": 21,
+  "feishu_revision": 9
+}

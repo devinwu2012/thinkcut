@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "name": "视频项目模板",
+  "title": "",
+  "cover_main": "",
+  "cover_sub": "",
+  "description": "",
+  "tags": [],
+  "bilibili_category": "",
+  "youtube_category": "26",
+  "original": true,
+  "materials_confirmed": false,
+  "documents": [],
+  "assets": {
+    "video": "",
+    "subtitles": "",
+    "covers": {
+      "3:4": "",
+      "4:3": "",
+      "16:9": ""
+    }
+  },
+  "targets": [],
+  "resolve": {
+    "project": "",
+    "timeline": ""
+  },
+  "delivery": "蚁小二内部草稿；用户在客户端手动发布"
+}

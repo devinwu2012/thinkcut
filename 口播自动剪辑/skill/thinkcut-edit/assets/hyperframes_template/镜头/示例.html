@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- HyperFrames 镜头模板。一个镜头一个文件：复制本文件，改名成镜头号（如 A20.html），只改“这个镜头的内容”和“时间轴”两处。
+     __W__ __H__ __DUR__ 和 window.THINKCUT 由 出片.py 按本片画幅、这个镜头在 分镜.json 里的起止自动填，不要手写数字。
+     不要直接双击打开本文件；看效果用 python3 出片.py --预览 镜头号，再 hyperframes preview。 -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=__W__, height=__H__" />
+    <script src="共用/gsap.min.js"></script>
+    <link rel="stylesheet" href="共用/基础.css" />
+    <style>
+      html, body, #root { width: __W__px; height: __H__px; }
+      /* 这个镜头自己的样式写在这里，尺寸按“设计稿像素”写（3:4、9:16 设计稿宽 1080；16:9 宽 1920），出 4K 时自动放大 2 倍 */
+      .row { position: absolute; left: 80px; right: 80px; height: 96px; display: flex; align-items: center; gap: 24px; border-bottom: 2px solid rgba(255, 255, 255, 0.08); }
+      .row .num { font-size: 34px; font-weight: 600; color: var(--blue); width: 60px; }
+      .row .name { font-size: 46px; font-weight: 600; }
+      .row .desc { font-size: 28px; color: var(--dim); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="__DUR__" data-width="__W__" data-height="__H__">
+      <!-- #stage 就是画面区（导航条下面那一块），位置和大小由 共用/基础.js 按本片版式摆好；内容都放在 #design 里 -->
+      <div id="stage"><div id="design">
+        <!-- ===== 这个镜头的内容 ===== -->
+        <div class="title" style="position:absolute; left:80px; top:90px; font-size:40px; color:var(--dim)">示例：三步清单</div>
+        <div class="row" id="r1" style="top:200px"><span class="num">01</span><span class="name">第一步</span><span class="desc">小字说明</span></div>
+        <div class="row" id="r2" style="top:296px"><span class="num">02</span><span class="name">第二步</span><span class="desc">小字说明</span></div>
+        <div class="row" id="r3" style="top:392px"><span class="num">03</span><span class="name">第三步</span><span class="desc">小字说明</span></div>
+        <div id="box" style="position:absolute; left:240px; top:760px; width:600px; height:240px; border:3px solid rgba(255,255,255,0.85); border-radius:12px"></div>
+      </div></div>
+    </div>
+    <script src="共用/基础.js"></script>
+    <script>
+      // ===== 时间轴 =====  时间都是“这个镜头里的第几秒”（镜头开头是 0）。
+      // 要卡口播里的某个字：先在 分镜规格.json 的 anchors 里定卡点，这里写 THINKCUT.at('卡点名')，改了口播时间不用回来改数字。
+      const tl = gsap.timeline({ paused: true });
+      ["#r1", "#r2", "#r3"].forEach((id, i) => {
+        tl.fromTo(id, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 0.3 + i * 0.5);
+      });
+      // 标签：字在目标点正上方、一条竖线引上去（THINKCUT.label，不要自己画折线）；两个标签先后出现，不同时弹出来
+      THINKCUT.label(tl, { x: 360, y: 760, text: "左边", from: 1.9, to: 4.6 });
+      THINKCUT.label(tl, { x: 720, y: 760, text: "右边", from: 2.6, to: 5.3 });
+      // 下面三句每个镜头最后都要有：把时间轴补到镜头结尾，交给 HyperFrames（这一句必须原样写在镜头文件里，它的检查认这个写法），停在第 0 秒
+      THINKCUT.pad(tl);
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

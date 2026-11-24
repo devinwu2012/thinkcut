@@ -1,0 +1,24 @@
+/* HyperFrames 镜头共用样式：字体、配色、画面区。颜色以 references/动画风格.md 和包装系统为准，这里不另起一套。 */
+@font-face { font-family: "PF"; font-weight: 400; src: local("PingFang SC Regular"), local("PingFangSC-Regular"); }
+@font-face { font-family: "PF"; font-weight: 500; src: local("PingFang SC Medium"), local("PingFangSC-Medium"); }
+@font-face { font-family: "PF"; font-weight: 600; src: local("PingFang SC Semibold"), local("PingFangSC-Semibold"); }
+:root {
+  --bg: #16181D;      /* 暗场底色 */
+  --blue: #64A9E8;    /* 正确做法、重点 */
+  --red: #FF5C5C;     /* 错误做法、警示 */
+  --green: #2FA36B;   /* 对勾 */
+  --white: #FFFFFF;
+  --dim: #9A9A9A;     /* 次要字 */
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; background: transparent; }
+#root { position: relative; background: var(--bg); font-family: "PF", sans-serif; font-weight: 500; color: var(--white); }
+#root.transparent { background: transparent; }      /* 出片.py --透明：不画底色，出带透明通道的片（叠在别的画面上用） */
+#stage { position: absolute; overflow: hidden; }
+#design { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+/* 标签（THINKCUT.label，2026-11-21 新14）：白字不加底、柔和投影；目标点蓝圆环＋白芯；引线一条白竖线，字在目标点正上方。尺寸是设计稿像素（4K 时 ×2，和 Blender 标签一样大） */
+.brand-label { position: absolute; width: 0; height: 0; opacity: 0; }
+.brand-label .ring { position: absolute; left: -13px; top: -13px; width: 26px; height: 26px; border: 3px solid var(--blue); border-radius: 50%; }
+.brand-label .ring::after { content: ""; position: absolute; left: 6px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--white); }
+.brand-label .line { position: absolute; left: -1.25px; bottom: 13px; width: 2.5px; background: rgba(255, 255, 255, 0.9); }
+.brand-label .text { position: absolute; left: 0; transform: translateX(-50%); white-space: nowrap; font-size: 38px; font-weight: 600; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55); }

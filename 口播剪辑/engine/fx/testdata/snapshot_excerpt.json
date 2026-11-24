@@ -1,0 +1,372 @@
+{
+  "schema_version": 1,
+  "project": "离线摘录",
+  "timecode": "01:00:00:00",
+  "timeline": {
+    "name": "02主线时间线",
+    "id": "fixture-main",
+    "start": 108000,
+    "end": 115533,
+    "fps": 29.97,
+    "width": 2880,
+    "height": 2160,
+    "tracks": [],
+    "markers": {},
+    "items": [
+      {
+        "id": "faebeb9c-6de5-48c1-a792-f30591feffd0",
+        "name": "Text+",
+        "type": "video",
+        "track": 4,
+        "start": 108374,
+        "end": 108432,
+        "texts": [
+          {
+            "tool": "Template",
+            "inputs": {
+              "StyledText": "Step 1.",
+              "Font": "Xingkai SC",
+              "Style": "Bold",
+              "Size": 0.1732,
+              "Center": {
+                "1": 0.5,
+                "2": 0.5,
+                "3": 0.0
+              },
+              "GlobalIn": 0.0,
+              "GlobalOut": 57.0,
+              "Alpha1": 1.0,
+              "Enabled1": 1.0,
+              "Enabled2": 0.0,
+              "Enabled3": 0.0,
+              "Red1": 0.0,
+              "Green1": 0.0,
+              "Blue1": 0.0,
+              "SoftnessX3": null,
+              "SoftnessY3": null,
+              "Offset3": null,
+              "Opacity3": null,
+              "WriteOnStart": null,
+              "WriteOnEnd": null,
+              "samples": [
+                {
+                  "frame": 0.0,
+                  "text": "Step 1.",
+                  "size": 0.1732
+                },
+                {
+                  "frame": 29.0,
+                  "text": "Step 1.",
+                  "size": 0.1732
+                },
+                {
+                  "frame": 57.0,
+                  "text": "Step 1.",
+                  "size": 0.1732
+                }
+              ]
+            },
+            "comp_range": {
+              "COMPN_RenderStart": 0.0,
+              "COMPN_RenderEnd": 57.0,
+              "COMPN_GlobalStart": 0.0,
+              "COMPN_GlobalEnd": 57.0
+            }
+          }
+        ],
+        "props": {
+          "Pan": -90.99999999999991,
+          "Tilt": 287.9999999999995,
+          "ZoomX": 1.0,
+          "ZoomY": 1.0,
+          "ZoomGang": true,
+          "RotationAngle": 0.0,
+          "AnchorPointX": 0.0,
+          "AnchorPointY": 0.0,
+          "Pitch": 0.0,
+          "Yaw": 0.0,
+          "FlipX": false,
+          "FlipY": false,
+          "CropLeft": 0.0,
+          "CropRight": 0.0,
+          "CropTop": 0.0,
+          "CropBottom": 0.0,
+          "CropSoftness": 0.0,
+          "CropRetain": false,
+          "DynamicZoomEase": 0,
+          "CompositeMode": 0,
+          "Opacity": 100.0,
+          "TransformEnabled": true,
+          "CroppingEnabled": true,
+          "DynamicZoomEnabled": false,
+          "CompositeEnabled": true
+        },
+        "track_name": "视频 4"
+      },
+      {
+        "id": "3833f673-c066-4acc-91dc-6e106e6bc236",
+        "name": "Text+",
+        "type": "video",
+        "track": 7,
+        "start": 110362,
+        "end": 110507,
+        "texts": [
+          {
+            "tool": "Template",
+            "inputs": {
+              "StyledText": "",
+              "Font": "ChillDuanSans",
+              "Style": "Black",
+              "Size": 0.115,
+              "Center": {
+                "1": 0.5,
+                "2": 0.5,
+                "3": 0.0
+              },
+              "GlobalIn": 0.0,
+              "GlobalOut": 144.0,
+              "Alpha1": 1.0,
+              "Enabled1": 1.0,
+              "Enabled2": 1.0,
+              "Enabled3": 0.0,
+              "Red1": 1.0,
+              "Green1": 1.0,
+              "Blue1": 1.0,
+              "SoftnessX3": null,
+              "SoftnessY3": null,
+              "Offset3": null,
+              "Opacity3": null,
+              "WriteOnStart": null,
+              "WriteOnEnd": null,
+              "samples": [
+                {
+                  "frame": 0.0,
+                  "text": "",
+                  "size": 0.115
+                },
+                {
+                  "frame": 72.0,
+                  "text": "",
+                  "size": 0.115
+                },
+                {
+                  "frame": 144.0,
+                  "text": "",
+                  "size": 0.115
+                }
+              ]
+            },
+            "comp_range": {
+              "COMPN_RenderStart": 0.0,
+              "COMPN_RenderEnd": 144.0,
+              "COMPN_GlobalStart": 0.0,
+              "COMPN_GlobalEnd": 144.0
+            }
+          }
+        ],
+        "props": {
+          "Pan": -979.1999999999999,
+          "Tilt": 907.2,
+          "ZoomX": 1.0,
+          "ZoomY": 1.0,
+          "ZoomGang": true,
+          "RotationAngle": 0.0,
+          "AnchorPointX": 0.0,
+          "AnchorPointY": 0.0,
+          "Pitch": 0.0,
+          "Yaw": 0.0,
+          "FlipX": false,
+          "FlipY": false,
+          "CropLeft": 0.0,
+          "CropRight": 0.0,
+          "CropTop": 0.0,
+          "CropBottom": 0.0,
+          "CropSoftness": 0.0,
+          "CropRetain": false,
+          "DynamicZoomEase": 0,
+          "CompositeMode": 0,
+          "Opacity": 100.0,
+          "TransformEnabled": true,
+          "CroppingEnabled": true,
+          "DynamicZoomEnabled": false,
+          "CompositeEnabled": true
+        },
+        "track_name": "视频 7"
+      },
+      {
+        "id": "b5776307-ca08-450f-a893-13e97d49c352",
+        "name": "超广角对比_主摄",
+        "type": "video",
+        "track": 13,
+        "start": 110373,
+        "end": 110416,
+        "texts": [
+          {
+            "tool": "Template",
+            "inputs": {
+              "StyledText": "",
+              "Font": "ChillDuanSans",
+              "Style": "Black",
+              "Size": 0.115,
+              "Center": {
+                "1": 0.5,
+                "2": 0.5,
+                "3": 0.0
+              },
+              "GlobalIn": 84.0,
+              "GlobalOut": 126.0,
+              "Alpha1": 1.0,
+              "Enabled1": 1.0,
+              "Enabled2": 1.0,
+              "Enabled3": 0.0,
+              "Red1": 1.0,
+              "Green1": 1.0,
+              "Blue1": 1.0,
+              "SoftnessX3": 0.0,
+              "SoftnessY3": 0.0,
+              "Offset3": {
+                "1": 0.003,
+                "2": -0.003,
+                "3": 0.0
+              },
+              "Opacity3": 0.85,
+              "WriteOnStart": null,
+              "WriteOnEnd": null,
+              "samples": [
+                {
+                  "frame": 84.0,
+                  "text": "",
+                  "size": 0.115
+                },
+                {
+                  "frame": 105.0,
+                  "text": "",
+                  "size": 0.115
+                },
+                {
+                  "frame": 126.0,
+                  "text": "",
+                  "size": 0.115
+                }
+              ]
+            },
+            "comp_range": {
+              "COMPN_RenderStart": 84.0,
+              "COMPN_RenderEnd": 126.0,
+              "COMPN_GlobalStart": 84.0,
+              "COMPN_GlobalEnd": 126.0
+            }
+          }
+        ],
+        "props": {
+          "Pan": 1086.9999999999993,
+          "Tilt": 907.2,
+          "ZoomX": 1.0,
+          "ZoomY": 1.0,
+          "ZoomGang": true,
+          "RotationAngle": 0.0,
+          "AnchorPointX": 0.0,
+          "AnchorPointY": 0.0,
+          "Pitch": 0.0,
+          "Yaw": 0.0,
+          "FlipX": false,
+          "FlipY": false,
+          "CropLeft": 0.0,
+          "CropRight": 0.0,
+          "CropTop": 0.0,
+          "CropBottom": 0.0,
+          "CropSoftness": 0.0,
+          "CropRetain": false,
+          "DynamicZoomEase": 0,
+          "CompositeMode": 0,
+          "Opacity": 100.0,
+          "TransformEnabled": true,
+          "CroppingEnabled": true,
+          "DynamicZoomEnabled": false,
+          "CompositeEnabled": true
+        },
+        "track_name": "视频 13"
+      },
+      {
+        "id": "fixture-nested-instance",
+        "name": "花字2_1008",
+        "type": "video",
+        "track": 17,
+        "track_name": "花字2",
+        "start": 108000,
+        "end": 109442,
+        "source_start": 0,
+        "texts": [],
+        "nested": {
+          "name": "花字2_1008",
+          "id": "fixture-nested",
+          "start": 108000,
+          "end": 109442,
+          "items": [
+            {
+              "id": "e42d9e66-dc31-48b6-9e5d-f71259da41e1",
+              "track": 1,
+              "type": "video",
+              "name": "Text+",
+              "start": 109410,
+              "end": 109442,
+              "duration": 32,
+              "track_name": "Video 1",
+              "props": {},
+              "texts": [
+                {
+                  "tool": "Template",
+                  "comp_range": {
+                    "COMPN_RenderStart": 0
+                  },
+                  "inputs": {
+                    "StyledText": "24毫米主摄",
+                    "Font": "AidianFengYaHeiChangTi",
+                    "Style": "Regular",
+                    "Center": {
+                      "1": 0.5,
+                      "2": 0.72,
+                      "3": 0.0
+                    },
+                    "HorizontalJustificationNew": 3.0,
+                    "VerticalJustificationNew": 3.0,
+                    "Red1": 1.0,
+                    "Green1": 1.0,
+                    "Blue1": 1.0,
+                    "Alpha1": 1.0,
+                    "Opacity1": 1.0,
+                    "Enabled1": 1.0,
+                    "Enabled2": 0.0,
+                    "Enabled3": 1.0,
+                    "ElementShape1": 0.0,
+                    "ElementShape3": 0.0,
+                    "Red3": 0.0,
+                    "Green3": 0.0,
+                    "Blue3": 0.0,
+                    "Alpha3": 1.0,
+                    "Opacity3": 0.85,
+                    "SoftnessX3": 0.0,
+                    "SoftnessY3": 0.0,
+                    "SoftnessGlow3": 0.0,
+                    "Offset3": {
+                      "1": 0.003,
+                      "2": -0.003,
+                      "3": 0.0
+                    },
+                    "GlobalIn": 0.0,
+                    "GlobalOut": 31.0
+                  },
+                  "samples": []
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "fixture_sources": [
+    "实操包/证据/用户当前版本_修复后.json：仅三条 Text+",
+    "第0阶段/证据/N_05_result.json：仅一条嵌套 Text+；外层实例为最小包装"
+  ]
+}

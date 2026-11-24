@@ -1,0 +1,165 @@
+{
+ "schema_version": 1,
+ "root": "素材库/音效素材",
+ "root_env": "AI_EDIT_SFX_DIR",
+ "frame_rate": "30000/1001",
+ "favorites": [
+  {
+   "filename": "咻-起身01+可爱.mp3",
+   "usage": "花字入场第 1 个",
+   "duration_frames": 7,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "UI+弹出，弹出+6.mp3",
+   "usage": "花字入场第 2 个",
+   "duration_frames": 5,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "02_清脆鼠标点击.mp3",
+   "usage": "花字入场第 3 个",
+   "duration_frames": 13,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "电子触摸-科技-综艺特效.mp3",
+   "usage": "科技/参数",
+   "duration_frames": 14,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "相机快门2.mp3",
+   "usage": "拍照样张，只取一下",
+   "duration_frames": 6,
+   "source_start_frame": 279,
+   "estimated": true,
+   "estimate_method": "ffprobe astats：最响峰连续 -18 dB 区段，前留 10ms、后留 20ms，29.97fps 向外取整；需试听确认"
+  },
+  {
+   "filename": "闪-想到+叮.mp3",
+   "usage": "结尾点赞关注",
+   "duration_frames": 11,
+   "source_start_frame": 3,
+   "estimated": true,
+   "estimate_method": "ffprobe astats：最响峰连续 -18 dB 区段，前留 10ms、后留 20ms，29.97fps 向外取整；需试听确认"
+  },
+  {
+   "filename": "咻+唰+转场音效.mp3",
+   "usage": "转场",
+   "duration_frames": 11,
+   "source_start_frame": 7,
+   "estimated": true,
+   "estimate_method": "ffprobe astats：最响峰连续 -18 dB 区段，前留 10ms、后留 20ms，29.97fps 向外取整；需试听确认"
+  },
+  {
+   "filename": "弹出窗口提示音效.mp3",
+   "usage": "提醒",
+   "duration_frames": 3,
+   "source_start_frame": 22,
+   "estimated": true,
+   "estimate_method": "ffprobe astats：最响峰连续 -18 dB 区段，前留 10ms、后留 20ms，29.97fps 向外取整；需试听确认"
+  },
+  {
+   "filename": "科技单击3.mp3",
+   "usage": "科技单击，只取一下",
+   "duration_frames": 4,
+   "source_start_frame": 2,
+   "estimated": true,
+   "estimate_method": "ffprobe astats：最响峰连续 -18 dB 区段，前留 10ms、后留 20ms，29.97fps 向外取整；需试听确认"
+  },
+  {
+   "filename": "单击鼠标声音音效.mp3",
+   "usage": "鼠标单击，只取一下",
+   "duration_frames": 4,
+   "source_start_frame": 80,
+   "estimated": true,
+   "estimate_method": "ffprobe astats：最响峰连续 -18 dB 区段，前留 10ms、后留 20ms，29.97fps 向外取整；需试听确认"
+  },
+  {
+   "filename": "打字声.mp3",
+   "usage": "文字逐字出现",
+   "duration_frames": 3,
+   "source_start_frame": 25,
+   "estimated": true,
+   "estimate_method": "ffprobe astats：最响峰连续 -18 dB 区段，前留 10ms、后留 20ms，29.97fps 向外取整；需试听确认"
+  },
+  {
+   "filename": "唰音效刷出标题.mp3",
+   "usage": "镜头推近/拉回的轻“唰”；2026-11-22 进黑名单（见 blacklist：用户否掉三次），选到会停",
+   "duration_frames": 25,
+   "source_start_frame": 0,
+   "estimated": true,
+   "estimate_method": "整段使用，需试听确认"
+  },
+  {
+   "filename": "mixkit-bathroom-toilet-flush-1889.wav",
+   "usage": "马桶冲水、水流冲下（Mixkit Bathroom toilet flush，免费可商用，见素材库/音效素材/来源说明.txt）",
+   "duration_frames": 150,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "mixkit-pen-marker-line-2998.wav",
+   "usage": "资料截图上的橙色下划线（马克笔划一道；2026-11-01 用户在 261030 试听选定，替代下划线上用的“唰”）",
+   "duration_frames": 12,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "mixkit-paper-quick-slice-2384.wav",
+   "usage": "划掉（打叉、划掉几天之类；2026-11-01 用户选定）",
+   "duration_frames": 11,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "mixkit-sand-swish-1494.wav",
+   "usage": "动画里刮掉表面浮浆的轻沙沙声（2026-11-01 用户选定，替代角磨机）",
+   "duration_frames": 57,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "mixkit-spray-water-or-liquid-3215.wav",
+   "usage": "动画里喷水（2026-11-01 用户选定）",
+   "duration_frames": 75,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "mixkit-water-bubble-1317.wav",
+   "usage": "动画里材料刷上去/渗进去的一声水泡（2026-11-01 用户选定）",
+   "duration_frames": 13,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "mixkit-cool-interface-click-tone-1113.wav",
+   "usage": "花字/卡片出现时的轻提示音（克制档，比“科技单击”柔；2026-11-12《水电阶段》下载试用，只给重点花字用，别每个花字都配；Mixkit 免费可商用，见素材库/音效素材/来源说明.txt）",
+   "duration_frames": 30,
+   "source_start_frame": 0,
+   "estimated": false
+  },
+  {
+   "filename": "mixkit-select-click-900.wav",
+   "usage": "更短更轻的点击（备用：列表逐条、小标签；2026-11-12《水电阶段》下载，还没在成片里用过；Mixkit 免费可商用，见素材库/音效素材/来源说明.txt）",
+   "duration_frames": 20,
+   "source_start_frame": 0,
+   "estimated": false
+  }
+ ],
+ "default_peak_dbfs": -5,
+ "blacklist_说明": "用户否掉过的音效：thinkcut-edit 的 sfx、花字音效 fx.py 选到就停；用户听过、这次确实要用才 --allow-sounds 放行（2026-11-22 从 5 条片子的反馈记录和问题台账整理）",
+ "blacklist": [
+  {
+   "filename": "唰音效刷出标题.mp3",
+   "why": "用户否掉三次：261110 水电“这个音效少用，尽量别用……不行就把它从音效库里删了”；261117 大字“人的眼睛”上“这块音效不好……我不喜欢这个音效”、“营销行为”上“现在音效赶紧删了，我以后都不想，太难听”",
+   "since": "2026-11-22"
+  }
+ ]
+}

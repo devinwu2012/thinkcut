@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>老房烟道反味修复</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0f11;overflow:hidden;font-family:"PingFang SC","Noto Sans SC",sans-serif}
+  #stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  #frame{position:relative;width:min(100vw,177.78vh);aspect-ratio:16/9}
+  #frame canvas{position:absolute;inset:0;width:100%;height:100%}
+  #bar{position:absolute;left:0;right:0;bottom:0;padding:10px 18px 14px;background:linear-gradient(transparent,rgba(0,0,0,.65));color:#ddd;font-size:13px;display:flex;gap:14px;align-items:center;opacity:0;transition:opacity .3s}
+  body:hover #bar{opacity:1}
+  #bar button{background:#FF6F00;border:0;color:#fff;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer}
+  #track{position:relative;flex:1;height:22px;cursor:pointer}
+  #track .rail{position:absolute;left:0;right:0;top:9px;height:4px;background:rgba(255,255,255,.2);border-radius:2px}
+  #track .fill{position:absolute;left:0;top:9px;height:4px;background:#FF6F00;border-radius:2px}
+  #track .tick{position:absolute;top:4px;width:1px;height:14px;background:rgba(255,255,255,.45)}
+  #track .lab{position:absolute;top:-12px;font-size:11px;color:rgba(255,255,255,.7);transform:translateX(-50%)}
+  #time{min-width:92px;text-align:right;font-variant-numeric:tabular-nums}
+  #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:16px}
+  body.clean #bar{display:none}
+</style>
+</head>
+<body>
+<div id="stage"><div id="frame"><canvas id="gl" style="display:none"></canvas><canvas id="ov"></canvas><div id="loading">正在生成画面……</div></div></div>
+<div id="bar"><button id="pp">暂停</button><div id="track"><div class="rail"></div><div class="fill"></div></div><div id="time"></div></div>
+<script>
+window.__err='';addEventListener('error',e=>{window.__err+=(e.message||'')+' @'+(e.lineno||'')+'\n'});addEventListener('unhandledrejection',e=>{window.__err+='REJ '+(e.reason&&e.reason.stack||e.reason)+'\n'});
+/* ======== 节奏配置（timeline.js）：拿到真实口播后只改这里的数字 ======== */
+/*TIMELINE*/
+</script>
+<script id="three-src" type="text/plain">/*THREE*/</script>
+<script type="module">
+const blobURL = (code) => URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+const threeURL = blobURL(document.getElementById('three-src').textContent);
+const THREE = await import(threeURL);
+window.THREE = THREE;
+/*APP*/
+document.getElementById('loading').remove();
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "timeline": {
+    "name": "02主线时间线",
+    "start": 108000,
+    "end": 115533,
+    "width": 2880,
+    "height": 2160
+  },
+  "effects": [
+    {
+      "effect_id": "lens-spec-001",
+      "group_id": "lens-001",
+      "kind": "spec",
+      "text": "24毫米主摄",
+      "start": 109410,
+      "end": 109442,
+      "layer": 2,
+      "source_marker": null,
+      "style": {
+        "profile": "brand_label",
+        "size": 0.075
+      },
+      "anchor": {
+        "subject": "镜头标注下方",
+        "coordinate_system": "frame_normalized_bottom_left",
+        "center": [
+          0.5,
+          0.72
+        ],
+        "subject_bbox": null
+      },
+      "replace_item_ids": [],
+      "animation": [],
+      "sounds": []
+    }
+  ]
+}

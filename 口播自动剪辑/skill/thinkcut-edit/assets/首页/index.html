@@ -1,0 +1,229 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>ThinkCut</title>
+<style>
+/* 首页（2026-11-24 用户定方向 C：“像网页、丑、不合理、片子删不掉”→ 四步看板，每条片子开成自己的窗口）。thinkcut_edit.py home 起的服务给它（固定端口 8760）。
+   规矩：
+   1. 状态只有 4 个词、同一套颜色：待你看（蓝）／待发送（橙）／AI 在改（紫）／✓ 已定（绿）；没事做的不挂标签。四步：写文案 → 出初稿 → 改初稿 → 发布。
+   2. 外观按 Mac 原生：系统字体，浅色为主、跟系统深浅色走，工具栏 52 高；主按钮“＋ 新建片子”在工具栏最右。
+   3. 看板／列表两种看法，记住上次选的（只存在这台电脑的浏览器里）。
+   4. 右键一条片子（看板的卡、列表的行都一样）：打开、在 Finder 中显示、重命名…、移到“做完的”／移回来、复制片名、移到回收站…。
+   5. 小浮层（“新建片子”“AI 在等吗”、右键菜单）点外面空白处关、Esc 关；确认框（改名、删除）是 Mac 式从工具栏下面落下的，点外面不关，只能点按钮或 Esc。
+   6. 删除＝整个片子文件夹挪进 NAS 回收站（能拿回来，不是永久删除），先弹确认框；挪完底下提示条可以“撤销”。
+   7. 只开一条片子（C2，用户 2026-11-24 定；达芬奇一次只开一个工程）：单击只选中，双击（或回车、右键“打开”）就在这个窗口里进到这条片子
+      （location.href＝审片台网址?home=首页地址#栏目），在片子里按 ⌘W（外壳）或浏览器后退回到这里；上次开的那张卡描蓝边、标“上次开的”。
+      审片台还没起时先到首页的 /open?…，首页起好审片台再 302 跳过去（这一步不进浏览器历史，后退直接回首页）；新建片子也走它。
+   颜色是三块共用的苹果 macOS 配色（变量名和值见共享约定 C2_配色和约定，审片台、外壳一样）。 */
+:root{--bg:#ffffff;--bar:#f6f6f6;--side:#f9f9f9;--card:#ffffff;--text:#1d1d1f;--text-2:#3a3a3c;--muted:#6e6e73;--line:#e5e5e5;--line-2:#c7c7cc;--chip:#f0f0f2;--seg:#e3e3e8;--seg-on:#ffffff;
+  --accent:#007aff;--accent-text:#0066cc;--red:#ff3b30;
+  --s-wait:#0066cc;--s-wait-bg:#e5f0ff;--s-todo:#b35c00;--s-todo-bg:#fff1dc;--s-ai:#8944ab;--s-ai-bg:#f3e8fa;--s-ok:#248a3d;--s-ok-bg:#e3f5e8;--dot-ok:#34c759;--dot-todo:#ff9500;
+  --shadow:0 1px 2px rgba(0,0,0,.06),0 0 0 1px var(--line);--menu:rgba(246,246,246,.97);--scrim:rgba(0,0,0,.18)}
+@media (prefers-color-scheme:dark){:root{--bg:#1e1e1e;--bar:#2b2b2b;--side:#242424;--card:#2c2c2e;--text:#f5f5f7;--text-2:#d1d1d6;--muted:#98989d;--line:#3a3a3c;--line-2:#545458;--chip:#3a3a3c;--seg:#3a3a3c;--seg-on:#636366;
+  --accent:#0a84ff;--accent-text:#64a8ff;--red:#ff453a;
+  --s-wait:#64a8ff;--s-wait-bg:#0f2f55;--s-todo:#ffb340;--s-todo-bg:#4a3418;--s-ai:#da8fff;--s-ai-bg:#3b2147;--s-ok:#4cd964;--s-ok-bg:#16351f;--dot-ok:#30d158;--dot-todo:#ff9f0a;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 0 0 1px var(--line);--menu:rgba(43,43,43,.97);--scrim:rgba(0,0,0,.4)}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}[hidden]{display:none!important}
+body{display:flex;flex-direction:column;background:var(--side);color:var(--text);font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none}
+button,input{font:inherit;color:inherit}input{-webkit-user-select:text;user-select:text}
+.tbtn{height:28px;border-radius:6px;border:0;background:transparent;display:inline-flex;align-items:center;gap:6px;padding:0 10px;cursor:default;white-space:nowrap}
+.tbtn:hover:not(:disabled){background:var(--chip)}.tbtn.primary{background:var(--accent);color:#fff;font-weight:600;padding:0 12px}.tbtn.primary:hover:not(:disabled){filter:brightness(1.08);background:var(--accent)}
+.tbtn.plain{background:var(--card);box-shadow:0 0 0 1px var(--line-2);padding:0 16px}.tbtn.plain:hover:not(:disabled){background:var(--card)}
+.tbtn.danger{background:var(--red);color:#fff;font-weight:600;padding:0 16px}.tbtn.danger:hover:not(:disabled){background:var(--red);filter:brightness(1.08)}
+button:disabled{opacity:.45}button:focus-visible,.card:focus-visible,tr:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.muted{color:var(--muted)}.grow{flex:1}
+.pill{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:11px;font-size:11px;font-weight:600;white-space:nowrap}
+.st-wait{color:var(--s-wait);background:var(--s-wait-bg)}.st-todo{color:var(--s-todo);background:var(--s-todo-bg)}.st-ai{color:var(--s-ai);background:var(--s-ai-bg)}.st-ok{color:var(--s-ok);background:var(--s-ok-bg)}
+.live{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--dot-ok);margin-left:6px;flex:none}
+/* 工具栏 */
+.toolbar{height:52px;flex:0 0 52px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--bar);border-bottom:1px solid var(--line);white-space:nowrap;min-width:0}
+.toolbar h1{font-size:15px;font-weight:700;margin:0}
+html.cutdesk-app .toolbar{padding-left:92px}   /* 在 Mac 外壳里：左边给窗口三颗灯留够空（C2 用户嫌太近）；拖窗口外壳来做 */
+.sum{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;min-width:0}.sum b.t{color:var(--s-wait)}.sum b.a{color:var(--s-ai)}
+.seg{display:flex;background:var(--seg);border-radius:6px;padding:2px;flex:none}.seg .tbtn{height:24px;padding:0 10px;border-radius:5px}.seg .tbtn:hover{background:transparent}
+.seg .tbtn[aria-pressed="true"],.seg .tbtn[aria-pressed="true"]:hover{background:var(--seg-on);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.pop{position:relative;flex:0 0 auto}.pop>summary{list-style:none}.pop>summary::-webkit-details-marker{display:none}
+.pop-body{position:absolute;right:0;top:36px;width:420px;max-width:calc(100vw - 32px);background:var(--card);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.2),0 0 0 1px var(--line);padding:14px 16px;z-index:20;white-space:normal;-webkit-user-select:text;user-select:text}
+.pop-body h3{font-size:13px;margin:0 0 6px}.pop-body code{display:block;background:var(--bg);border-radius:6px;padding:6px 9px;font-size:12px;word-break:break-all;margin:4px 0 8px;user-select:all}
+.aisum{display:flex;align-items:center;gap:6px;font-size:12px;height:28px;padding:0 8px;border-radius:6px;color:var(--muted)}.aisum:hover{background:var(--chip)}
+.dot{width:8px;height:8px;border-radius:4px;background:var(--line-2)}.dot.on{background:var(--dot-ok)}.dot.off{background:var(--dot-todo)}
+.field{display:block;width:100%;border:0;border-radius:6px;background:var(--card);padding:7px 10px;margin:6px 0 12px;box-shadow:inset 0 0 0 1px var(--line-2)}.field:focus{outline:3px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+.row{display:flex;align-items:center;gap:8px}
+/* 看板 */
+main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;padding:20px 22px;align-items:start;min-width:760px;flex:1 0 auto}
+.colh{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:0 4px 10px}.colh .c{color:var(--muted);font-weight:400}
+.num{width:20px;height:20px;border-radius:10px;background:var(--text);color:var(--bg);font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--card);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;cursor:default;transition:box-shadow .12s}
+.card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1),0 0 0 1px var(--line)}.card.sel{outline:2px solid var(--accent);outline-offset:1px}
+.card.last{box-shadow:0 0 0 3px var(--accent)}.thumb{position:relative}.lastpill{position:absolute;right:10px;top:10px;background:var(--card);color:var(--text-2);box-shadow:0 0 0 1px var(--line)}
+.thumb{height:150px;background:var(--chip);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;-webkit-user-drag:none}
+.cb{padding:10px 12px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.ct{font-weight:700;display:flex;align-items:center;min-width:0}.ct span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ct .n{color:var(--muted);font-weight:400;flex:none;margin-right:.6em}
+.cn{font-size:12px;color:var(--muted)}.cf{display:flex;gap:6px;align-items:center;min-height:20px}.cf .w{margin-left:auto;font-size:11px;color:var(--muted)}
+.err{color:var(--red);font-size:12px}
+.empty{border:1.5px dashed var(--line-2);border-radius:10px;height:120px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 16px;color:var(--muted);font-size:12px}
+.done{margin:0 22px 18px;background:var(--card);border-radius:10px;box-shadow:var(--shadow);min-width:716px;flex:none}
+.done-h{display:flex;align-items:center;gap:12px;padding:10px 14px;min-width:0}.done-h b{font-weight:700}.done-h .first{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.link{border:0;background:none;color:var(--accent-text);font-size:12px;padding:0;cursor:default;margin-left:auto;white-space:nowrap}
+.done-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;padding:4px 14px 14px}.done-grid .thumb{height:110px}
+.foot{height:36px;flex:0 0 36px;display:flex;align-items:center;justify-content:center;gap:18px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);background:var(--bar);white-space:nowrap;overflow:hidden}
+.blank{margin:60px auto;text-align:center;color:var(--muted)}
+/* 列表 */
+.table{width:100%;border-collapse:collapse;background:var(--card);min-width:760px}
+.table th{font-size:11px;font-weight:600;color:var(--muted);padding:6px 12px;border-bottom:1px solid var(--line);text-align:left;position:sticky;top:0;background:var(--card);white-space:nowrap;z-index:1}
+.table td{padding:0 12px;height:46px;border-bottom:1px solid var(--chip);white-space:nowrap}
+.table tr.film:hover td{background:var(--chip)}.table tr.film.sel td{background:var(--accent);color:#fff}
+.table .nm{max-width:0;width:40%}.table .nm>div{display:flex;align-items:center;min-width:0}.table .nm span{overflow:hidden;text-overflow:ellipsis}.table .n{color:var(--muted);margin-right:.6em;flex:none}
+.table .sub{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.table tr.film.sel .sub,.table tr.film.sel .n,.table tr.film.sel .muted,.table tr.film.sel .steps *{color:rgba(255,255,255,.9)!important}
+.table tr.grp td{height:28px;font-size:11px;font-weight:600;color:var(--muted);background:var(--chip)}
+.steps{display:flex;gap:4px;align-items:center}.steps i{font-style:normal;color:var(--muted)}.steps .s-done{color:var(--s-ok)}.steps .s-now{font-weight:700}.steps .s-todo{color:var(--muted)}
+/* 右键菜单、确认框、提示条 */
+.menu{position:fixed;z-index:60;min-width:220px;background:var(--menu);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:5px}
+.menu button{display:flex;width:100%;height:24px;align-items:center;gap:8px;padding:0 10px;border:0;border-radius:5px;background:none;text-align:left;cursor:default}
+.menu button:hover,.menu button:focus{background:var(--accent);color:#fff;outline:none}.menu button:hover .k,.menu button:focus .k{color:#fff}
+.menu .k{margin-left:auto;color:var(--muted);font-size:12px;padding-left:16px}.menu .red{color:var(--red)}.menu hr{border:0;height:1px;background:var(--line);margin:4px 8px}
+.scrim{position:fixed;left:0;right:0;top:52px;bottom:0;background:var(--scrim);z-index:50}
+.sheet{position:fixed;left:50%;top:52px;transform:translate(-50%,0);animation:drop .22s ease-out;width:480px;max-width:calc(100vw - 32px);background:var(--chip);border-radius:0 0 12px 12px;box-shadow:0 18px 40px rgba(0,0,0,.28);padding:20px 22px 18px;z-index:51;-webkit-user-select:text;user-select:text}
+@keyframes drop{from{transform:translate(-50%,-110%)}}.sheet .sh{display:flex;gap:14px}.sheet h2{font-size:14px;font-weight:700;margin:0 0 6px;word-break:break-all}.sheet p{font-size:12px;line-height:1.6;margin:0 0 6px}
+.sheet .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}.sheet svg{flex:none}
+#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);display:flex;align-items:center;gap:14px;background:rgba(29,29,31,.94);color:#fff;border-radius:10px;padding:8px 16px;font-size:13px;max-width:min(680px,90vw);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:70}
+#toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}#toast.err{background:var(--red)}#toast button{border:0;background:none;color:#64a8ff;font-weight:600;padding:0;cursor:default;flex:none}
+</style>
+<header class="toolbar">
+<h1>ThinkCut</h1><span id="sum" class="sum"></span><span class="grow"></span>
+<div class="seg" role="group" aria-label="看法"><button class="tbtn" id="v-board" aria-pressed="true">看板</button><button class="tbtn" id="v-list" aria-pressed="false">列表</button></div>
+<details id="aipop" class="pop ovl"><summary class="aisum" title="AI 连没连上：点开看怎么连"><i id="aidot" class="dot"></i><span id="aiword">AI …</span></summary><div class="pop-body" id="aibody"></div></details>
+<details id="newpop" class="pop ovl"><summary class="tbtn primary" id="newbtn">＋ 新建片子</summary><div class="pop-body">
+<h3>新片子的题目</h3><span class="muted">可以空着，先叫“未命名”，以后右键“重命名…”</span><input id="newtitle" class="field" maxlength="60" placeholder="比如：卫生间防水到底刷多高">
+<div class="row"><span class="muted grow">程序直接建好项目文件夹，进到这条片子的“文案”栏开始写；不用 AI 在场。</span><button id="newgo" class="tbtn primary">建好，开始写</button></div></div></details>
+</header>
+<main id="main"></main>
+<footer class="foot"><span>双击一张卡片，就在这个窗口里进到这条片子</span><span id="backhint">在片子里按 ⌘W，退回这里</span><span>一次只开一条片子（达芬奇一次只开一个工程）</span></footer>
+<div id="menu" class="menu" role="menu" hidden></div>
+<div id="scrim" class="scrim" hidden></div><div id="sheet" class="sheet" role="dialog" aria-modal="true" hidden></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TOKEN='__SHENPIAN_TOKEN__';
+const get=p=>fetch(p).then(r=>r.json());
+const post=(p,b)=>fetch(p,{method:'POST',headers:{'Content-Type':'application/json','X-Shenpian-Token':TOKEN},body:JSON.stringify(b||{})}).then(r=>r.json()).catch(()=>({ok:false,error:'连不上首页服务：在对话里让 AI 运行 home 重新打开'}));
+const store={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
+let toastT;function say(s,err,undo){const t=$('toast');t.innerHTML='<span>'+esc(s)+'</span>'+(undo?'<button id="undo">撤销</button>':'');t.className='show'+(err?' err':'');
+  if(undo)$('undo').onclick=()=>{t.className='';undo()};clearTimeout(toastT);toastT=setTimeout(()=>t.className='',undo?15000:err?7000:2400)}
+const UST={'待你看':'wait','待发送':'todo','AI 在改':'ai','已定':'ok'};
+// 页面上的叫法（2026-11-24 用户定“第一次看就懂”，和审片台一样）；数据里的状态名不变
+const SN={'待你看':'等你看','待发送':'还没交给 AI','AI 在改':'AI 修改中','已定':'✓ 已定'};
+const pill=(s,n)=>s?`<span class="pill st-${UST[s]}">${esc(SN[s]||s)}${n?' '+n:''}</span>`:'';
+const when=t=>{if(!t)return'';const d=new Date(t*1000),n=new Date(),p=x=>String(x).padStart(2,'0');
+  return d.toDateString()===n.toDateString()?`今天 ${p(d.getHours())}:${p(d.getMinutes())}`:`${d.getMonth()+1}月${d.getDate()}日`};
+const STEPS=['写文案','出初稿','改初稿','发布'];
+const EMPTY={写文案:'点右上“＋ 新建片子”开始写',出初稿:'文案定稿、点了“开工”后 AI 出初稿',改初稿:'AI 出好初稿后在这里看、提意见',发布:'审核线定了以后在这里导出、存草稿'};
+// —— 浮层：点外面空白处关、Esc 关（确认框例外：只能点按钮或 Esc） ——
+document.addEventListener('pointerdown',e=>{for(const el of document.querySelectorAll('.ovl'))if(el.open&&!el.contains(e.target))el.open=false;if(!$('menu').contains(e.target))hideMenu()});
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(!$('sheet').hidden)return closeSheet();hideMenu();document.querySelectorAll('.ovl').forEach(el=>el.open=false)});
+// —— 数据：先出名字，每条的阶段、封面、轮到你／AI 在改并发补齐 ——
+let FILMS=[],ST={},AI={},SEL=null,VIEW=store.get('cutdesk-home-view')==='list'?'list':'board',DONE_OPEN=false,loaded=false,EMPTY_MSG='';
+const film=id=>FILMS.find(f=>f.id===id);
+function where(f){if(f.done)return{col:'发布',tag:'已定',note:'做完了'};const st=ST[f.id]?.stages;if(!st)return{col:'写文案',note:'…'};
+  if(st.every(x=>x.state==='done'))return{col:'发布',tag:'已定',note:'存好草稿了；发完可以右键移到“做完的”'};
+  const x=st.filter(x=>x.state==='now').pop()||st[0];return{col:x.name,tag:x.tag,note:x.note}}
+const count=(f,tag)=>{const s=ST[f.id];if(!s||!tag||tag==='已定')return 0;return tag==='AI 在改'?s.ai:s.turn};
+const listening=f=>AI.films?.includes(f.id)||(AI.all&&ST[f.id]?.open);
+const title=(f,row)=>`<span class="n">${esc(f.num)}</span><span>${esc(f.title)}</span>${listening(f)?'<i class="live" title="AI 已连这条片子"></i>':''}${row&&LAST===f.id?'<span class="pill lastpill" style="position:static;margin-left:8px">上次开的</span>':''}`;
+function card(f){const s=ST[f.id],w=where(f);
+  const th=s?.cover?`<img alt="" src="/api/cover?id=${encodeURIComponent(f.id)}&v=${s.cover}">`:'还没有封面';
+  const foot=s?.ok===false?`<span class="err">${esc(s.error)}</span>`:pill(w.tag,count(f,w.tag));
+  return `<div class="card${SEL===f.id?' sel':''}${LAST===f.id?' last':''}" tabindex="0" data-id="${esc(f.id)}"><div class="thumb">${th}${LAST===f.id?'<span class="pill lastpill">上次开的</span>':''}</div><div class="cb"><div class="ct">${title(f)}</div>
+<div class="cn">${esc(w.note||'')}</div><div class="cf">${foot}<span class="w">${esc(when(s?.t||f.t))}</span></div></div></div>`}
+function drawBoard(){const doing=FILMS.filter(f=>!f.done),done=FILMS.filter(f=>f.done);
+  const cols=Object.fromEntries(STEPS.map(n=>[n,[]]));for(const f of doing)(cols[where(f).col]||cols['写文案']).push(f);
+  let h='<div class="board">'+STEPS.map((n,i)=>`<section class="col" aria-label="${n}"><div class="colh"><span class="num">${i+1}</span>${n}<span class="c">${cols[n].length}</span></div>${cols[n].length?cols[n].map(card).join(''):`<div class="empty">${EMPTY[n]}</div>`}</section>`).join('')+'</div>';
+  if(done.length)h+=`<div class="done"><div class="done-h"><b>做完的</b><span class="muted">${done.length}</span>${DONE_OPEN?'':`<span style="color:var(--s-ok)">✓</span><span class="first">${esc(done[0].num+'　'+done[0].title)}${done.length>1?`　等 ${done.length} 条`:''}</span>`}<button class="link" id="doneT">${DONE_OPEN?'收起':'全部展开'}</button></div>${DONE_OPEN?`<div class="done-grid">${done.map(card).join('')}</div>`:''}</div>`;
+  return h}
+function trow(f){const s=ST[f.id],w=where(f),st=s?.stages||STEPS.map(n=>({name:n,state:f.done?'done':'todo'}));
+  const steps=st.map((x,i)=>`${i?'<i>→</i>':''}<span class="s-${x.state}">${x.state==='done'?'✓':''}${esc(x.name)}</span>`).join('');
+  const ok=s&&s.ok!==false,c=ok?`<span style="${s.turn?'color:var(--s-wait);font-weight:600':''}">${s.turn}</span>`:'',a=ok?`<span style="${s.ai?'color:var(--s-ai);font-weight:600':''}">${s.ai}</span>`:'';
+  return `<tr class="film${SEL===f.id?' sel':''}" tabindex="0" data-id="${esc(f.id)}"><td class="nm"><div>${title(f,1)}</div><div class="sub">${s?.ok===false?`<span class="err">${esc(s.error)}</span>`:esc(w.note||'')}</div></td>
+<td><div class="steps">${steps}</div></td><td>${pill(w.tag)}</td><td>${c}</td><td>${a}</td><td class="muted">${esc(when(s?.t||f.t))}</td></tr>`}
+function drawList(){const doing=FILMS.filter(f=>!f.done),done=FILMS.filter(f=>f.done);
+  return `<table class="table"><thead><tr><th>片名</th><th>在哪一步</th><th>状态</th><th>等你处理</th><th>AI 修改中</th><th>改动时间</th></tr></thead><tbody>${doing.map(trow).join('')}
+${done.length?`<tr class="grp"><td colspan="6">做完的 · ${done.length}<button class="link" id="doneT" style="margin-left:10px">${DONE_OPEN?'收起':'全部展开'}</button></td></tr>${DONE_OPEN?done.map(trow).join(''):''}`:''}</tbody></table>`}
+function draw(){if(!loaded||!$('menu').hidden)return;const m=$('main'),y=m.scrollTop;
+  m.innerHTML=!FILMS.length?`<p class="blank">${esc(EMPTY_MSG)}</p>`:VIEW==='list'?drawList():drawBoard();m.scrollTop=y;
+  if($('doneT'))$('doneT').onclick=e=>{e.stopPropagation();DONE_OPEN=!DONE_OPEN;draw();if(DONE_OPEN)fill(FILMS.filter(f=>f.done&&!ST[f.id]))};
+  const tt=FILMS.filter(f=>!f.done).reduce((a,f)=>[a[0]+(ST[f.id]?.turn||0),a[1]+(ST[f.id]?.ai||0)],[0,0]);
+  $('sum').innerHTML=`等你处理 <b class="t">${tt[0]}</b> · AI 修改中 <b class="a">${tt[1]}</b>`}
+async function fill(list){const q=[...list];await Promise.all(Array.from({length:4},async()=>{while(q.length){const f=q.shift();const s=await get('/api/film?id='+encodeURIComponent(f.id)).catch(()=>null);if(s)ST[f.id]=s}}));draw()}
+let filling=false;
+async function refresh(){if(filling)return;filling=true;try{
+  const r=await get('/api/films');FILMS=r.films;EMPTY_MSG=r.exists?'还没有片子：点右上“＋ 新建片子”':'放片子的文件夹不存在：让 AI 看看 home 的 --root';
+  await fill(FILMS.filter(f=>!f.done||DONE_OPEN));loaded=true;draw()}finally{filling=false}}
+function setView(v){VIEW=v;store.set('cutdesk-home-view',v);$('v-board').setAttribute('aria-pressed',v==='board');$('v-list').setAttribute('aria-pressed',v==='list');draw()}
+$('v-board').onclick=()=>setView('board');$('v-list').onclick=()=>setView('list');setView(VIEW);
+// —— AI 在不在等（3 秒问一次） ——
+async function ai(){const a=await get('/api/ai').catch(()=>null);if(!a)return;const was=JSON.stringify([AI.all,AI.films]);AI=a;
+  const n=a.films.length;$('aidot').className='dot '+(a.all||n?'on':'off');$('aiword').textContent=a.all?'AI 已连':n?`AI 已连 ${n} 条`:'AI 未连';
+  $('aibody').innerHTML=`<h3>${a.all?'AI 正挂着“等所有片子”：任何一条片子点“交给 AI”它马上接手':n?'AI 只在等这几条片子：'+n+' 条（别的片子点了“交给 AI”它要等你提醒）':'AI 未连：你在片子里点“交给 AI”只会先记下'}</h3>
+<p class="muted">怎么连：打开 Claude Code（或 Codex），在对话里说一句“看口播台”，或让它运行下面这条命令（Claude Code 放后台跑，一直挂着）：</p><code>${esc(a.cmd)}</code>
+<p class="muted">片名后面的绿点＝AI 已连这条片子。</p>`;
+  if(JSON.stringify([a.all,a.films])!==was)draw()}
+// —— 打开片子：点的那一下就开成自己的窗口 ——
+const homeQ='?home='+encodeURIComponent(location.origin);
+const IN_APP=!!window.cutdeskApp||document.documentElement.classList.contains('cutdesk-app');
+if(!IN_APP)$('backhint').textContent='在片子里点浏览器的后退，退回这里';      // 浏览器里 ⌘W 是关标签页，不能这么说
+// —— 打开片子：就在这个窗口里进去（一次只开一条片子） ——
+let LAST=store.get('cutdesk-home-last');
+function openFilm(id,col){const s=ST[id];LAST=id;store.set('cutdesk-home-last',id);
+  location.href=s?.url?s.url+homeQ+(col?'#'+encodeURIComponent(col):''):'/open?id='+encodeURIComponent(id)+'&t='+TOKEN+(col?'&col='+encodeURIComponent(col):'')}
+const pick=e=>e.target.closest('[data-id]');
+function select(id){SEL=id;document.querySelectorAll('[data-id]').forEach(el=>el.classList.toggle('sel',el.dataset.id===id))}
+$('main').addEventListener('click',e=>{const el=pick(e);if(el)select(el.dataset.id)});
+$('main').addEventListener('dblclick',e=>{const el=pick(e);if(el)openFilm(el.dataset.id)});
+$('main').addEventListener('contextmenu',e=>{const el=pick(e);if(!el)return;e.preventDefault();select(el.dataset.id);showMenu(el.dataset.id,e.clientX,e.clientY)});
+document.addEventListener('keydown',e=>{if(!$('sheet').hidden||!$('menu').hidden||e.target.closest?.('input'))return;const el=document.activeElement?.closest?.('[data-id]');if(!el)return;const id=el.dataset.id;
+  if(e.key==='Enter'){e.preventDefault();openFilm(id)}else if(e.metaKey&&e.key==='Backspace'){e.preventDefault();askTrash(id)}else if(e.metaKey&&e.altKey&&e.code==='KeyR'){e.preventDefault();reveal(id)}});
+// —— 右键菜单 ——
+function showMenu(id,x,y){const f=film(id);if(!f)return;const m=$('menu');
+  m.innerHTML=`<button data-a="open">打开<span class="k">↩</span></button><hr><button data-a="reveal">在 Finder 中显示<span class="k">⌥⌘R</span></button><button data-a="rename">重命名…</button><hr>
+<button data-a="done">${f.done?'移回“在做的”':'移到“做完的”'}</button><button data-a="copy">复制片名</button><hr><button data-a="trash" class="red">移到回收站…<span class="k">⌘⌫</span></button>`;
+  m.hidden=false;const r=m.getBoundingClientRect();m.style.left=Math.max(4,Math.min(x,innerWidth-r.width-8))+'px';m.style.top=Math.max(4,Math.min(y,innerHeight-r.height-8))+'px';
+  m.onclick=e=>{const a=e.target.closest('button')?.dataset.a;if(!a)return;hideMenu();({open:()=>openFilm(id),reveal:()=>reveal(id),rename:()=>askRename(id),done:()=>moveDone(id),copy:()=>copyName(id),trash:()=>askTrash(id)})[a]()};
+  m.onkeydown=e=>{const b=[...m.querySelectorAll('button')],i=b.indexOf(document.activeElement);if(e.key==='ArrowDown'){e.preventDefault();b[(i+1)%b.length].focus()}else if(e.key==='ArrowUp'){e.preventDefault();b[(i-1+b.length)%b.length].focus()}}}
+function hideMenu(){if($('menu').hidden)return;$('menu').hidden=true;draw()}
+async function reveal(id){const r=await post('/api/reveal',{id});if(!r.ok)say('打不开 Finder：'+r.error,1)}
+function copyName(id){const f=film(id);navigator.clipboard?.writeText(f.name).then(()=>say('已复制：'+f.name),()=>say('没复制上：浏览器不让写剪贴板',1))}
+async function moveDone(id){const f=film(id);const r=await post('/api/finish',{id,back:f.done});if(!r.ok)return say((f.done?'没移回来：':'没移过去：')+r.error,1);
+  say(f.done?'移回“在做的”了':'移到“做完的”了');delete ST[id];SEL=r.id;await refresh()}
+// —— 确认框（Mac 式，从工具栏下面落下；点外面不关） ——
+function openSheet(html){const s=$('sheet');s.innerHTML=html;s.hidden=false;$('scrim').hidden=false;
+  setTimeout(()=>(s.querySelector('input')||s.querySelector('.go'))?.focus(),60)}
+function closeSheet(){const s=$('sheet');$('scrim').hidden=true;s.hidden=true;s.innerHTML=''}
+const ICON_TRASH='<svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"><path d="M12 14h20l-2 24H14z" fill="var(--chip)" stroke="var(--muted)" stroke-width="1.5"/><path d="M9 14h26M18 14v-4h8v4" fill="none" stroke="var(--muted)" stroke-width="1.5"/></svg>';
+const ICON_EDIT='<svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"><rect x="8" y="10" width="28" height="24" rx="4" fill="var(--chip)" stroke="var(--muted)" stroke-width="1.5"/><path d="M14 28l2-5 9-9 3 3-9 9z" fill="none" stroke="var(--muted)" stroke-width="1.5"/></svg>';
+function askTrash(id){const f=film(id);if(!f)return;
+  openSheet(`<div class="sh">${ICON_TRASH}<div><h2>把“${esc(f.name)}”移到回收站？</h2><p>整个片子文件夹（文案、素材、审片记录）挪到 NAS 回收站，<b>能拿回来，不是永久删除</b>。在跑的审片台会先停掉。</p></div></div>
+<div class="btns"><button class="tbtn plain go" id="no">取消</button><button class="tbtn danger" id="yes">移到回收站</button></div>`);
+  $('no').onclick=closeSheet;$('yes').onclick=async()=>{$('yes').disabled=true;const r=await post('/api/trash',{id});closeSheet();
+    if(!r.ok)return say('没删：'+r.error,1);delete ST[id];await refresh();
+    say(`已挪到 NAS 回收站（${r.to.split('/').slice(-3).join('/')}）${r.note||''}`,0,async()=>{const b=await post('/api/restore',{to:r.to,from:r.from});if(!b.ok)return say('没拿回来：'+b.error,1);say('拿回来了'+(b.note||''));await refresh()})}}
+function askRename(id){const f=film(id);if(!f)return;
+  openSheet(`<div class="sh">${ICON_EDIT}<div style="flex:1;min-width:0"><h2>重命名“${esc(f.name)}”</h2><p class="muted">前面的编号 ${esc(f.num||'（没有）')} 不变；文件夹名、项目.json、文案文件名一起改。在跑的审片台会先停掉。</p>
+<input id="rn" class="field" maxlength="60" value="${esc(f.title)}" aria-label="新片名"><p id="rnerr" class="err" hidden></p></div></div>
+<div class="btns"><button class="tbtn plain" id="no">取消</button><button class="tbtn primary go" id="yes">改名</button></div>`);
+  let force=false;
+  const go=async()=>{$('yes').disabled=true;const r=await post('/api/rename',{id,title:$('rn').value,user_ok:force});$('yes').disabled=false;
+    if(r.ok){closeSheet();say('改好了：'+r.id.split('/').pop());delete ST[id];SEL=r.id;return refresh()}
+    $('rnerr').hidden=false;$('rnerr').textContent=r.error;if(r.need_ok){force=true;$('yes').textContent='仍然改名'}};
+  $('no').onclick=closeSheet;$('yes').onclick=go;$('rn').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing)go()});$('rn').oninput=()=>{force=false;$('yes').textContent='改名'};setTimeout(()=>$('rn')?.select(),70)}
+// —— 新建片子：只要一个题目；点的那一下开新窗口到 /open?new=…，首页建好文件夹、起好审片台、跳到“文案”栏 ——
+$('newpop').addEventListener('toggle',()=>{if($('newpop').open)setTimeout(()=>$('newtitle').focus(),0)});
+function newFilm(){location.href='/open?new='+encodeURIComponent($('newtitle').value)+'&col='+encodeURIComponent('写稿')+'&t='+TOKEN}
+$('newgo').onclick=newFilm;
+window.addEventListener('cutdesk:new-film',e=>{e.preventDefault();$('newpop').open=true});   // Mac 外壳的 ⌘N：先弹题目框，不直接建
+$('newtitle').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing)newFilm()});
+setInterval(()=>{if(document.visibilityState==='visible'&&$('sheet').hidden)refresh().catch(()=>{})},8000);setInterval(()=>ai().catch(()=>{}),3000);
+window.addEventListener('pageshow',e=>{if(e.persisted){LAST=store.get('cutdesk-home-last');refresh().catch(()=>{})}});   // 从片子后退回来（浏览器可能直接拿缓存的页面）
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh().catch(()=>{})});
+refresh();ai();
+</script>

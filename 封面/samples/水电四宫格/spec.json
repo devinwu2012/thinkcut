@@ -1,0 +1,30 @@
+{
+  "layout": "grid",
+  "line1": "水电这四件事儿",
+  "line2": "多少钱都得花",
+  "sub": "十三年的装修经验",
+  "circle": "四件事儿",
+  "cells": [
+    {
+      "label": "中央换气扇|一分多管",
+      "scene": "a front cutaway of a small bathroom ceiling space: one compact box-shaped central exhaust fan hidden in the ceiling void, with three flexible round ducts branching from it — one down inside the wall to a wall-hung toilet below, one sideways through the wall to a shoe cabinet (just its edge), one to a ceiling vent above a small glass shower",
+      "subject": "the fan box and its three ducts"
+    },
+    {
+      "label": "每个房间|网线＋光纤",
+      "scene": "close-up of a wall network outlet faceplate on a plain wall, with two sockets; one ethernet cable with an RJ45 plug and one thin optical fibre patch cord are plugged in, both cables hanging down",
+      "subject": "the faceplate and the two cables"
+    },
+    {
+      "label": "灯带变压器|集中放箱子",
+      "scene": "a wall-mounted metal transformer box with its front lid swung open; many ventilation slots on the lid and sides; inside, four small rectangular LED strip transformers sit neatly in a row, and their wires gather to one terminal strip",
+      "subject": "the transformer box (housing and lid)"
+    },
+    {
+      "label": "提前预埋|水母地漏",
+      "scene": "a cross-section of a floor drain embedded in the floor slab under floor tiles: a deep drain body with a deep U-shaped water seal holding water, and a soft jellyfish-like silicone membrane resting over the water seal under a square grate, pipe leaving at the bottom",
+      "subject": "the drain body and the jellyfish membrane"
+    }
+  ],
+  "created": "2026-11-12T17:06:57"
+}
