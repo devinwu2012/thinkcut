@@ -1,4 +1,4 @@
-# 口播台（Cutdesk）：给 AI 助手的地图（先读这一页）
+# ThinkCut · 思刻：给 AI 助手的地图（先读这一页）
 
 这个文件夹是一整套“口播视频剪辑自动化”：写文案 → 出初稿 → 在审片台上改 → 发布。你（Claude Code 或 Codex）负责操作，人负责看和拍板。所有能力都在这里，只有这一套；做片子用下面带 `thinkcut-` 前缀的 5 个技能。
 
@@ -29,7 +29,7 @@
 | 音效文件和用法 | `素材库/音效素材/`（来源说明 `来源说明.txt`）；用法登记 `口播剪辑/engine/config/sfx_favorites.json` |
 | 某条片子的东西（原片、成片、复盘、反馈记录） | 那条片子的项目文件夹，不在这里 |
 | 新 Mac 或链接坏了 | `bash bin/setup_mac.sh`（链接 5 个技能、恢复环境运行副本、自检） |
-| Mac 程序外壳（口播台：一个窗口，首页和片子在里面来回走） | 构建 `bash bin/build_app.sh`（`--install` 放进应用程序）；外壳代码 `bin/app/`，起停首页的判断 `bin/cutdesk_app.py`（测试 `bin/test_cutdesk_app.py`） |
+| Mac 程序外壳（ThinkCut：一个窗口，首页和片子在里面来回走） | 构建 `bash bin/build_app.sh`（`--install` 放进应用程序）；外壳代码 `bin/app/`，起停首页的判断 `bin/cutdesk_app.py`（测试 `bin/test_cutdesk_app.py`） |
 
 ## 5 个技能入口
 

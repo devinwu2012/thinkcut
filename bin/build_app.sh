@@ -1,5 +1,5 @@
 #!/bin/bash
-# 构建 Mac 程序外壳 ThinkCut.app（2026-11-24 用户定名；原叫 Cutdesk／口播台，内部文件名、可执行文件名、签名名沿用 Cutdesk）：只用系统自带的 swiftc（Xcode 命令行工具），不签名、不改系统安全设置。
+# 构建 Mac 程序外壳 ThinkCut.app（2026-11-24 用户定名 ThinkCut · 思刻；原叫 Cutdesk，内部文件名、可执行文件名、签名名沿用 Cutdesk）：只用系统自带的 swiftc（Xcode 命令行工具），不签名、不改系统安全设置。
 #   bash bin/build_app.sh                 产出到 程序文件夹/build/ThinkCut.app（build/ 不进存档）
 #   bash bin/build_app.sh --out 某个文件夹   产出到那里（测试用）
 #   bash bin/build_app.sh --install       构建后放进“应用程序”文件夹（/Applications，写不进去就放 ~/Applications）

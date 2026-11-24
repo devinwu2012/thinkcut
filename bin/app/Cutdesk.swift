@@ -1,4 +1,4 @@
-// Cutdesk（口播台）Mac 程序外壳（2026-11-24 用户定：本地 Mac 程序，外壳套住现有网页界面，不内嵌模型、不碰账号）。
+// Cutdesk（ThinkCut · 思刻）Mac 程序外壳（2026-11-24 用户定：本地 Mac 程序，外壳套住现有网页界面，不内嵌模型、不碰账号）。
 // 第二轮（2026-11-24 用户定：“双击直接就进去了……然后 ⌘W 直接退出来”）：程序里永远只有一个窗口，一次只开一条片子（达芬奇一次也只开一个工程）。
 //   首页（thinkcut_edit.py home，本机 8760 端口）和片子的审片台都在这一个窗口里来回走；⌘W 在片子里＝回首页，在首页＝关窗口（不退出，⌘0 或点程序坞图标叫回）；⌘Q 才退出。
 // 起不起首页、退出停不停，交给 bin/cutdesk_app.py 判断（离线测试在 bin/test_cutdesk_app.py）。
@@ -81,7 +81,7 @@ func notice(_ title: String, _ body: String) -> String {
     """
 }
 
-// 每个页面一开始就有的：告诉页面“在口播台程序里”，以及工具栏空白处拖窗口、双击缩放（WKWebView 盖住了标题栏，系统不会自己拖）
+// 每个页面一开始就有的：告诉页面“在 ThinkCut 程序里”，以及工具栏空白处拖窗口、双击缩放（WKWebView 盖住了标题栏，系统不会自己拖）
 let pageScript = """
 (()=>{if(window.cutdeskApp)return;
 const post=m=>{try{webkit.messageHandlers.cutdesk.postMessage(m)}catch(e){}},H=\(Int(toolbarHeight));

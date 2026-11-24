@@ -165,7 +165,7 @@ $('v-board').onclick=()=>setView('board');$('v-list').onclick=()=>setView('list'
 async function ai(){const a=await get('/api/ai').catch(()=>null);if(!a)return;const was=JSON.stringify([AI.all,AI.films]);AI=a;
   const n=a.films.length;$('aidot').className='dot '+(a.all||n?'on':'off');$('aiword').textContent=a.all?'AI 已连':n?`AI 已连 ${n} 条`:'AI 未连';
   $('aibody').innerHTML=`<h3>${a.all?'AI 正挂着“等所有片子”：任何一条片子点“交给 AI”它马上接手':n?'AI 只在等这几条片子：'+n+' 条（别的片子点了“交给 AI”它要等你提醒）':'AI 未连：你在片子里点“交给 AI”只会先记下'}</h3>
-<p class="muted">怎么连：打开 Claude Code（或 Codex），在对话里说一句“看口播台”，或让它运行下面这条命令（Claude Code 放后台跑，一直挂着）：</p><code>${esc(a.cmd)}</code>
+<p class="muted">怎么连：打开 Claude Code（或 Codex），在对话里说一句“看思刻”，或让它运行下面这条命令（Claude Code 放后台跑，一直挂着）：</p><code>${esc(a.cmd)}</code>
 <p class="muted">片名后面的绿点＝AI 已连这条片子。</p>`;
   if(JSON.stringify([a.all,a.films])!==was)draw()}
 // —— 打开片子：点的那一下就开成自己的窗口 ——
