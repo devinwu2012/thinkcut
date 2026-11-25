@@ -1,6 +1,6 @@
 # ThinkCut · 思刻
 
-**English summary.** ThinkCut is an AI-operated workflow for talking-head ("口播") videos on macOS. You bring a script or a recording; your own AI coding assistant (Claude Code or Codex, signed in with your own account) drafts the cut, animations, subtitles, chapter bar, sound effects, cover and publishing copy, and puts everything on a local review page where you edit and approve. Editing happens in DaVinci Resolve Studio. The program has no built-in model and never touches your AI account. Two gates always need your explicit OK: exporting the full video and publishing it. This is an early version, verified so far only in its author's own setup, and the documentation is in Chinese.
+**English summary.** ThinkCut is an AI-operated workflow for talking-head ("口播") videos on macOS. You bring a script or a recording; your own AI coding assistant (Claude Code or Codex, signed in with your own account) drafts the cut, animations, subtitles, chapter bar, sound effects, cover and publishing copy, and puts everything on a local review page where you edit and approve. Editing happens in DaVinci Resolve Studio. The program has no built-in model and never touches your AI account. Two gates always need your explicit OK: exporting the full video and publishing it. This is an early version, verified so far only in its author's own setup, and the documentation is in Chinese. A longer English summary: [README.en.md](README.en.md).
 
 ---
 
@@ -52,11 +52,11 @@ ThinkCut（中文名“思刻”）是一个口播视频剪辑工作流，帮你
 |---|---|---|---|---|---|---|
 | **Claude Code 或 Codex** | 驱动整个流程：读说明、跑命令、改项目 | 必需 | 用你自己账号的额度 | 各自官网 | 用你自己的账号登录即可；`bash bin/setup_mac.sh --links` 把技能链接到 `~/.claude/skills`、`~/.codex/skills` | 没人干活，只能自己敲命令 |
 | **Codex 的生图** | 出封面底图、初稿里缺画面时的占位图（程序调用 `codex exec`） | 做封面时必需 | 用你 Codex 账号的额度；失败也算一次 | 同上 | 装好、登录好 Codex 就行；也可以用环境变量 `THINKCUT_IMAGE_GEN` 换成别的生图命令 | 封面和占位图出不来。只用 Claude Code 时封面怎么出：待确认；需要哪种 Codex 账号：待确认 |
-| **豆包语音：语音识别** | 剪口播的第一步：把口播转成带时间的文字 | 剪口播必需 | 按次计费（识别前会提示） | 火山引擎“豆包语音”新版控制台（console.volcengine.com/speech）；**火山方舟的 Key 不能用** | `python3 口播剪辑/bin/doubao_credentials.py`：打开一个只在本机的网页，在里面输入 Key；存在 `口播剪辑/secrets/doubao_api_key`（只有你能读，已被 git 忽略，不进存档）；存好会用一小段音频实测一次 | 体检写“可以转文字：否”，剪不了口播 |
+| **豆包语音：语音识别** | 剪口播的第一步：把口播转成带时间的文字 | 剪口播必需 | 按次计费（识别前会提示） | 火山引擎“豆包语音”新版控制台（console.volcengine.com/speech）；**火山方舟的 Key 不能用** | `python3 core/bin/doubao_credentials.py`：打开一个只在本机的网页，在里面输入 Key；存进这台 Mac 的钥匙串（每台 Mac 各配一次；以前存在 `core/secrets/doubao_api_key` 的会在第一次用时自动导入钥匙串，旧文件不删）；存好会用一小段音频实测一次 | 体检写“可以转文字：否”，剪不了口播 |
 | **豆包语音合成 2.0（seed-tts-2.0）** | 只有文案、还没录口播时，用机器配音占位做初稿 | 可选 | 按字数计费；`--dry-run` 只算字数不花钱 | 同上，和识别共用一个 Key | 同上；音色在 IP 配置里（`配音.音色`） | 没录口播时出不了带声音的初稿 |
 | **DaVinci Resolve Studio（达芬奇付费版）** | 剪口播放进时间线、配 B-roll、花字音效、审核时间线、修音（人声隔离）、导出 4K | 必需 | 付费软件 | Blackmagic 官网，自己安装并打开过一次 | 程序通过达芬奇自带的脚本接口连它（`/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting`）；审片台里“按空格让达芬奇播放”要给系统 Python 开“辅助功能”权限（第一次会弹提示） | 免费版没有脚本接口和人声隔离，大部分步骤做不了（具体卡在哪一步：待确认）。作者用的是 21.1.1／21.1.2，别的版本：待确认 |
-| **达芬奇连接程序（davinci-resolve-mcp）** | 搭时间线、加字幕 | 必需 | 免费开源 | GitHub 上的 davinci-resolve-mcp（作者用的固定版本见 `口播剪辑/bin/setup_mac.sh`） | 属于“程序环境”的一部分，见上面“现在的限制” | 放不进达芬奇 |
-| **蚁小二（发布工具）** | 把成片、封面、标题简介标签存成各平台的**草稿** | 可选 | 以服务商为准；要哪种账号：待确认 | 蚁小二官网；还要装它的命令行工具（npm 包 `@yixiaoermail/cli`，版本要求：待确认） | `bash 视频项目管理/bin/setup_mac.sh` 装好 `yxer-safe`，再运行 `yxer-safe key set` 输入 Key；Key 存在这台 Mac 的**登录钥匙串**里，不落盘、不进存档 | 发布栏“存到蚁小二草稿”做不了，其余照常；你可以自己手动发 |
+| **达芬奇连接程序（davinci-resolve-mcp）** | 搭时间线、加字幕 | 必需 | 免费开源 | GitHub 上的 davinci-resolve-mcp（作者用的固定版本见 `core/bin/setup_mac.sh`） | 属于“程序环境”的一部分，见上面“现在的限制” | 放不进达芬奇 |
+| **蚁小二（发布工具）** | 把成片、封面、标题简介标签存成各平台的**草稿** | 可选 | 以服务商为准；要哪种账号：待确认 | 蚁小二官网；还要装它的命令行工具（npm 包 `@yixiaoermail/cli`，版本要求：待确认） | `bash projects/bin/setup_mac.sh` 装好 `yxer-safe`，再运行 `yxer-safe key set` 输入 Key；Key 存在这台 Mac 的**登录钥匙串**里，不落盘、不进存档 | 发布栏“存到蚁小二草稿”做不了，其余照常；你可以自己手动发 |
 
 ### 本机工具
 
@@ -72,7 +72,7 @@ ThinkCut（中文名“思刻”）是一个口播视频剪辑工作流，帮你
 | 声学对齐模型 Qwen3-ForcedAligner-0.6B（约 1.2 GB） | 把字和声音对齐到每个字 | 剪口播必需 | 在“程序环境”里；可选的 silero-vad 让气口判断更准 |
 | 抠人模型 RVM（rvm_mobilenetv3） | “人挡字”效果（人站在大字前面） | 用到人挡字才要 | 在“程序环境”里 |
 | 字体 | 字幕冬青黑体、花字苹方、封面宋体＋冬青黑体 | 必需 | 都是 macOS 自带的，不用另装 |
-| `素材库/字体/` | 人挡字的风格字体 | 用到人挡字才要 | 自己下载放进去：思源黑体 SourceHanSansSC-Heavy/Light.otf、思源宋体 SourceHanSerifSC-Heavy.otf、Inter 的 InterDisplay-*.ttf（放 `Inter/` 子文件夹），都是 SIL OFL 免费字体 |
+| `素材库/字体/` | 人挡字的风格字体 | 用到人挡字才要 | `bash bin/fetch_fonts.sh` 自动下载放好（约 250 MB，按指纹核对版本）；或自己下载放进去：思源黑体 SourceHanSansSC-Heavy/Light.otf、思源宋体 SourceHanSerifSC-Heavy.otf、Inter 的 InterDisplay-*.ttf（放 `Inter/` 子文件夹），都是 SIL OFL 免费字体 |
 | `素材库/音效素材/` | 花字音效 | 做花字音效才要 | 作者自己的音效库，不随代码分发；放你自己的，或用环境变量 `AI_EDIT_SFX_DIR` 指过去 |
 
 Mac 芯片和系统版本的最低要求：待确认（作者在 Apple 芯片的 Mac 上使用）。
@@ -102,11 +102,11 @@ Mac 芯片和系统版本的最低要求：待确认（作者在 Apple 芯片的
 3. **体检**：看哪些齐了、哪些缺：
 
    ```bash
-   python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py doctor
+   python3 studio/skill/thinkcut-edit/scripts/thinkcut_edit.py doctor
    ```
 
    ```bash
-   bash 口播剪辑/bin/setup_mac.sh --check
+   bash core/bin/setup_mac.sh --check
    ```
 
    第二条只检查、不安装，逐项列出剪口播这一块缺什么。
@@ -114,21 +114,21 @@ Mac 芯片和系统版本的最低要求：待确认（作者在 Apple 芯片的
 4. **建你自己的 IP 配置**（颜色、字体、配音音色、发布平台、给 AI 看的口吻规矩都在里面，见“多个 IP”）：
 
    ```bash
-   python3 bin/cutdesk_config.py new 你的名字
+   python3 bin/thinkcut_config.py new 你的名字
    ```
 
-   然后把 `配置档/公共.json` 里的 `"默认IP"` 改成它（或写进只在这台电脑上的 `配置档/本机.json`：`{"默认IP": "你的名字"}`）。不建的话用自带的 `示例IP`。
+   然后把 `profiles/公共.json` 里的 `"默认IP"` 改成它（或写进只在这台电脑上的 `profiles/本机.json`：`{"默认IP": "你的名字"}`）。不建的话用自带的 `示例IP`。
 
 5. **配 Key**（只配你要用的）。豆包语音（在弹出的本机网页里输入）：
 
    ```bash
-   python3 口播剪辑/bin/doubao_credentials.py
+   python3 core/bin/doubao_credentials.py
    ```
 
    蚁小二（先装工具，再把 Key 存进钥匙串，输入时不显示）：
 
    ```bash
-   bash 视频项目管理/bin/setup_mac.sh
+   bash projects/bin/setup_mac.sh
    ```
 
    ```bash
@@ -167,17 +167,17 @@ Mac 芯片和系统版本的最低要求：待确认（作者在 Apple 芯片的
 首页是所有项目的入口。打开方式：双击 ThinkCut 程序，或在终端里：
 
 ```bash
-python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
+python3 studio/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 ```
 
 （默认在 `http://localhost:8760`；放项目的文件夹按你 IP 配置里的“片子文件夹”（配置键名，未改），也可以加 `--root <文件夹>`。）
 
-![首页看板](docs/截图/01_首页_看板.jpg)
+![首页看板](docs/screenshots/01-home-board.jpg)
 
 - **看板（默认）**：四列 撰稿 → 初剪 → 精修 → 发布，每个项目按它正在的那一步放进一列。卡片上：封面小图（还没有就写“还没有封面”）、编号＋项目名、**这一步该做什么**一句、状态和件数、最后改动时间。
 - **列表**：右上角切到“列表”，一行一条，四步做到哪一目了然（✓ 绿字做完、粗字正在做、灰字没到）。选哪种看法记在这台电脑上。
 
-  ![首页列表](docs/截图/02_首页_列表.jpg)
+  ![首页列表](docs/screenshots/02-home-list.jpg)
 
 - **顶栏**：“待审阅 N · AI 处理中 N”是所有项目加起来的；右边“AI 在线／AI 离线”（点开有一条命令，让 AI 运行它就连上了，见“和 AI 怎么配合”）；“＋ 新建项目”。
 - **打开一个项目**：**双击**卡片（或选中后回车、右键“打开”），就在**同一个窗口**里进到它的审片台；回首页：在 Mac 程序里按 ⌘W，在浏览器里点后退。一次只开一个项目（达芬奇一次也只开一个工程）。上次开的那张卡有蓝边。
@@ -207,7 +207,7 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 
 ### 文稿
 
-![文稿栏](docs/截图/03_文稿栏.jpg)
+![文稿栏](docs/screenshots/03-script.jpg)
 
 - **干嘛的**：写口播稿、和 AI 一起改、定稿。一开始就有，项目刚建、甚至只有一个题目时就能用。读写的是项目里的文案文件 `03_成片/<项目名>.md`，自动保存。
 - **怎么写**：左边三块——标题、封面文字（一行一行）、口播正文（一个自然段空一行；`###` 小标题和 `>` 备注是灰字，不算口播）。正文还空着时可以把一大段贴进“贴在这里”，自动分出标题和正文。上面写着总字数和估计时长，“A− A+”调字号。
@@ -219,7 +219,7 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 
 ### 口播精剪
 
-![口播精剪栏](docs/截图/04_口播精剪栏.jpg)
+![口播精剪栏](docs/screenshots/04-talk-edit.jpg)
 
 - **干嘛的**：用**改文字的方法剪口播**。AI 剪完一版后，这里是一个文字剪辑器：左边预览画面，右边是剪后的口播文字。
 - **何时出现**：有了剪口播工程（录了、AI 剪过）以后；之前写“未开始”。
@@ -230,7 +230,7 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 
 ### 配音试听
 
-![配音试听栏](docs/截图/05_配音试听栏.jpg)
+![配音试听栏](docs/screenshots/05-voice-preview.jpg)
 
 - **干嘛的**：AI 有声音要你听时才出现，比如机器配音占位、气口（停顿）新旧两种剪法、修音前后对比。平时没有这一栏。
 - **怎么用**：听，满意点“可以”（就按这个做）；不满意点“提意见”写哪里不对，再“提交 AI”。两段对比时一次只放一段。
@@ -238,7 +238,7 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 
 ### 动画
 
-![动画栏](docs/截图/06_动画栏.jpg)
+![动画栏](docs/screenshots/06-animation.jpg)
 
 - **干嘛的**：看 AI 做的卡点动画。关系类镜头先出 2–3 张**草图**（多选一，点“选这个”），再出**样张**（定格图或短视频，点“可以”）；样张点了“可以”，AI 才整段出片。
 - **怎么看**：一次看一项，底下一排小图换项（← → 键也能换）。有成片以后每项多一块“**带口播播放**”：左边是这几个镜头在成片里的那一段，右边口播的字跟着声音一个个亮，下面标出卡点——用来判断动效、卡点对不对。空格播放／暂停，点字跳过去。一项里有几个视频时会并排一起播，能逐帧、看原尺寸。
@@ -246,7 +246,7 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 
 ### 审片
 
-![审片栏](docs/截图/07_审片栏.jpg)
+![审片栏](docs/screenshots/07-review.jpg)
 
 - **干嘛的**：审整片。AI 在达芬奇里建好审核时间线（改动处标绿），这一栏是**整篇口播全文**，按章节分段，章节名就是导航条上的字。**看片在达芬奇里**，这里负责定位和记意见。
 - **和达芬奇联动**：点一个字，达芬奇跳到那里；按空格（或“播放／暂停”）达芬奇播放（第一次要给系统 Python 开“辅助功能”权限，页面会说怎么开）；播到哪，全文里那一小句就高亮。上面一条全片时间条：章节、动画／实拍／图片镜头的区间、每条意见的位置，点哪里达芬奇跳哪里。
@@ -259,7 +259,7 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 
 ### 封面
 
-![封面栏](docs/截图/08_封面栏.jpg)
+![封面栏](docs/screenshots/08-cover.jpg)
 
 - **干嘛的**：选封面方向。AI 按你的 IP 配置先出 3:4 的几个方向，自己挑一个把 4:3、16:9 也出齐，一起发上来（“我是这么假设的”里写着它先选了哪个）。
 - **怎么用**：每个方向下面“选这个”；和 AI 挑的一样就不用动，不一样 AI 会用你选的那个补出其它比例。点图看大图，“全部摆开”把所有方向、所有版本摆成一面墙，能选两张并排比，每张下面都能直接提意见。
@@ -267,7 +267,7 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 
 ### 发布
 
-![发布栏](docs/截图/09_发布栏.jpg)
+![发布栏](docs/screenshots/09-publish.jpg)
 
 - **干嘛的**：发布前最后一步。标题（只读，在文稿栏改）、简介、标签三个框，AI 已经写好初稿，你直接改，自动保存并检查（标签 8–10 个、数字只用口播里说过的）；右边是 AI 的说明和“AI 和你各改过什么”。
 - **发布设置**：“只存草稿”（在蚁小二中手动发布）或“定时发布”＋时间（至少 10 分钟以后）；“发布说明”可以写只发哪几个平台之类，不写就按 IP 配好的平台全发。
@@ -279,7 +279,7 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 2. **让它挂着等**：你在页面上点“提交 AI”之后，AI 要在等着才会马上动手。对 AI 说“看审片台”（或“看思刻”），或者把首页“AI 离线”里给的命令交给它运行：
 
    ```bash
-   python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home --wait
+   python3 studio/skill/thinkcut-edit/scripts/thinkcut_edit.py home --wait
    ```
 
    （Claude Code 放后台跑；Codex 前台跑时加 `--wait-timeout 1500`，到时间没人点就再跑。）只做一个项目时也可以用 `workbench <项目文件夹> --wait`。连上了，首页和审片台的灯会变成“AI 在线”，项目名后面有个绿点。**AI 没连时你点的都会记下，只是没人马上处理。**
@@ -302,37 +302,37 @@ python3 口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py home
 
 ## 多个 IP
 
-一个 IP（一个账号、一个人设）一套配置。程序自带的公共层在程序文件夹的 `配置档/` 里；你自己的 IP 放在程序文件夹旁边的 `ThinkCut配置档/`（这样升级程序不会动它，`python3 bin/cutdesk_config.py where` 能查到位置）：
+一个 IP（一个账号、一个人设）一套配置。程序自带的公共层在程序文件夹的 `profiles/` 里；你自己的 IP 放在程序文件夹旁边的 `ThinkCut配置档/`（这样升级程序不会动它，`python3 bin/thinkcut_config.py where` 能查到位置）：
 
-- `配置档/公共.json`：所有 IP 共用的默认值（片子文件夹、画幅、字体、发布平台……）。
+- `profiles/公共.json`：所有 IP 共用的默认值（片子文件夹、画幅、字体、发布平台……）。
 - `ThinkCut配置档/<IP>/ip.json`：这个 IP 和公共层不一样的地方：封面颜色和字体、配音音色、画幅、发布平台、领域词、成图文件名开头等。
 - `ThinkCut配置档/<IP>/规矩.md`：给 AI 看的这个 IP 的口吻、品牌、偏好（AI 做这个 IP 的项目时先读它）。
 - `ThinkCut配置档/<IP>/词库.txt`（可选）：这个 IP 自己的专有名词，校对字幕时用。
-- `配置档/本机.json`（可选，不进存档）：这台电脑自己的设置，比如默认 IP、项目放别处。
+- `profiles/本机.json`（可选，不进存档）：这台电脑自己的设置，比如默认 IP、项目放别处。
 
 看有哪些 IP、默认是谁：
 
 ```bash
-python3 bin/cutdesk_config.py list
+python3 bin/thinkcut_config.py list
 ```
 
 新建一个（从 `示例IP` 复制）：
 
 ```bash
-python3 bin/cutdesk_config.py new 新名字
+python3 bin/thinkcut_config.py new 新名字
 ```
 
 看某个 IP 合并后的配置、给 AI 看的规矩：
 
 ```bash
-python3 bin/cutdesk_config.py show --ip 新名字
+python3 bin/thinkcut_config.py show --ip 新名字
 ```
 
 ```bash
-python3 bin/cutdesk_config.py rules --ip 新名字
+python3 bin/thinkcut_config.py rules --ip 新名字
 ```
 
-建项目时指定 IP：`python3 视频项目管理/bin/project.py init "项目名" --ip 新名字`（不写用默认 IP）。项目的 `项目.json` 里记着它属于哪个 IP，之后封面颜色、配音音色、发布平台都按这个 IP 来。（首页切换 IP：即将加入。）
+建项目时指定 IP：`python3 projects/bin/project.py init "项目名" --ip 新名字`（不写用默认 IP）。项目的 `项目.json` 里记着它属于哪个 IP，之后封面颜色、配音音色、发布平台都按这个 IP 来。（首页切换 IP：即将加入。）
 
 ## 两道闸
 
@@ -350,20 +350,20 @@ python3 bin/cutdesk_config.py rules --ip 新名字
 - **程序自己的东西**在这个文件夹里：程序、技能说明、配置档、素材库（字体、音效、素材索引）。
 - **Mac 上还会留的**：5 个技能链接、程序环境的运行副本（可以删，用 `bash bin/sync_env.sh` 恢复）、审片台按空格的小服务（可以删，下次自动重建），以及用完就删的临时文件。
 - **程序不会动**：你的原始素材文件；你在达芬奇里手改过的片段、字幕、花字、音效（手改过的就是定稿，不会被批量覆盖）；你没点头的任何导出或发布。
-- **密钥**：豆包 Key 在 `口播剪辑/secrets/`（已被 git 忽略）；蚁小二 Key 在钥匙串。不进存档、不写进文档、不贴给 AI。
+- **密钥**：豆包 Key 和蚁小二 Key 都在这台 Mac 的钥匙串里（豆包以前放的 `core/secrets/` 照读，已被 git 忽略）。不进存档、不写进文档、不贴给 AI。
 
 ## 文件夹一览
 
 | 文件夹 | 管什么 |
 |---|---|
-| `口播自动剪辑/` | 剪辑总入口、动画成片、字幕、音效、审核线、导出、审片台和首页 |
-| `口播剪辑/` | 剪口播、配画面、达芬奇里的花字音效、素材库工具 |
-| `章节导航/` | 章节导航条 |
-| `封面/` | 封面 |
-| `视频项目管理/` | 建项目、整理素材、存档、上传草稿 |
-| `配置档/` | 每个 IP 一套配置 |
+| `studio/` | 剪辑总入口、动画成片、字幕、音效、审核线、导出、审片台和首页 |
+| `core/` | 剪口播、配画面、达芬奇里的花字音效、素材库工具 |
+| `chapters/` | 章节导航条 |
+| `cover/` | 封面 |
+| `projects/` | 建项目、整理素材、存档、上传草稿 |
+| `profiles/` | 每个 IP 一套配置 |
 | `bin/` | 安装、环境、配置、Mac 程序外壳 |
-| `docs/截图/` | 本说明用的截图 |
+| `docs/screenshots/` | 本说明用的截图 |
 
 各文件夹自己的说明在它们的 `README.md` 里；给 AI 看的完整地图在 [AGENTS.md](AGENTS.md)。
 
@@ -380,14 +380,21 @@ python3 bin/cutdesk_config.py rules --ip 新名字
 
 ## 离线测试
 
-不连达芬奇、不开浏览器、不生图（要先放好 `素材库/字体/` 和 `素材库/音效素材/`）：
+不连达芬奇、不开浏览器、不生图。先装好 `requirements/dev.txt` 里的包、ffmpeg（要带 zscale，`brew install ffmpeg-full`）、Node，再放好字体（音效库测试用不到）：
 
 ```bash
-bash 口播自动剪辑/bin/run_tests.sh
+bash bin/fetch_fonts.sh
+python3 bin/test_all.py
 ```
+
+全套约 5 分钟。GitHub 上每次推到 main 或开合并请求也会自动跑这一套（`.github/workflows/test.yml`）。
+
+只跑某一块：`python3 bin/test_all.py cover`。Python 包清单在 `requirements/`：`base.txt` 日常用，`dev.txt` 跑测试用；`align.txt`、`matting.txt`、`resolve-mcp.txt` 是转写对齐、抠人、达芬奇连接各自环境的版本记录。
 
 ## 许可证
 
-本项目以 [PolyForm Noncommercial 1.0.0](LICENSE.md) 授权：个人、学习、研究、非营利用途可以自由使用和修改；**商业用途需另行取得作者授权**。第三方组件（如 ffmpeg、three.js）遵循各自的许可证。
+本项目以 [PolyForm Noncommercial 1.0.0](LICENSE.md) 授权：个人、学习、研究、非营利用途可以自由使用和修改；**商业用途需另行取得作者授权**。随仓库带的第三方代码（GSAP、three.js）和要自己装的组件（如 ffmpeg）遵循各自的许可证，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+反馈和参与见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)，每版变化见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。
 
 Licensed under PolyForm Noncommercial 1.0.0 — free for noncommercial use; commercial use requires a separate license from the author.

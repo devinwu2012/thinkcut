@@ -2,7 +2,7 @@
 # sync_env.sh 的离线测试（2026-11-21 体检）：用临时目录造假的 NAS 原件和 Mac 副本，不碰真的环境、不碰回收站。
 #   bash bin/test_sync_env.sh
 set -u
-export THINKCUT_ALIGN_ENV=thinkcut-align THINKCUT_MATTING_ENV=thinkcut-matting      # 假环境用新名字；不让 bin/旧名兼容.sh 换成旧名字
+export THINKCUT_ALIGN_ENV=thinkcut-align THINKCUT_MATTING_ENV=thinkcut-matting      # 假环境用新名字；不让 bin/legacy_names.sh 换成旧名字
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P) || exit 1
 T=$(mktemp -d) || exit 1; trap 'rm -rf "$T"' EXIT
 fails=0

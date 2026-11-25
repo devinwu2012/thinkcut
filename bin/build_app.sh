@@ -30,10 +30,10 @@ esac
 APP="$OUT/$NAME.app"; TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$OUT"; rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-swiftc -O -o "$APP/Contents/MacOS/Cutdesk" "$PROG/bin/app/Cutdesk.swift" -framework AppKit -framework WebKit
-# 图标：用定稿的“一刀·两层纸”（2026-11-24 用户选定，矢量原件 bin/app/Cutdesk.svg，来源见 内部/ 交接）；没有定稿文件时才用代码画的临时图标
-if [ -f "$PROG/bin/app/Cutdesk.icns" ]; then
-  cp "$PROG/bin/app/Cutdesk.icns" "$APP/Contents/Resources/Cutdesk.icns"
+swiftc -O -o "$APP/Contents/MacOS/Cutdesk" "$PROG/bin/app/ThinkCut.swift" -framework AppKit -framework WebKit
+# 图标：用定稿的“一刀·两层纸”（2026-11-24 用户选定，矢量原件 bin/app/ThinkCut.svg，来源见 internal/ 交接）；没有定稿文件时才用代码画的临时图标
+if [ -f "$PROG/bin/app/ThinkCut.icns" ]; then
+  cp "$PROG/bin/app/ThinkCut.icns" "$APP/Contents/Resources/Cutdesk.icns"
 else
   swiftc -O -o "$TMP/make_icon" "$PROG/bin/app/make_icon.swift" -framework AppKit
   "$TMP/make_icon" "$TMP/Cutdesk.iconset"

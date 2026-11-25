@@ -1,0 +1,63 @@
+# 离线测试（GitHub Actions：GitHub 提供的自动跑测试服务）。推到 main、开合并请求、或在 Actions 页手动点时跑。
+# 和 python3 bin/test_all.py 同一套：不连达芬奇、不调付费接口。字体由 bin/fetch_fonts.sh 下载（按 sha256 核对）；音效库测试用不到。
+# 注意：私有仓库里 macOS 机器按 10 倍分钟数计费，免费额度用得快；公开仓库不收费。
+name: 离线测试
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # 私有仓库（内部版）只在手动点时跑，免得每次发版都耗 macOS 的 10 倍计费分钟；公开仓库自动跑（不收费）
+    if: ${{ !github.event.repository.private || github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      FONT_CACHE: ${{ github.workspace }}/../thinkcut-fonts
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 用 macOS 自带的 Python 3.9（和用户机器一样；机器默认的 python3 是 Homebrew 的新版）
+        run: |
+          mkdir -p "$RUNNER_TEMP/py39"
+          ln -sf /usr/bin/python3 "$RUNNER_TEMP/py39/python3"
+          echo "$RUNNER_TEMP/py39" >> "$GITHUB_PATH"
+          /usr/bin/python3 --version
+
+      - name: 装 Python 包
+        run: /usr/bin/python3 -m pip install --user -r requirements/dev.txt
+
+      - name: 装 ffmpeg-full（要 zscale）
+        run: |
+          brew install ffmpeg-full
+          brew link --force --overwrite ffmpeg-full
+          ffmpeg -hide_banner -filters | grep -q zscale
+
+      - name: 字体缓存
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/../thinkcut-fonts
+          key: fonts-${{ hashFiles('bin/fetch_fonts.sh') }}
+
+      - name: 下载字体
+        run: bash bin/fetch_fonts.sh
+
+      - name: git 身份（有几项测试会在临时仓库里存档）
+        run: |
+          git config --global user.name "ThinkCut CI"
+          git config --global user.email "ci@localhost"
+
+      - name: 全套离线测试
+        run: |
+          python3 --version; node --version; ffmpeg -version | head -1
+          python3 bin/test_all.py

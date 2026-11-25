@@ -1,0 +1,12 @@
+# 日常程序（审片台、首页、封面、分镜、测试）用的 Python 包。现在跑在 macOS 自带的 Python 3.9 上（/usr/bin/python3）。
+# 版本是作者机器上实际在用、全套测试通过的版本。装：python3 -m pip install --user -r requirements/base.txt
+# 转写对齐、抠人、达芬奇连接各有自己的环境，清单见同文件夹的 align.txt、matting.txt、resolve-mcp.txt。
+fonttools==4.60.2
+numpy==2.0.2
+pillow==11.3.0
+# Python 3.11 以下才要（读 toml；3.11 起自带 tomllib）
+tomli==2.4.0; python_version < "3.11"
+# 审片台按空格让达芬奇播放（studio/.../thinkcut/workbench.py 里的小服务）
+pyobjc-framework-ApplicationServices==11.1
+pyobjc-framework-Cocoa==11.1
+pyobjc-framework-Quartz==11.1

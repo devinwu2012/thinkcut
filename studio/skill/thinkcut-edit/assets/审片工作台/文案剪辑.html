@@ -1,0 +1,360 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>审片台 · 文案 · 口播</title>
+<style>
+/* 审片台“口播剪辑”栏下半的文字剪辑器（2026-11-22 用户定：最早剪 A-roll 的审核网页并进审片台“口播剪辑”栏——“用改文字的方法做剪辑”，风格和审片台一样）。
+   这一页由审片台内嵌在“口播剪辑”栏里（thinkcut_edit.py workbench 起的服务给它），单独打开会跳回审片台；请求都由审片台查过口令后转给剪口播后台
+   （core/engine/src/review_v2_server.py），删句、恢复、挪小句、改字幕、分段、撤销重做、保存到达芬奇的逻辑都在那边。
+   版面沿用 2026-11-14 用户选定的“版本二”：左边画面、右边整篇文稿连着读、底下通栏播放条。样式照审片台（index.html）的规矩：
+   · 苹果系统字、浅灰底白卡片（圆角 14），不加边框和彩色底块；按钮小圆角（.btn），蓝底 .primary 这一栏只有“保存到达芬奇”一个，.ghost 只有蓝字。
+   · 颜色只有两种有意思：灰 = AI 做的、系统的；蓝 = 我做的、能点的；红只给报错。
+   · 文稿标记靠形状分：划掉 = 删（灰是 AI、蓝是我），蓝下划线 = 我恢复，淡蓝底 = 我挪过，点线 = 改过字幕，黑底白字 = 正在播的字。 */
+:root{color-scheme:light dark;--bar:#f6f6f6;--bg:#f5f5f7;--surface:#ffffff;--text:#1d1d1f;--text-2:#6e6e73;--line:#e5e5e5;--fill:#e8e8ed;--fill-2:#d2d2d7;--mark:#a1a1a6;--blue:#007aff;--blue-text:#0066cc;--blue-tint:#e5f0ff;--orange:#b35c00;--green:#248a3d;--red:#ff3b30;--sel:#b9d8fb;--land:#c7e0fb;--ar:.75}
+@media (prefers-color-scheme:dark){:root{--bar:#2b2b2b;--bg:#1e1e1e;--surface:#2c2c2e;--text:#f5f5f7;--text-2:#98989d;--line:#3a3a3c;--fill:#3a3a3c;--fill-2:#545458;--mark:#7c7c80;--blue:#0a84ff;--blue-text:#64a8ff;--blue-tint:#0f2f55;--orange:#ffb340;--green:#4cd964;--red:#ff453a;--sel:#1d4f86;--land:#163a66}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+button,input,select{font:inherit;color:inherit}button{border:0;background:none;cursor:pointer;white-space:nowrap}
+.btn{border:0;background:var(--fill);border-radius:8px;padding:5px 12px;font-size:14px;cursor:pointer}.btn:hover:not(:disabled){background:var(--fill-2)}
+.btn.primary{background:var(--blue);color:#fff;font-weight:500}.btn.primary:hover:not(:disabled){background:var(--blue)}
+.btn.ghost{background:none;color:var(--blue-text);padding:5px 8px}.btn.ghost:hover:not(:disabled){background:var(--fill)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.muted{color:var(--text-2);font-size:13px}p{margin:4px 0}
+/* 顶栏（和审片台审核线栏的工具条一样）：剪后时长、保存状态、我的改动、帮助、撤销重做、保存到达芬奇 */
+.topbar{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding:8px 20px;background:var(--surface);border-bottom:1px solid var(--line);font-size:13px}
+.stats{flex:0 1 auto;min-width:0;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.statusline{flex:1 1 140px;min-width:0;display:flex;flex-direction:column;line-height:1.4;text-align:right;color:var(--text-2)}
+#status:empty,#error:empty{display:none}#error{color:var(--red)}
+/* 状态和报错最多显示两行（达芬奇的报错可能很长）；鼠标移上去看全文。 */
+.statusline>div{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.statusline:hover>div{-webkit-line-clamp:unset}
+.actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.actions .primary{margin-left:6px}
+.notice{padding:6px 20px;background:var(--surface);border-bottom:1px solid var(--line);color:var(--orange);font-size:13px}.notice[hidden]{display:none}
+
+/* 嵌在审片台里时（第二轮，2026-11-24）：工具条就是审片台的第二条细栏，“保存到达芬奇”在窗口右上角，这里不再放 */
+.in-shenpian .topbar{min-height:44px;padding:4px 20px;background:var(--bar);flex-wrap:nowrap}
+.in-shenpian #saveResolve{display:none}
+.in-shenpian .statusline{font-size:12px;max-width:420px}.in-shenpian .statusline>div{-webkit-line-clamp:1}
+/* 顶栏里的小弹层：我的改动、帮助（和审片台“怎么用”一样） */
+.pop{position:relative}.pop>summary{list-style:none;display:inline-flex;align-items:center;padding:5px 8px;border-radius:8px;color:var(--blue-text);font-size:14px;white-space:nowrap;cursor:pointer;user-select:none}
+.pop>summary:hover{background:var(--fill)}.pop>summary::-webkit-details-marker{display:none}
+.pop-body{position:absolute;right:0;top:34px;z-index:40;width:min(400px,90vw);max-height:70vh;overflow:auto;padding:14px 16px;background:var(--surface);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);font-size:14px;line-height:1.7}
+.pop-body h3{margin:10px 0 4px;font-size:13px;font-weight:600;color:var(--text-2)}.pop-body h3:first-child{margin-top:0}.pop-body ul{margin:0;padding-left:18px}.pop-body li{margin:4px 0}.pop-body details{margin-top:8px}.pop-body details summary{cursor:pointer;color:var(--blue-text)}
+.legend{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center}.legend b{font-weight:400;font-size:15px}
+.legend .ai{color:var(--text-2);text-decoration:line-through}.legend .user{color:var(--blue-text);text-decoration:line-through}.legend .restore{box-shadow:inset 0 -2px 0 var(--blue)}.legend .move{background:var(--blue-tint);border-radius:4px}.legend .fixed{border-bottom:2px dotted var(--text-2)}.legend .playing{background:var(--text);color:#fff;border-radius:4px;padding:0 3px}
+kbd{font:12px ui-monospace,Menlo,monospace;padding:1px 5px;border-radius:4px;background:var(--fill)}
+.change-list{display:flex;flex-direction:column;gap:2px}.change-list button{padding:6px 10px;border-radius:8px;text-align:left;white-space:normal;line-height:1.6}.change-list button:hover{background:var(--fill)}
+.change-list .cut-text{color:var(--blue-text);text-decoration:line-through}.change-list .restore-text{box-shadow:inset 0 -2px 0 var(--blue)}.change-list .move-text{background:var(--blue-tint);border-radius:4px}
+.player-size{display:flex;align-items:center;gap:8px}.player-size input{flex:1;min-width:0;accent-color:var(--blue);cursor:ew-resize}
+/* 中间：左画面，右文稿。画面一栏的宽度跟着素材比例走（--ar = 宽 / 高，视频读到后设）：
+   竖的（3:4、9:16）按这一栏的高度算宽，横的（16:9）最多占 46% 宽；“画面大小”滑杆可以再手调。 */
+.workspace{flex:1;min-height:0;display:grid;grid-template-columns:min(var(--player-width,46vw),calc((100vh - 200px)*var(--ar)),60vw) minmax(0,1fr);gap:20px;padding:16px 20px}
+.stage-col{min-width:0;display:flex;flex-direction:column;gap:8px}
+.video-stage{position:relative;aspect-ratio:var(--ar);width:100%;container-type:inline-size;background:var(--text);border-radius:14px;overflow:hidden}
+video{display:block;width:100%;height:100%;object-fit:contain;background:var(--text);cursor:pointer}
+.caption{position:absolute;left:5%;right:5%;bottom:6%;text-align:center;color:#fff;font-size:clamp(11px,4.2cqw,58px);font-weight:600;line-height:1.35;pointer-events:none;white-space:pre-line;-webkit-text-stroke:.10em #111;paint-order:stroke fill;text-shadow:0 1px 3px #000}
+.audition{padding:8px 12px;border-radius:10px;background:var(--surface);font-size:13px}.audition[hidden]{display:none}
+.document{min-width:0;min-height:0;background:var(--surface);border-radius:14px;overflow:hidden}
+.text-pane{container-type:inline-size;height:100%;padding:6px 40px 56px;overflow-y:auto;overscroll-behavior:contain;scroll-padding:80px}
+.paragraph{padding:18px 0 0;scroll-margin-top:12px}.paragraph h2{margin:0 0 2px;font-size:15px;font-weight:600;color:var(--text-2);user-select:none}.num{display:none}
+/* 字号跟着文稿栏的宽度走（16–22 px）。 */
+.copy{font-size:var(--copy-size,16px);line-height:1.95;margin:0 0 .4em;word-break:break-word}
+.unit{border-radius:5px;transition:background-color .12s;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+/* 挪小句的把手：整句下面一条发亮的下划线。每个小句的字下面留着看不见的一截（行间空隙），
+   页面自己算指针落在哪个小句的那一截里，所以整条空隙都抓得住。 */
+.unit{padding-bottom:.8em}.unit.hot{background-color:var(--blue-tint);background-image:linear-gradient(var(--blue),var(--blue)),linear-gradient(to bottom,rgba(0,113,227,.28),rgba(0,113,227,0));background-size:100% 3px,100% .6em;background-position:0 calc(100% - .55em),0 100%;background-repeat:no-repeat}
+.text-pane.grab,.text-pane.grab *{cursor:grab}.text-pane.grabbing,.text-pane.grabbing *{cursor:grabbing}.text-pane.grab .unit.hot{background-size:100% 4px,100% .6em}
+.unit.moved{background:var(--blue-tint)}
+.unit.lifted{display:none}
+.drag-ghost{position:fixed;z-index:60;max-width:min(380px,45vw);padding:3px 10px;border-radius:9px;background:var(--blue-tint);color:var(--text);opacity:.85;line-height:1.6;box-shadow:0 12px 32px rgba(0,0,0,.2);pointer-events:none;animation:lift .14s ease-out}
+@keyframes lift{from{transform:scale(.94);opacity:.3}}
+.drop-caret{position:fixed;z-index:59;width:3px;border-radius:2px;background:var(--blue);box-shadow:0 0 0 3px rgba(0,113,227,.2);pointer-events:none;transition:left .09s ease-out,top .09s ease-out,height .09s ease-out}
+.unit.landed{animation:landed .9s ease-out}@keyframes landed{from{background-color:var(--land)}}
+@media(prefers-reduced-motion:reduce){.drag-ghost,.unit.landed{animation:none}.drop-caret{transition:none}}
+.word{cursor:text;border-radius:4px}.word:hover{background:var(--fill)}
+.word.deleted{color:var(--text-2);text-decoration:line-through;text-decoration-thickness:1.5px}.word.deleted.by-user{color:var(--blue-text)}
+.word.restored-by-user{box-shadow:inset 0 -2px 0 var(--blue)}.caption-fixed{border-bottom:2px dotted var(--text-2)}
+.word.chosen{background:var(--fill-2)}.word.active,.word.active.chosen{background:var(--text);color:var(--bg)}
+.word.unverified{text-decoration:underline wavy var(--mark);text-underline-offset:5px}.word.deleted.unverified{text-decoration:line-through}.space{white-space:pre-wrap}
+::selection{background:var(--sel);color:var(--text)}
+/* 选中一个字后浮在它旁边的操作条（位置由页面算，播放时收起）。 */
+.selbar{position:fixed;z-index:50;display:flex;align-items:center;gap:6px;max-width:min(560px,92vw);padding:6px;border-radius:12px;background:var(--surface);box-shadow:0 8px 30px rgba(0,0,0,.18)}.selbar[hidden]{display:none}
+.selection-label{max-width:220px;padding:0 8px;font-size:13px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 底部通栏播放条：播放、时间、按段落分格的进度条（上面的小点：灰 = AI 删的地方，蓝 = 我改的地方）、上一处／下一处、倍速、全屏。 */
+.playbar{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;padding:8px 20px 10px;background:var(--surface);border-top:1px solid var(--line)}
+#play{min-width:68px}.time{font-variant-numeric:tabular-nums;font-size:13px;color:var(--text-2);white-space:nowrap}
+.track{position:relative;flex:1 1 140px;min-width:120px;height:46px}
+.track-inner{position:absolute;left:8px;right:8px;top:0;bottom:0}.track-inner::before{content:"";position:absolute;left:0;right:0;top:12px;height:8px;border-radius:4px;background:var(--fill)}
+.played{position:absolute;left:0;top:12px;width:0;height:8px;border-radius:4px;background:var(--text);pointer-events:none}
+.marks{position:absolute;inset:0;pointer-events:none}.marks i{position:absolute}
+.gap{top:12px;width:3px;height:8px;margin-left:-1.5px;background:var(--surface)}
+.tick{top:3px;width:3px;height:5px;margin-left:-1.5px;border-radius:1.5px;background:var(--mark)}.tick.mine{width:5px;margin-left:-2.5px;background:var(--blue);z-index:1}
+.seek{position:absolute;left:0;top:4px;width:100%;height:24px;margin:0;background:transparent;cursor:pointer;-webkit-appearance:none;appearance:none}
+.seek::-webkit-slider-runnable-track{height:24px;background:transparent}.seek::-moz-range-track{height:24px;background:transparent}
+.seek::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:4px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}.seek::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.seek:disabled{opacity:.4;cursor:default}
+.toc{position:absolute;left:0;right:0;top:27px;height:19px;z-index:2}.toc[hidden]{display:none}
+.toc button{position:absolute;top:0;height:19px;padding:0 6px 0 0;border-radius:4px;color:var(--text-2);font-size:13px;line-height:19px;text-align:left;overflow:hidden;text-overflow:ellipsis}.toc button:hover:not(:disabled){color:var(--blue-text)}.toc button.on{color:var(--text);font-weight:600}
+.speed{display:flex;align-items:center;gap:2px;padding:2px;border-radius:8px;background:var(--fill);font-size:13px}.speed span{padding:0 4px 0 8px;color:var(--text-2);white-space:nowrap}
+.speed button{padding:3px 8px;border-radius:6px;font-variant-numeric:tabular-nums}.speed button:hover:not(:disabled){background:var(--fill-2)}.speed button.on,.speed button.on:hover{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.16);font-weight:600}
+.preview-shell:is(:fullscreen,.expanded){display:flex;align-items:center;justify-content:center;background:#000;padding:16px;overflow:hidden}
+.preview-shell:is(:fullscreen,.expanded) .video-stage{width:min(100%,calc((100dvh - 32px)*var(--ar)));border-radius:0}
+.preview-shell.expanded{position:fixed;inset:0;z-index:10000;width:100vw;height:100dvh}
+@media(max-width:640px){.statusline{flex-basis:100%;text-align:left}.workspace{grid-template-columns:1fr;padding:12px 16px;overflow:auto}.stage-col{align-items:center}.video-stage{width:min(100%,calc(46vh*var(--ar)))}.text-pane{height:auto;max-height:70vh;padding:8px 20px 28px}.copy{font-size:17px}}
+</style>
+
+<header class="topbar"><span id="summary" class="stats">正在读取…</span>
+<div class="statusline"><div id="resolveStatus" role="status" aria-live="polite">改动自动保存在本机；点“保存到达芬奇”更新时间线和字幕。</div><div id="status" role="status"></div><div id="error" role="alert"></div></div>
+<div class="actions"><div class="speed" role="group" aria-label="字号" title="文稿的字大小（记在这个浏览器里）"><span>字号</span><button id="fontDown" aria-label="字小一点">A−</button><button id="fontNow" disabled></button><button id="fontUp" aria-label="字大一点">A+</button></div><details id="myChanges" class="pop"><summary id="changeSummary">我的改动</summary><div class="pop-body"><div id="changeList" class="change-list"></div></div></details>
+<details class="pop"><summary>帮助</summary><div class="pop-body">
+<h3>文稿里的标记</h3><div class="legend"><b class="ai">划掉的灰字</b><span>AI 删的</span><b class="user">划掉的蓝字</b><span>我删的</span><b class="restore">蓝色下划线</b><span>我恢复的</span><b class="move">淡蓝底</b><span>我挪过位置的</span><b class="fixed">点线</b><span>改过字幕写法的</span><b class="playing">黑底</b><span>正在播的字</span></div>
+<h3>怎么操作</h3><ul>
+<li><b>删字</b>：暂停后拖选文字，松开就划掉。</li><li><b>恢复</b>：拖选已经划掉的字，松开就恢复。</li>
+<li><b>挪位置</b>：鼠标移到一个小句（逗号、句号分开）上，它下面亮起蓝色下划线；按住下划线，拖到别的小句前半截或后半截。</li>
+<li><b>定位</b>：点一个字跳到那里，旁边会浮出“恢复、改字幕、听原话”；<kbd>空格</kbd> 播放 / 暂停。</li>
+<li><b>找改动</b>：进度条上的小点是改动的位置，灰点是 AI 删的，蓝点是我改的；“上一处 / 下一处改动”挨个跳。</li>
+<li><b>分段</b>：点一个字后按 <kbd>回车</kbd>，从这一小句起另起一段；在段首按 <kbd>删除键</kbd> 和上一段合并。只改排版，不影响剪辑。</li>
+<li><b>撤销</b>：<kbd>⌘Z</kbd>，重做 <kbd>⇧⌘Z</kbd>。</li>
+<li>改动自动保存在本机，点“保存到达芬奇”才更新时间线和字幕。</li>
+<li>键盘（空格、⌘Z、回车、删除键）仅在口播精剪栏打开时作用于此处；切换到审片栏后，空格仍控制达芬奇播放。</li></ul>
+<h3>画面</h3><label class="player-size" for="playerSize">画面大小<input id="playerSize" type="range" min="280" max="960" step="20" value="600" aria-label="画面大小"></label>
+<details><summary>原有选择与备注</summary><div id="prior"></div></details><details><summary>定位说明</summary><p>中文按汉字对齐，英文按发音单词定位；标点随相邻字处理。波浪线表示边界尚待核实，此处暂不剪切。</p><p>画面字幕沿用原转写，尚未人工校对。倍速只影响预览。逐字时间来自本机语音对齐模型，是模型估计的发音边界。页面按当前删除区间即时跳播，原始素材不变；剪辑结果同时在后台生成。</p></details>
+</div></details>
+<button id="undo" class="btn ghost" title="撤销（⌘Z）" disabled>撤销</button><button id="redo" class="btn ghost" title="重做（⇧⌘Z）" disabled>重做</button><button id="saveResolve" class="btn primary" disabled>保存到达芬奇</button></div></header>
+<div id="alignmentNotice" class="notice" hidden></div>
+<div class="workspace"><aside class="stage-col"><div id="previewShell" class="preview-shell"><div class="video-stage"><video id="video" preload="auto" playsinline src="/source.mp4" aria-label="视频预览"></video><div id="caption" class="caption" aria-label="预览字幕"></div></div></div>
+<p id="cursorLabel" class="muted">点一个字定位，按空格播放</p><div id="audition" class="audition" hidden></div></aside>
+<main class="document"><div id="textPane" class="text-pane" tabindex="0"><div id="paragraphs"></div></div></main></div>
+<div id="selbar" class="selbar" hidden><span id="selectionLabel" class="selection-label"></span><button id="restore" class="btn" disabled>恢复</button><button id="fixCaption" class="btn" disabled title="修改这个字在字幕里的写法；原始转写不变">改字幕</button><button id="auditionButton" class="btn" hidden>听原话</button></div>
+<footer class="playbar"><button id="play" class="btn" disabled>播放</button><span id="clock" class="time">00:00 / 00:00</span>
+<div class="track"><div class="track-inner"><div id="played" class="played"></div><div id="trackMarks" class="marks"></div><nav id="toc" class="toc" aria-label="段落" hidden></nav></div><input id="seek" class="seek" type="range" min="0" max="1" value="0" step="0.01" aria-label="剪后进度" disabled></div>
+<button id="prevChange" class="btn ghost" disabled>上一处改动</button><button id="nextChange" class="btn ghost" disabled>下一处改动</button>
+<div id="speedButtons" class="speed" role="group" aria-label="播放倍速"><span>倍速</span><button data-rate="1">1.0</button><button data-rate="1.2">1.2</button><button data-rate="1.5">1.5</button><button data-rate="1.8">1.8</button><button data-rate="2">2.0</button></div>
+<select id="playbackSpeed" aria-label="预览倍速" hidden><option value="1">1.0×</option><option value="1.2">1.2×</option><option value="1.5">1.5×</option><option value="1.8">1.8×</option><option value="2">2.0×</option></select>
+<button id="fullscreen" class="btn ghost">全屏</button></footer>
+<script src="/caption-engine.js"></script><script src="/caption-text.js"></script><script src="/preview-source.js"></script><script src="/resolve-sync.js"></script>
+<script data-role="shenpian">
+// 审片台接口（只这一段是审片台加的，下面剪辑器本身的代码照原样）：
+// ① 这一页只内嵌在审片台“口播剪辑”栏里用（一个页面、一个地址）：单独打开就跳回审片台的“口播剪辑”栏。
+// ② 写入请求带审片台的页面口令：审片台查过同源和口令，才转给剪口播后台（别的网页、命令行冒充不了用户改字）。
+// ③ 键盘（空格、⌘Z、回车、删除键）只在“口播剪辑”栏是当前栏时归剪辑器：别的栏目时这里收到的按键一律不处理，焦点交回审片台。
+if(window.parent===window)location.replace('/#'+encodeURIComponent('文案'));
+const SHENPIAN_TOKEN='__SHENPIAN_TOKEN__';
+// 口令先问外面的审片台页面要（服务重启后口令会换，外面的页面会拿到新的），问不到再用本页带的
+const shenpianToken=()=>{try{return window.parent.shenpianToken?.()||SHENPIAN_TOKEN}catch{return SHENPIAN_TOKEN}};
+(()=>{const send=window.fetch.bind(window);window.fetch=(url,options)=>{if(options&&options.method==='POST')options={...options,headers:{...(options.headers||{}),'X-Shenpian-Token':shenpianToken()}};return send(url,options)}})();
+// 字号（2026-11-22 用户：“加个模块……让我可以随意调整字块大小”）：12–30，默认 16
+(()=>{const KEY='kouboFontSize';let size=16;try{size=+localStorage.getItem(KEY)||16}catch{}
+  const set=v=>{size=Math.max(12,Math.min(30,v));document.documentElement.style.setProperty('--copy-size',size+'px');const n=document.getElementById('fontNow');if(n)n.textContent=size;try{localStorage.setItem(KEY,size)}catch{}};
+  document.addEventListener('DOMContentLoaded',()=>{set(size);document.getElementById('fontDown').onclick=()=>set(size-1);document.getElementById('fontUp').onclick=()=>set(size+1)});set(size)})();
+function wenanShown(){try{return window.parent.document.querySelector('.pane.on')?.dataset.col==='文案'}catch{return true}}
+document.addEventListener('keydown',e=>{if(!wenanShown()){e.stopImmediatePropagation();e.preventDefault();try{window.parent.focus()}catch{}}},true);
+// ④ 审片台规矩 8（2026-11-22 用户定：“我点击空白的位置，它应该自动退出”）：“我的改动”“帮助”两个弹出框点外面就收起、按 Esc 也收起；
+//    点在这一页任何地方也顺手关掉审片台那边开着的浮层（“标题 · 封面文字 · 原稿”等）。只加关闭方式，剪辑操作不动。
+function closePops(except){document.querySelectorAll('details.pop[open]').forEach(d=>{if(d!==except)d.open=false})}
+document.addEventListener('pointerdown',e=>{closePops(e.target.closest?.('details.pop'));try{window.parent.closeOvlAll?.()}catch{}},true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.querySelector('details.pop[open]'))closePops()},true);
+</script>
+<script>
+// 报错给人看：原始异常（英文、网络错误）换成一句中文；切到别的栏（内嵌框被隐藏）、窗口在后台时不轮询
+const humanErr=e=>{const m=String(e?.message||e||'');return /[\u4e00-\u9fa5]/.test(m)&&!/Errno|Traceback|[A-Za-z]+Error\b/.test(m)?m:'暂时无法读取口播精剪数据，请稍后重试；仍不行请告诉 AI'};
+const shown=()=>document.visibilityState==='visible'&&(!window.frameElement||window.frameElement.offsetParent!==null);
+
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const video=typeof PreviewSource==='undefined'?$('video'):PreviewSource.attach($('video')),pane=$('textPane'),sizeKey='c0451-player-width',time=s=>`${String(Math.floor(Math.max(0,s+.001)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,s+.001)%60)).padStart(2,'0')}`;
+let data,tokens=[],timeTokens=[],lookup=new Map(),elements=new Map(),lastSelection=[],activeId=null,busy=false,syncing=false,dragging=false,suppressClick=false,audition=null,auditionTarget=null,locatedId=null,followUntil=0,seekPending=false,initialized=false,lastAlignment=null,captionTrack=null,originalCaptionTrack=null,captionKey=null,boundaryTimer=null,boundaryKey=null,removedIds=null,loadVersion=0,playbackEnded=false,playSeg=null,dragRun=null,dropTarget=null,clauseRuns=[];
+function resize(value){const w=Math.max(280,Math.min(960,Math.round((Number(value)||600)/20)*20));$('playerSize').value=w;document.documentElement.style.setProperty('--player-width',w+'px');return w}
+// 没手调过就不设宽度：画面一栏按素材比例自己定（见样式里的 .workspace）。
+try{const saved=localStorage.getItem(sizeKey);if(saved)resize(saved)}catch{}$('playerSize').oninput=()=>{const w=resize($('playerSize').value);try{localStorage.setItem(sizeKey,String(w))}catch{}};
+const speedKey='c0451-preview-speed';
+function setSpeed(value){const rate=[1,1.2,1.5,1.8,2].includes(Number(value))?Number(value):1;video.preservesPitch=true;video.playbackRate=rate;video.defaultPlaybackRate=rate;$('playbackSpeed').value=String(rate);for(const b of $('speedButtons').querySelectorAll?.('button')||[])b.classList.toggle('on',Number(b.dataset.rate)===rate);try{localStorage.setItem(speedKey,String(rate))}catch{};cancelBoundary();armBoundary();}
+let savedSpeed=1;try{savedSpeed=localStorage.getItem(speedKey)||1}catch{};setSpeed(savedSpeed);
+$('playbackSpeed').onchange=()=>{setSpeed($('playbackSpeed').value);$('playbackSpeed').blur()};
+$('speedButtons').onclick=e=>{const b=e.target.closest?.('[data-rate]');if(b){setSpeed(b.dataset.rate);b.blur?.()}};
+function rebuildCaptions(){const key=lastAlignment+JSON.stringify([data.text_cuts||data.cuts,data.segments||[],data.subtitle_token_corrections||[]]);if(key===captionKey)return;captionKey=key;const corrected=CaptionText.correctTokens(tokens,data.units,data.subtitle_token_corrections||[]).tokens;originalCaptionTrack=CaptionEngine.build(corrected);captionTrack=CaptionEngine.build(corrected,t=>removed(t),data.segments?CaptionEngine.timeline(data.segments,data.fps):undefined);CaptionText.balanceBrandLines(originalCaptionTrack.cues,CaptionEngine);CaptionText.balanceBrandLines(captionTrack.cues,CaptionEngine);}
+function showCaption(now){if(!captionTrack)return;const original=!!audition||(video.paused&&locatedId&&removed(lookup.get(locatedId)));const track=original?originalCaptionTrack:captionTrack;
+ const cue=video.paused&&locatedId?track.byId.get(locatedId):CaptionEngine.at(track,now);const text=cue?cue.lines.join('\n'):'';
+ if($('caption').textContent!==text)$('caption').textContent=text;$('caption').dataset.mode=original?'original':'edited';$('caption').dataset.ids=cue?cue.ids.join(','):'';
+}
+function cancelBoundary(){clearTimeout(boundaryTimer);boundaryTimer=null;boundaryKey=null}
+function armBoundary(){if(!data||video.paused||video.seeking||seekPending){cancelBoundary();return}const now=video.currentTime;const seg=data.segments[playSeg],f=now*data.fps;const end=audition?audition.end:seg&&f>=seg.src_in-.5&&f<seg.src_out?seg.src_out/data.fps:data.cuts.find(([a,b])=>b/data.fps>now)?.[0]/data.fps;if(!Number.isFinite(end)){cancelBoundary();return}const key=end+':'+video.playbackRate;if(boundaryTimer&&key===boundaryKey)return;cancelBoundary();boundaryKey=key;boundaryTimer=setTimeout(()=>{boundaryTimer=null;tick()},Math.max(4,(end-now)*1000/video.playbackRate));}
+video.addEventListener('ratechange',()=>{cancelBoundary();armBoundary()});video.addEventListener('pause',cancelBoundary);video.addEventListener('play',armBoundary);
+// The preview frame follows the footage: 16:9, vertical 9:16 or anything else.
+function fitStage(){const w=video.videoWidth,h=video.videoHeight;if(w&&h)document.documentElement.style.setProperty('--ar',(w/h).toFixed(4))}
+video.addEventListener('loadedmetadata',fitStage);
+function acceptData(next){data=next;removedIds=Array.isArray(next.removed_token_ids)?new Set(next.removed_token_ids):null}
+function removed(t){if(!t)return false;if(removedIds)return removedIds.has(t.id);const mid=(t.start_ms+t.end_ms)*data.fps/2000;return (data.text_cuts||data.cuts).some(([a,b])=>a<=mid&&mid<b)}
+// Segments are listed in cut-timeline order; after sentences are moved they are no longer in source order.
+function segIndexAt(f){return data.segments.findIndex(s=>s.src_in<=f&&f<s.src_out)}
+function nextIndexAfter(f){let best=-1;data.segments.forEach((s,i)=>{if(s.src_in>f&&(best<0||s.src_in<data.segments[best].src_in))best=i});return best}
+function sourceToTimeline(sec){const f=sec*data.fps,i=segIndexAt(f);if(i>=0){const s=data.segments[i];return (s.tl_in+f-s.src_in)/data.fps}const j=nextIndexAfter(f);return j>=0?data.segments[j].tl_in/data.fps:data.duration}
+function timelineToSource(sec){const f=sec*data.fps;for(const s of data.segments)if(f<s.tl_out)return (s.src_in+Math.max(0,f-s.tl_in))/data.fps;return (data.segments.at(-1)?.src_out??0)/data.fps}
+function nextKept(sec){const f=sec*data.fps;if(segIndexAt(f)>=0)return sec;const j=nextIndexAfter(f);return j>=0?data.segments[j].src_in/data.fps:null}
+function pause(){video.pause();$('play').textContent='播放'}
+function seekTo(sec,seg=null){if(data?.segments){const f=sec*data.fps,i=segIndexAt(f);playSeg=seg??(i>=0?i:nextIndexAfter(f))}seekPending=Math.abs(video.currentTime-sec)>.00001;video.currentTime=sec}
+function playFrom(sec){pause();playbackEnded=false;locatedId=null;audition=null;$('audition').hidden=true;seekTo(nextKept(sec)??data.segments[0].src_in/data.fps);video.play().catch(e=>$('error').textContent='请再点播放：'+e.message)}
+// Reads like an article: each chapter is one paragraph unless the user splits it with Enter.
+// Chapters come from the outline AI wrote by topic (审核/文稿分段.json), else from the project sections, else start at “第一个/第二件…”.
+function layout(){
+ const units=data.units,breaks=new Set(data.outline?.breaks||[]);
+ if(data.outline?.sections?.length)return {sections:data.outline.sections,breaks};
+ if(data.sections?.length>1)return {sections:data.sections,breaks};
+ const sections=[{start:units[0]?.id??0,title:'开头'}];
+ for(const u of units)if(u.id!==sections[0].start&&/^第[一二三四五六七八九十0-9]+(个|件|步|部分|点)/.test(u.text))sections.push({start:u.id,title:u.text.replace(/[。！？!?]+$/,'').slice(0,24)});
+ return {sections,breaks}}
+function draw(){
+ const byUnit=new Map();tokens.forEach(t=>{if(!byUnit.has(t.unit_id))byUnit.set(t.unit_id,[]);byUnit.get(t.unit_id).push(t)});
+ const {sections,breaks}=layout(),groupStarts=sections.map(s=>s.start),titles=sections.map(s=>s.title);
+ const sectionOf=id=>{let g=-1;groupStarts.forEach((start,i)=>{if(start<=id)g=i});return g};
+ // A clause is the run of words in one sentence up to a comma, full stop or similar; it is the unit the user drags.
+ const clauseOf=new Map();for(const u of data.units){const chars=Array.from(u.text),ts=byUnit.get(u.id)||[];let k=0;
+  ts.forEach((t,i)=>{const next=ts[i+1]?.char_start??chars.length;t.display=chars.slice(t.char_start,next).join('');t.lead=i===0&&t.char_start>0?chars.slice(0,t.char_start).join(''):'';clauseOf.set(t.id,u.id+':'+k);if(/[，,。！？!?；;：:、…]\s*$/.test(t.display))k++})}
+ const moves=(data.manual_changes||[]).filter(c=>c.action==='move'),moved=new Set(moves.flatMap(c=>c.ids)),side=new Map(moves.flatMap(c=>c.ids.map(id=>[id,c.side])));
+ clauseRuns=[];for(const id of data.word_order||tokens.map(t=>t.id)){const key=clauseOf.get(id);if(!key)continue;const last=clauseRuns.at(-1);if(last&&last.key===key)last.ids.push(id);else clauseRuns.push({key,ids:[id]})}
+ // Chapters and paragraphs follow the reviewed order; a moved clause stays in the paragraph where it now sits.
+ let html='',current=-1,toc=[];secFirst=[];
+ // A moved clause shows in the chapter the user aimed at: dropped on the front half of a clause → that clause's chapter, else the chapter it follows.
+ clauseRuns.forEach((run,r)=>{const first=lookup.get(run.ids[0]),unit=first.unit_id,isMoved=run.ids.some(id=>moved.has(id));let g=sectionOf(unit);if(g<0)return;
+ if(isMoved){const next=side.get(run.ids[0])==='before'&&clauseRuns.slice(r+1).find(x=>!x.ids.some(id=>moved.has(id)));g=next?sectionOf(lookup.get(next.ids[0]).unit_id):current>=0?current:g}
+ if(g!==current){if(current>=0)html+='</p></section>';toc.push(g);secFirst.push({g,id:run.ids[0],title:titles[g]});html+=`<section class="paragraph" id="sec-${g}"><h2><span class="num">${toc.length}</span>${esc(titles[g])}</h2><p class="copy">`;current=g}
+ else if(breaks.has(run.ids[0]))html+='</p><p class="copy">';
+ html+=`<span class="unit${isMoved?' moved':''}" data-run="${r}">`;
+ for(const id of run.ids){const t=lookup.get(id);if(t.lead)html+=`<span class="space">${esc(t.lead)}</span>`;
+ html+=`<span class="word ${removed(t)?'deleted':''} ${!t.ready?'unverified':''}" data-id="${esc(t.id)}" title="原片 ${time(t.start_ms/1000)}${!t.ready?' · 边界待核实':''}">${esc(t.display)}</span>`}
+ html+='</span>'});
+ $('toc').hidden=toc.length<2;
+ $('paragraphs').innerHTML=html;activeId=null;elements=new Map([...document.querySelectorAll('.word')].map(el=>[el.dataset.id,el]));update();
+}
+function update(){
+ const manualCuts=new Set(data.manual_cut_token_ids||[]),manualRestores=new Set(data.manual_restored_token_ids||[]);
+ let removedCount=0;for(const t of tokens){const el=elements.get(t.id);if(!el)continue;const cut=removed(t);if(cut)removedCount++;el.classList.toggle('deleted',cut);el.classList.toggle('by-user',cut&&manualCuts.has(t.id));el.classList.toggle('by-ai',cut&&!manualCuts.has(t.id));el.classList.toggle('restored-by-user',!cut&&manualRestores.has(t.id));el.dataset.changeOrigin=cut?(manualCuts.has(t.id)?'user':'ai'):manualRestores.has(t.id)?'user-restored':'';el.classList.toggle('chosen',lastSelection.includes(t.id))}
+ const changes=data.manual_changes||[];$('changeSummary').textContent=changes.length?`我的改动 · ${changes.length} 处`:'我的改动';$('changeList').innerHTML=changes.length?changes.map(change=>`<button data-jump-id="${esc(change.ids[0])}" title="点此定位原片 ${time(change.start_ms/1000)}">${{cut:'我删除',restore:'我恢复',move:'我挪动'}[change.action]}：<span class="${{cut:'cut-text',restore:'restore-text',move:'move-text'}[change.action]}">${esc(change.text)}</span></button>`).join(''):'<span class="muted">还没有改动。你删的字是蓝色划掉，挪过的小句是淡蓝底。</span>';
+ $('saveResolve').disabled=busy||syncing||!data.alignment;$('undo').disabled=busy||syncing||!data.cursor;$('redo').disabled=busy||syncing||data.cursor>=data.history_length;$('restore').disabled=busy||syncing||!lastSelection.some(id=>removed(lookup.get(id)));$('fixCaption').disabled=busy||syncing||lastSelection.length!==1;
+ const fixes=new Map((data.subtitle_token_corrections||[]).map(c=>[c.id,c.after]));for(const [id,el] of elements){el.classList.toggle('caption-fixed',fixes.has(id));if(fixes.has(id))el.title=`字幕显示为「${fixes.get(id)}」`}$('play').disabled=busy||!tokens.length;$('seek').disabled=busy||!tokens.length;$('seek').max=data.duration;
+ $('summary').textContent=`剪后 ${time(data.duration)} · 保留 ${tokens.filter(t=>t.ready&&!removed(t)).length} 字 · ${data.repeat_count||0} 处重复已处理`;
+ $('selectionLabel').textContent=lastSelection.length?'已选：'+lastSelection.map(id=>lookup.get(id).text).join(''):'';
+ $('prior').innerHTML=`<p>已保留原页 ${data.prior_choices} 组选项。</p>`+Object.values(data.notes).filter(Boolean).map(n=>`<p>${esc(n)}</p>`).join('');
+ const count=tokens.filter(t=>!t.ready).length;$('alignmentNotice').hidden=!count;$('alignmentNotice').textContent=count?`${count} 个字词的边界尚待核实，已标出虚线。其余可逐字定位和划选。`:'';
+ drawTrack();$('prevChange').disabled=$('nextChange').disabled=busy||syncing||!changePoints.length;placeBar();rebuildCaptions();tick();
+}
+// 进度条：按段落分格（格子下面写段落名），上面一排小点标出改动的位置——灰点 = AI 删的，蓝点 = 我改的（删、恢复、挪）。
+// changePoints 是这些点按剪后时间排好的清单，“上一处 / 下一处改动”就在它里面走。
+let secFirst=[],changePoints=[];
+function drawTrack(){if(!data?.segments||!(data.duration>0))return;const D=data.duration,pct=s=>Math.max(0,Math.min(100,s/D*100)),at=id=>{const t=lookup.get(id);return t?sourceToTimeline(t.start_ms/1000):0};
+ const secs=secFirst.map(s=>({...s,at:at(s.id)})).sort((a,b)=>a.at-b.at);if(secs.length)secs[0].at=0;
+ $('toc').innerHTML=secs.length>1?secs.map((s,i)=>{const a=pct(s.at),b=pct(secs[i+1]?.at??D);return `<button data-sec="${s.g}" data-from="${s.at}" data-to="${secs[i+1]?.at??D}" style="left:${a}%;width:${b-a}%" title="${esc(s.title)}">${esc(s.title)}</button>`}).join(''):'';
+ const manual=new Set(data.manual_cut_token_ids||[]),pts=[];let prev=null;
+ for(const t of timeTokens){const kind=removed(t)?(manual.has(t.id)?'mine':'ai'):null;if(kind&&kind!==prev)pts.push({at:sourceToTimeline(t.start_ms/1000),id:t.id,kind});prev=kind}
+ for(const c of data.manual_changes||[])if(c.action!=='cut'&&lookup.has(c.ids?.[0]))pts.push({at:at(c.ids[0]),id:c.ids[0],kind:'mine'});
+ pts.sort((a,b)=>a.at-b.at);changePoints=pts.filter((p,i)=>!i||p.at-pts[i-1].at>.05||p.kind!==pts[i-1].kind);
+ $('trackMarks').innerHTML=secs.slice(1).map(s=>`<i class="gap" style="left:${pct(s.at)}%"></i>`).join('')+changePoints.map(p=>`<i class="tick ${p.kind}" style="left:${pct(p.at)}%"></i>`).join('');trackAt=-1}
+function jumpChange(dir){if(busy||syncing||!changePoints.length)return;const now=sourceToTimeline(video.currentTime),k=changePoints.findIndex(p=>p.id===locatedId);
+ const i=k>=0?k+dir:dir>0?changePoints.findIndex(p=>p.at>now+.02):changePoints.map(p=>p.at<now-.02).lastIndexOf(true);const p=changePoints[i];if(!p)return;followUntil=0;elements.get(p.id)?.click()}
+$('prevChange').onclick=()=>jumpChange(-1);$('nextChange').onclick=()=>jumpChange(1);
+// 选中一个字后，操作条浮在它下面（下面放不下就放上面）；播放、拖动时收起，字滚出文稿框也收起。
+function placeBar(){const bar=$('selbar'),el=lastSelection.length?elements.get(lastSelection[0]):null,r=video.paused&&!dragging&&dragRun===null?el?.getBoundingClientRect?.():null,box=pane.getBoundingClientRect();
+ if(!r||r.bottom<box.top||r.top>box.bottom){bar.hidden=true;return}bar.hidden=false;const w=bar.offsetWidth||320,h=bar.offsetHeight||48,vw=window.innerWidth||1200;
+ bar.style.left=Math.max(12,Math.min(vw-w-12,r.left-12))+'px';bar.style.top=(r.bottom+h+10>box.bottom?r.top-h-8:r.bottom+8)+'px'}
+pane.addEventListener('scroll',placeBar,{passive:true});window.addEventListener?.('resize',placeBar);video.addEventListener('play',placeBar);video.addEventListener('pause',placeBar);
+// 点文稿的空白处：收起操作条。
+pane.addEventListener('click',e=>{if(e.target.closest?.('.word')||suppressClick||busy||syncing||!lastSelection.length)return;lastSelection=[];update()});
+let trackAt=-1;
+async function load(initial=false){const requestVersion=++loadVersion;const r=await fetch('/editor-api');if(!r.ok)throw Error((await r.json().catch(()=>null))?.error||'页面数据读取失败');const next=await r.json();if(busy||requestVersion!==loadVersion)return;
+ const changed=!data||next.state_revision!==data.state_revision||next.revision!==data.revision||next.alignment?.alignment_id!==lastAlignment||JSON.stringify(next.cuts)!==JSON.stringify(data.cuts);
+ if(!changed)return;const alignmentChanged=next.alignment?.alignment_id!==lastAlignment;acceptData(next);lastAlignment=data.alignment?.alignment_id;
+ if(alignmentChanged){pause();lastSelection=[];locatedId=null;auditionTarget=null;audition=null;captionKey=null;$('auditionButton').hidden=true;$('audition').hidden=true;initialized=false}
+ if(!data.alignment){tokens=[];lookup=new Map();elements=new Map();$('paragraphs').textContent='';$('caption').textContent='';$('play').disabled=true;$('seek').disabled=true;$('undo').disabled=true;$('redo').disabled=true;$('restore').disabled=true;$('saveResolve').disabled=true;$('alignmentNotice').hidden=false;$('alignmentNotice').textContent='正在计算逐字时间戳；完成后会自动启用选字和定位。';$('summary').textContent='逐字对齐准备中';return}
+ tokens=data.alignment.tokens;timeTokens=[...tokens].sort((a,b)=>a.start_ms-b.start_ms||a.end_ms-b.end_ms);lookup=new Map(tokens.map(t=>[t.id,t]));lastSelection=lastSelection.filter(id=>lookup.has(id));draw();
+ if(!initialized){initialized=true;const first=tokens.find(t=>t.ready&&!removed(t));if(first){const start=()=>{seekTo(first.start_ms/1000);tick()};if(video.readyState>=1)start();else video.addEventListener('loadedmetadata',start,{once:true})}}
+}
+// Change how one word is written in the subtitles; the transcript and cuts stay unchanged.
+async function fixCaption(){const t=lookup.get(lastSelection[0]);if(busy||syncing||!t)return;const old=(data.subtitle_token_corrections||[]).find(c=>c.id===t.id);
+ const value=prompt(`字幕里把「${t.text}」写成（改回原字即取消纠错）：`,old?old.after:t.text);if(value===null)return;const after=value.trim();
+ if(!after||(after===t.text&&!old)||(old&&after===old.after))return;
+ const row=after===t.text?{id:t.id,remove:true}:{id:t.id,before:t.text,after,reason:'网页手动修改字幕'};
+ busy=true;update();try{const r=await fetch('/subtitle-corrections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:[row],state_revision:data.state_revision})});
+ const result=await r.json();if(!r.ok)throw Error(result.error||'保存失败');acceptData(result);captionKey=null;$('status').textContent=row.remove?'已恢复原字幕':`字幕已改为「${after}」`}
+ catch(e){$('error').textContent=e.message}finally{busy=false;update()}}
+// Enter after clicking a word starts a new paragraph at its clause; Backspace on a paragraph start joins it back. Layout only: the cut is untouched.
+async function setBreak(on){if(busy||syncing||lastSelection.length!==1)return;const run=clauseRuns.find(r=>r.ids.includes(lastSelection[0]));if(!run)return;const id=run.ids[0],has=(data.outline?.breaks||[]).includes(id);
+ if(on===has||(on&&clauseRuns[0]===run))return;busy=true;update();try{const r=await fetch('/paragraph-break',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,on})});const result=await r.json();if(!r.ok)throw Error(result.error||'保存失败');acceptData(result);draw();$('status').textContent=on?'已从这里分段':'已和上一段合并'}catch(e){$('error').textContent=e.message}finally{busy=false;update()}}
+async function save(action,ids=[],extra={}){if(busy||syncing||!data?.alignment)return;busy=true;++loadVersion;pause();playbackEnded=false;locatedId=null;auditionTarget=null;$('auditionButton').hidden=true;audition=null;$('audition').hidden=true;$('error').textContent='';$('status').textContent='正在保存…';update();let reloadNeeded=false;
+ try{const r=await fetch('/editor-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...extra,action,ids,alignment_id:data.alignment.alignment_id,revision:data.revision,state_revision:data.state_revision})});const result=await r.json();if(!r.ok)throw Error(result.error||'保存失败');const reordered=JSON.stringify(result.word_order)!==JSON.stringify(data.word_order);acceptData(result);if(reordered)draw();if(action==='cut'||action==='restore')lastSelection=[];$('status').textContent=action==='undo'?'已撤销，保持暂停':action==='redo'?'已重做，保持暂停':action==='restore'?'已恢复所选，保持暂停':action==='move'?'已挪动并保存，保持暂停。':'已划线并保存，保持暂停。按空格继续播放。'}catch(e){reloadNeeded=true;$('error').textContent=e.message;$('status').textContent='未收到保存确认；正在重新读取当前状态…'}finally{busy=false;update();if(reloadNeeded){try{await load();$('status').textContent='已重新读取保存状态，请核对划线结果后再操作。'}catch(e){$('status').textContent='无法核对保存状态，请刷新后再操作。';$('error').textContent=e.message}}}}
+function selectedWords(){const sel=window.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount)return [];const r=sel.getRangeAt(0);return tokens.filter(t=>{const el=elements.get(t.id);if(!el||!r.intersectsNode(el))return false;const n=el.firstChild;if(r.startContainer===n&&r.startOffset>=n.length)return false;if(r.endContainer===n&&r.endOffset===0)return false;return true}).map(t=>t.id)}
+pane.addEventListener('pointerdown',e=>{if(busy||syncing){e.preventDefault();return}if(e.target.closest('.word')){dragging=true;pause();followUntil=Date.now()+2500}});
+document.addEventListener('pointerup',()=>{if(!dragging)return;dragging=false;if(busy||syncing)return;const ids=selectedWords();if(!ids.length)return;suppressClick=true;setTimeout(()=>suppressClick=false,0);lastSelection=ids;window.getSelection().removeAllRanges();if(ids.some(id=>!removed(lookup.get(id))))save('cut',ids);else save('restore',ids)});
+pane.addEventListener('click',e=>{const el=e.target.closest('.word');if(!el||suppressClick||busy||syncing)return;const t=lookup.get(el.dataset.id);pause();playbackEnded=false;audition=null;auditionTarget=null;locatedId=null;$('audition').hidden=true;$('auditionButton').hidden=true;lastSelection=[t.id];update();if(!t.ready){$('error').textContent='这个字的时间边界尚待核实，未跳转。';return}$('error').textContent='';followUntil=0;
+ locatedId=t.id;seekTo(removed(t)?t.start_ms/1000:timelineToSource(sourceToTimeline(t.start_ms/1000)));
+ if(removed(t)){let index=tokens.indexOf(t),end=t.end_ms;while(index+1<tokens.length&&removed(tokens[index+1])&&tokens[index+1].unit_id===t.unit_id){end=tokens[++index].end_ms}auditionTarget={start:t.start_ms/1000,end:end/1000};$('auditionButton').hidden=false;}
+ $('status').textContent='已定位并暂停。按空格或播放键继续。';tick();});
+$('auditionButton').onclick=()=>{if(!auditionTarget||busy)return;pause();locatedId=null;audition={...auditionTarget};$('audition').hidden=false;$('audition').textContent='正在试听已删原段，播完自动停止。';seekTo(audition.start);video.play().catch(()=>{});};
+$('toc').onclick=e=>{const b=e.target.closest('[data-sec]'),el=b&&document.getElementById('sec-'+b.dataset.sec);if(!el)return;followUntil=Date.now()+3500;pane.scrollTo({top:pane.scrollTop+el.getBoundingClientRect().top-pane.getBoundingClientRect().top-12})};
+$('changeList').onclick=e=>{const button=e.target.closest('[data-jump-id]');if(button&&!busy&&!syncing)elements.get(button.dataset.jumpId)?.click()};
+// Drag a clause by the underline under it; drop on the first half of a clause to go before it, the second half to go after it. Esc cancels.
+function clearDrop(){dropTarget=null}
+// The clause whose underline strip (the room under its text, down to the next line) is under the pointer.
+function zoneUnit(el,x,y){const copy=el?.closest?.('.copy');if(!copy||el.closest('.word'))return null;const fs=parseFloat(getComputedStyle(copy).fontSize)||18;
+ for(const u of copy.querySelectorAll('.unit'))for(const r of u.getClientRects())if(x>=r.left&&x<=r.right&&y<=r.bottom&&y>=r.bottom-.8*fs-1)return u;return null}
+function dropAt(el,x,y){const span=el?.closest?.('.unit')||zoneUnit(el,x,y);if(!span||dragRun===null)return null;const run=clauseRuns[Number(span.dataset.run)],moving=clauseRuns[dragRun].ids,order=data.word_order||tokens.map(t=>t.id),word=el.closest?.('.word');
+ // Over a word: its position in the clause; elsewhere: the nearest word to the pointer.
+ let near=word;if(!near){let best=Infinity;for(const w of span.querySelectorAll('.word')){const b=w.getBoundingClientRect(),d=Math.hypot(Math.max(b.left-x,0,x-b.right),Math.max(b.top-y,0,y-b.bottom));if(d<best){best=d;near=w}}}
+ const first=!near||run.ids.indexOf(near.dataset.id)<run.ids.length/2;
+ const before=first?run.ids[0]:order[order.indexOf(run.ids.at(-1))+1]??null;if(moving.includes(before)||(order[order.indexOf(moving.at(-1))+1]??null)===before)return null;return {unit:span,before,first}}
+let hot=null;function setHot(u){if(hot===u)return;hot?.classList.remove('hot');hot=u;u?.classList.add('hot')}
+const pointTarget=e=>document.elementFromPoint?.(e.clientX,e.clientY)||e.target;
+// Lifting a clause: it leaves the text (the rest closes up), a faded card follows the pointer, and a caret marks where it will land.
+let ghost=null,caret=null;
+function startDrag(unit,e){dragRun=Number(unit.dataset.run);pause();pane.classList.remove('grab');pane.classList.add('grabbing');
+ ghost=document.createElement('div');ghost.className='drag-ghost';ghost.textContent=unit.textContent??'';const copy=unit.closest?.('.copy');if(copy)ghost.style.fontSize=parseFloat(getComputedStyle(copy).fontSize)*.8+'px';document.body.appendChild(ghost);
+ caret=document.createElement('div');caret.className='drop-caret';caret.hidden=true;document.body.appendChild(caret);unit.classList.add('lifted');moveGhost(e)}
+function moveGhost(e){if(ghost&&Number.isFinite(e.clientX)){ghost.style.left=e.clientX+18+'px';ghost.style.top=e.clientY+30+'px'}}
+function showCaret(target){if(!caret)return;const words=target?.unit.querySelectorAll?.('.word');const w=words?.length&&(target.first?words[0]:words[words.length-1]).getBoundingClientRect();
+ if(!w){caret.hidden=true;return}caret.hidden=false;caret.style.left=(target.first?w.left-3:w.right+1)+'px';caret.style.top=w.top-3+'px';caret.style.height=w.height+6+'px'}
+function endDrag(keepLifted=false){clearDrop();pane.classList.remove('grabbing');ghost?.remove();caret?.remove();ghost=caret=null;if(!keepLifted)document.querySelectorAll('.unit.lifted').forEach(el=>el.classList.remove('lifted'));dragRun=null}
+// Hover: light up the clause under the pointer; in its underline strip the pointer becomes a hand.
+pane.addEventListener('pointermove',e=>{
+ if(dragRun!==null){moveGhost(e);const el=pointTarget(e),target=dropAt(el,e.clientX,e.clientY);dropTarget=target;showCaret(target);
+  const box=pane.getBoundingClientRect();if(e.clientY<box.top+50)pane.scrollTop-=14;else if(e.clientY>box.bottom-50)pane.scrollTop+=14;return}
+ if(e.buttons)return;const zone=zoneUnit(e.target,e.clientX,e.clientY);setHot(zone||e.target.closest?.('.unit')||null);pane.classList.toggle('grab',!!zone)});
+pane.addEventListener('pointerleave',()=>{if(dragRun===null){setHot(null);pane.classList.remove('grab')}});
+// Press in the strip: start moving that clause (pressing on words keeps selecting text).
+pane.addEventListener('pointerdown',e=>{if(e.button!==0||busy||syncing||!data?.alignment)return;const zone=zoneUnit(e.target,e.clientX,e.clientY);if(!zone)return;
+ e.preventDefault();e.stopPropagation();startDrag(zone,e);try{pane.setPointerCapture(e.pointerId)}catch{}},true);
+pane.addEventListener('pointerup',async()=>{if(dragRun===null)return;const target=dropTarget,ids=clauseRuns[dragRun].ids;endDrag(!!target);if(!target)return;
+ await save('move',ids,{before:target.before,side:target.first?'before':'after'});document.querySelectorAll('.unit.lifted').forEach(el=>el.classList.remove('lifted'));
+ const landed=[...document.querySelectorAll('.unit')].find(el=>el.querySelector?.(`.word[data-id="${ids[0]}"]`));landed?.classList.add('landed');setTimeout(()=>landed?.classList.remove('landed'),900)});
+pane.addEventListener('pointercancel',()=>{if(dragRun!==null)endDrag()});
+$('restore').onclick=()=>save('restore',lastSelection);$('fixCaption').onclick=fixCaption;$('undo').onclick=()=>save('undo');$('redo').onclick=()=>save('redo');
+function togglePlay(){if(busy||!tokens.length)return;if(!video.paused){pause();return}playFrom(playbackEnded?data.segments[0].src_in/data.fps:video.currentTime)}
+$('play').onclick=togglePlay;video.onclick=togglePlay;video.addEventListener('play',()=>$('play').textContent='暂停');video.addEventListener('pause',()=>$('play').textContent='播放');video.addEventListener('seeked',()=>{seekPending=false;tick()});
+$('seek').addEventListener('pointerdown',()=>{pause();audition=null;$('audition').hidden=true});$('seek').oninput=()=>{if(busy)return;pause();playbackEnded=false;locatedId=null;auditionTarget=null;$('auditionButton').hidden=true;audition=null;$('audition').hidden=true;seekTo(timelineToSource(Number($('seek').value)));followUntil=0;tick()};
+function fullscreenLabel(){$('fullscreen').textContent=(document.fullscreenElement||$('previewShell').classList.contains('expanded'))?'退出全屏':'全屏';tick()}
+function exitExpanded(){$('previewShell').classList.remove('expanded');document.body.style.overflow='';fullscreenLabel()}
+$('fullscreen').onclick=async()=>{if(document.fullscreenElement){await document.exitFullscreen();return}if($('previewShell').classList.contains('expanded')){exitExpanded();return}try{await $('previewShell').requestFullscreen()}catch{$('previewShell').classList.add('expanded');document.body.style.overflow='hidden'}fullscreenLabel()};document.addEventListener('fullscreenchange',fullscreenLabel);
+function tick(){if(!data?.alignment)return;let now=video.currentTime;const at=sourceToTimeline(now);$('clock').textContent=`${time(at)} / ${time(data.duration)}`;if(document.activeElement!==$('seek'))$('seek').value=at;
+ if(Math.abs(at-trackAt)>.04){trackAt=at;$('played').style.width=Math.max(0,Math.min(100,at/data.duration*100))+'%';for(const b of $('toc').querySelectorAll?.('button')||[])b.classList.toggle('on',at>=Number(b.dataset.from)-.01&&at<Number(b.dataset.to)-.01)}
+ if(!video.paused&&!seekPending){if(audition){if(now>=audition.end){pause();video.currentTime=audition.end;now=audition.end;$('audition').textContent='原段试听结束，保持暂停。'}}else{const f=now*data.fps;let s=data.segments[playSeg];
+  // Play the segments in timeline order: past the end of the current one (a natural pass, not a jump), go to the next in the list.
+  if(s&&f>=s.src_out-.001&&f<s.src_out+20){const n=data.segments[playSeg+1];if(!n){pause();playbackEnded=true;seekTo((data.segments.at(-1).src_out-1)/data.fps);$('status').textContent='剪后播放结束，保持暂停。'}else if(segIndexAt(f)===playSeg+1)playSeg++;else{seekTo(n.src_in/data.fps,playSeg+1);now=n.src_in/data.fps}}
+  else if(!s||f<s.src_in-.5||f>=s.src_out){const i=segIndexAt(f);if(i>=0)playSeg=i;else{const next=nextKept(now);if(next===null){pause();playbackEnded=true;seekTo((data.segments.at(-1).src_out-1)/data.fps);$('status').textContent='剪后播放结束，保持暂停。'}else if(next>now+.001){seekTo(next);now=next}}}}}
+ showCaption(now);armBoundary();
+ let lo=0,hi=timeTokens.length-1,index=-1;while(lo<=hi){const mid=(lo+hi)>>1;if(timeTokens[mid].start_ms<=now*1000){index=mid;lo=mid+1}else hi=mid-1}
+ let t=timeTokens[index];if(video.paused&&locatedId)t=lookup.get(locatedId);if(video.paused&&!locatedId&&!audition&&(!t||now*1000>=t.end_ms+60||removed(t)))t=timeTokens.slice(index+1).find(x=>x.ready&&!removed(x));const id=t&&(video.paused||now*1000<t.end_ms+60)?t.id:null;
+ if(id!==activeId){if(activeId)elements.get(activeId)?.classList.remove('active');activeId=id;if(id){const el=elements.get(id);el?.classList.add('active');$('cursorLabel').textContent=`原片 ${time(t.start_ms/1000)} · ${t.text}${audition?' · 试听已删原声':''}`;
+ if(!dragging&&Date.now()>followUntil&&el){const rect=el.getBoundingClientRect(),box=pane.getBoundingClientRect();if(rect.top<box.top+35||rect.bottom>box.bottom-35)pane.scrollTo({top:pane.scrollTop+rect.top-box.top-box.height*.38,behavior:'smooth'})}}}
+}
+pane.addEventListener('wheel',()=>followUntil=Date.now()+3500,{passive:true});video.addEventListener('timeupdate',tick);video.addEventListener('ended',()=>{if(!audition)playbackEnded=true;tick()});
+if(video.requestVideoFrameCallback){const frame=()=>{tick();video.requestVideoFrameCallback(frame)};video.requestVideoFrameCallback(frame)}else{setInterval(()=>{if(!video.paused)tick()},33)}
+document.addEventListener('keydown',e=>{
+ if(e.isComposing)return;
+ if(e.key==='Escape'&&dragRun!==null){e.preventDefault();endDrag();return}
+ if(e.key==='Escape'&&$('previewShell').classList.contains('expanded')){e.preventDefault();exitExpanded();return}
+ if(e.code==='Space'){
+  const input=e.target.closest('input');const typing=e.target.isContentEditable||e.target.closest('textarea')||(input&&!['range','checkbox','radio','button','submit','reset'].includes(input.type));
+  if(typing||e.metaKey||e.ctrlKey||e.altKey)return;
+  e.preventDefault();e.stopPropagation();if(!e.repeat&&tokens.length&&!busy)togglePlay();return;
+ }
+ if(e.target.closest('input,select,textarea,[contenteditable="true"]'))return;
+ if(!e.metaKey&&!e.ctrlKey&&!e.altKey&&(e.key==='Enter'||e.key==='Backspace')&&lastSelection.length===1&&!e.target.closest('button,summary,a')){e.preventDefault();setBreak(e.key==='Enter');return}
+ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();if(!busy&&!syncing&&data&&(e.shiftKey?data.cursor<data.history_length:data.cursor>0))save(e.shiftKey?'redo':'undo')}
+},true);
+if(typeof ResolveSync!=='undefined')ResolveSync.attach({getData:()=>data,pause,onLock:value=>{syncing=value;if(data?.alignment)update()},onConflict:()=>load()});
+load(true).catch(e=>$('error').textContent=humanErr(e));setInterval(()=>{if(shown()&&!busy&&!dragging&&video.paused)load().then(()=>{if(/暂时无法读取/.test($('error').textContent))$('error').textContent=''}).catch(e=>$('error').textContent=humanErr(e))},3000);
+</script></html>

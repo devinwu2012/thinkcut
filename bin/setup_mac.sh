@@ -20,22 +20,22 @@ link() {  # 链接名 源目录
   done
 }
 # 5 个技能入口（10-23 合并成 3 个，10-24 上传拆回独立入口，11-11 加反馈）；剪口播、B-roll、花字、导航是 thinkcut-edit 下面的步骤
-link thinkcut-edit     "$ROOT/口播自动剪辑/skill/thinkcut-edit"      # 剪辑：口播→动画→字幕→导航→花字→导出
-link thinkcut-project  "$ROOT/视频项目管理/skills/thinkcut-project"  # 项目：建项目、整理素材、存档、登记封面
-link thinkcut-cover    "$ROOT/封面/skill/thinkcut-cover"             # 封面
-link thinkcut-upload   "$ROOT/视频项目管理/skills/thinkcut-upload"   # 上传：蚁小二内部草稿（2026-10-24 拆回独立入口）
-link thinkcut-feedback "$ROOT/口播自动剪辑/skill/thinkcut-feedback"  # 反馈：问题清单→反馈单交维护者（2026-11-11）
+link thinkcut-edit     "$ROOT/studio/skill/thinkcut-edit"      # 剪辑：口播→动画→字幕→导航→花字→导出
+link thinkcut-project  "$ROOT/projects/skills/thinkcut-project"  # 项目：建项目、整理素材、存档、登记封面
+link thinkcut-cover    "$ROOT/cover/skill/thinkcut-cover"             # 封面
+link thinkcut-upload   "$ROOT/projects/skills/thinkcut-upload"   # 上传：蚁小二内部草稿（2026-10-24 拆回独立入口）
+link thinkcut-feedback "$ROOT/studio/skill/thinkcut-feedback"  # 反馈：问题清单→反馈单交维护者（2026-11-11）
 # 从改名前升级来的安装：旧技能名照样链上（链到仓库里的旧路径，退回旧版本也不断），用户和 AI 原来的叫法还能用
-if [[ -f "$ROOT/bin/旧名兼容.sh" ]]; then
-  source "$ROOT/bin/旧名兼容.sh"
+if [[ -f "$ROOT/bin/legacy_names.sh" ]]; then
+  source "$ROOT/bin/legacy_names.sh"
   for pair in ${THINKCUT_LEGACY_SKILLS:-}; do link "${pair%%=*}" "$ROOT/${pair#*=}"; done
 fi
 if [[ $only_links == 1 ]]; then [[ $failed == 0 ]] && echo "技能链接就绪" || echo "有技能没链上，见上面"; exit $failed; fi
 echo "--- 上传用的 yxer-safe（只存蚁小二草稿、拦发布命令；Key 要在这台 Mac 上单独设：yxer-safe key set）"
-bash "$ROOT/视频项目管理/bin/setup_mac.sh" || failed=1      # 2026-11-13 审查：以前总安装脚本不装它，新 Mac 上传时报找不到 yxer-safe
+bash "$ROOT/projects/bin/setup_mac.sh" || failed=1      # 2026-11-13 审查：以前总安装脚本不装它，新 Mac 上传时报找不到 yxer-safe
 echo "--- 程序环境：从 NAS 的 环境/ 恢复 Mac 运行副本（macOS 27.2 不准运行 NAS 上的程序）"
 bash "$ROOT/bin/sync_env.sh" || failed=1
 echo "--- 动画/字幕/审核线自检"
-PYTHONUTF8=1 python3 "$ROOT/口播自动剪辑/skill/thinkcut-edit/scripts/thinkcut_edit.py" doctor || failed=1
+PYTHONUTF8=1 python3 "$ROOT/studio/skill/thinkcut-edit/scripts/thinkcut_edit.py" doctor || failed=1
 [[ $failed == 0 ]] && echo "全部就绪" || echo "有未就绪的项目，见上面"
 exit $failed

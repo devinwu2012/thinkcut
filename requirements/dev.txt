@@ -1,0 +1,4 @@
+# 改程序、跑测试时多要的（日常用不着）
+-r base.txt
+pytest==8.4.2
+# 代码检查 ruff 不用装，用 uvx 现取：uvx ruff@0.17.6 check .（配置在根目录 ruff.toml）

@@ -1,0 +1,32 @@
+{
+ "_说明": "公共层：所有 IP 都继承的默认值。某个 IP 不一样就在 profiles/<IP>/ip.json 里写同名的键盖掉；这台机器自己的（片子放别处、默认 IP 换人）写 profiles/本机.json（不进存档）。相对路径按程序目录算，{IP} 换成 IP 名字。读法见 bin/thinkcut_config.py。",
+ "默认IP": "示例IP",
+ "用户配置档": "../ThinkCut配置档",
+ "片子文件夹": "../{IP}视频",
+ "做完的片子子文件夹": "finish",
+ "试验田": "../{IP}试验田",
+ "回收站": "../#recycle",
+ "剪辑": {
+  "画幅": "3:4",
+  "字幕字体": "/System/Library/Fonts/Hiragino Sans GB.ttc"
+ },
+ "封面": {
+  "标题字体": "/System/Library/Fonts/Supplemental/Songti.ttc",
+  "副标题字体": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+  "文件名前缀": "封面_"
+ },
+ "发布": {
+  "平台": [
+   "抖音",
+   "快手",
+   "小红书",
+   "视频号",
+   "哔哩哔哩",
+   "Youtube"
+  ],
+  "youtube分类": "",
+  "原创": false,
+  "领域词": [],
+  "只发这些平台": false
+ }
+}

@@ -1,0 +1,25 @@
+# 编辑器统一设置（https://editorconfig.org）：大多数编辑器自动读，不用装东西。按现有代码的习惯定，老文件不用为它重排。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{py,sh,swift}]
+indent_style = space
+indent_size = 4
+
+[*.{js,mjs,cjs,html,css}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.min.js]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

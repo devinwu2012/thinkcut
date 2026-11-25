@@ -12,7 +12,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P) || exit 1
 NAS="${THINKCUT_ENV_NAS:-$ROOT/环境}"                                         # 两个 THINKCUT_ENV_* 只给离线测试换成临时目录用
 # 2026-11-24：环境原件只有使用版那一份；在开发版（使用版文件夹名后面加 -开发）里跑时用使用版的
 [[ -z "${THINKCUT_ENV_NAS:-}" && "$ROOT" == *-开发 && ! -d "$NAS" ]] && NAS="${ROOT%-开发}/环境"
-[[ -f "$ROOT/bin/旧名兼容.sh" ]] && source "$ROOT/bin/旧名兼容.sh"     # 从改名前升级来的机器：环境文件夹还叫旧名字
+[[ -f "$ROOT/bin/legacy_names.sh" ]] && source "$ROOT/bin/legacy_names.sh"     # 从改名前升级来的机器：环境文件夹还叫旧名字
 ALIGN=${THINKCUT_ALIGN_ENV:-thinkcut-align}; MATTING=${THINKCUT_MATTING_ENV:-thinkcut-matting}
 LOCAL="${THINKCUT_ENV_LOCAL:-$HOME/Library/Application Support/${THINKCUT_APP_DIR:-ThinkCut}/环境}"
 ITEMS=(python "$ALIGN" "$MATTING" davinci-resolve-mcp)
