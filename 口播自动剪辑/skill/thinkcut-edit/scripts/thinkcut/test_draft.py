@@ -59,21 +59,21 @@ class ExportGateTests(Base):
     def tearDown(self): self.srv.shutdown(); self.srv.server_close(); super().tearDown()
 
     def req(self, p, body, page=True):
-        h = {'Content-Type': 'application/json', **({'Origin': self.base, 'Sec-Fetch-Site': 'same-origin', 'X-Shenpian-Token': W.TOKEN} if page else {})}
+        h = {'Content-Type': 'application/json', **({'Origin': self.base, 'Sec-Fetch-Site': 'same-origin', 'Cookie': W.cookie_header(self.base)} if page else {})}
         q = urllib.request.Request(self.base + p, json.dumps(body).encode(), h)
         try:
             with urllib.request.urlopen(q) as r: return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e: return e.code, json.loads(e.read())
 
     def test_export_needs_the_page_click_and_nothing_else_counts(self):
-        with self.assertRaisesRegex(SystemExit, '(?s)还没在审片台点审核线“这一栏定了”.*AI 不能替用户点'): draft.export_gate(self.job)
-        with self.assertRaisesRegex(SystemExit, '这一栏定了'): resolve.export(self.job, user_ok='用户说：可以了导出吧')        # 转述的原话不算
+        with self.assertRaisesRegex(SystemExit, '(?s)还没在审片台点审片栏“定稿”.*AI 不能替用户点'): draft.export_gate(self.job)
+        with self.assertRaisesRegex(SystemExit, '“定稿”'): resolve.export(self.job, user_ok='用户说：可以了导出吧')        # 转述的原话不算
         code, _ = self.req('/api/settle', {'column': '审核线', 'on': True}, page=False)                                  # 不是页面发的（没有口令）：不收
         self.assertNotEqual(code, 200)
-        with self.assertRaisesRegex(SystemExit, '这一栏定了'): draft.export_gate(self.job)
+        with self.assertRaisesRegex(SystemExit, '“定稿”'): draft.export_gate(self.job)
         code, r = self.req('/api/settle', {'column': '审核线', 'on': True}); self.assertEqual((code, r.get('ok')), (200, True))   # 用户在页面上点
         got = draft.export_gate(self.job)
-        self.assertEqual(got['column'], '审核线'); self.assertIn('这一栏定了', got['via']); self.assertTrue(got['at'])
+        self.assertEqual(got['column'], '审核线'); self.assertIn('定稿', got['via']); self.assertTrue(got['at'])
 
     def test_any_change_after_the_click_voids_it(self):
         self.req('/api/settle', {'column': '审核线', 'on': True}); draft.export_gate(self.job)
@@ -82,13 +82,13 @@ class ExportGateTests(Base):
         with self.assertRaisesRegex(SystemExit, '之后审核线这一栏的内容变了'): draft.export_gate(Job(self.d))
         self.req('/api/settle', {'column': '审核线', 'on': True}); draft.export_gate(Job(self.d))
         self.req('/api/settle', {'column': '审核线', 'on': False})                                                       # 用户取消
-        with self.assertRaisesRegex(SystemExit, '这一栏定了'): draft.export_gate(Job(self.d))
+        with self.assertRaisesRegex(SystemExit, '“定稿”'): draft.export_gate(Job(self.d))
 
     def test_command_line_has_no_way_to_settle(self):
         text = S.read_text(encoding='utf-8')
         self.assertNotIn("'--settle'", text); self.assertNotIn('--settle', subprocess.run([sys.executable, '-B', str(S), 'workbench', '-h'], capture_output=True, text=True).stdout)
         r = subprocess.run([sys.executable, '-B', str(S), 'export', str(self.d), '--user-ok', '可以了'], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-        self.assertNotEqual(r.returncode, 0); self.assertIn('这一栏定了', r.stderr + r.stdout)
+        self.assertNotEqual(r.returncode, 0); self.assertIn('“定稿”', r.stderr + r.stdout)
 
     def test_trial_export_of_a_few_seconds_is_not_gated(self):
         self.addCleanup(setattr, resolve, 'project', resolve.project)
@@ -241,9 +241,9 @@ class StatusTests(Base):
         rows = {n: ok for n, ok, _ in draft.five(self.job)}
         self.assertTrue(rows['审核线'] and rows['封面'] and rows['上传文案'])
         _, out = quiet(draft.report, self.job)
-        self.assertIn('【初稿五项】', out); self.assertIn('初稿还差：', out); self.assertIn('最终闸：用户还没在审片台点审核线“这一栏定了”', out)
+        self.assertIn('【初稿五项】', out); self.assertIn('初稿还差：', out); self.assertIn('最终闸：用户还没在审片台点审片栏“定稿”', out)
         B._mark_settled(self.job, '审核线'); _, out = quiet(draft.report, self.job)
-        self.assertIn('最终闸：用户已在审片台点了审核线“这一栏定了”，可以整片导出', out)
+        self.assertIn('最终闸：用户已在审片台点了审片栏“定稿”，可以整片导出', out)
 
 
 if __name__ == '__main__':

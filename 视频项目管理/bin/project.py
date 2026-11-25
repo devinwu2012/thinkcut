@@ -378,11 +378,11 @@ def used_numbers(root, skip=None):
     return {n for place in places if place.is_dir() for n in (project_number(x.name) for x in place.iterdir() if x.is_dir() and x.name != skip) if n}
 
 
-def free_name(name, root, skip=None):
+def free_name(name, root, skip=None, also=()):
     """项目编号（名字开头 6 位 YYMMDD）不能和同目录已有项目重复（2026-11-17 用户定）：
-    撞号就按日期往后顺延一天（261130 → 261201），直到没被占用。返回 (可用的名字, 被占用的原编号或 None)。"""
+    撞号就按日期往后顺延一天（261130 → 261201），直到没被占用。also＝另外也算用过的编号（首页传回收站里删掉的片子的编号）。返回 (可用的名字, 被占用的原编号或 None)。"""
     from datetime import timedelta
-    n = project_number(name); used = used_numbers(root, skip)
+    n = project_number(name); used = used_numbers(root, skip) | set(also)
     if not n or n not in used: return name, None
     try: day = datetime.strptime(n, '%y%m%d')
     except ValueError: raise RuntimeError(f'项目编号 {n} 已被占用，而且不是一个真实日期，没法自动顺延；请换一个编号。') from None
@@ -422,6 +422,11 @@ def finish(directory, back=False, library=True):
             '提醒': notes + ['项目里记的绝对路径（达芬奇工程里的素材链接、自动剪辑的 job.json 等）还指着原位置；要接着改这条片子，先用 reopen 移回来。'] if not back else ['已移回原来的根目录，项目里记的路径恢复可用。']}
 
 
+def _same(a, b):
+    try: return os.path.samefile(a, b)
+    except OSError: return False
+
+
 RENAME_SKIP = ('反馈记录.md', 'AGENTS.md', 'CLAUDE.md')      # 用户原话和协作约定，改名不碰
 
 
@@ -444,7 +449,7 @@ def rename(directory, new_name, user_ok=False, library=True):
     if Path(new_name).name != new_name or new_name in ('', '.', '..') or ':' in new_name:
         raise RuntimeError('新名字不能包含路径或英文冒号。')
     if new_name == old: raise RuntimeError('新名字和现在的一样。')
-    if target.exists(): raise RuntimeError(f'「{new_name}」已经存在，不覆盖。')
+    if target.exists() and not _same(target, d): raise RuntimeError(f'「{new_name}」已经存在，不覆盖。')      # 只改大小写：不分大小写的盘上是同一个文件夹，放行
     n = project_number(new_name)
     if n and n in used_numbers(d.parent, skip=old):
         raise RuntimeError(f'编号 {n} 已被另一个项目占用；下一个没被占用的是 {free_name(new_name, d.parent, skip=old)[0][:6]}。')
@@ -470,7 +475,7 @@ def rename(directory, new_name, user_ok=False, library=True):
     renamed_to = script.with_name(new_name + '.md'); moved_script = False; originals = {}
     try:
         meta['name'] = new_name; write_json(target / '项目.json', meta)
-        if script.is_file() and not renamed_to.exists():      # 文案的文件名跟项目名走（在哪个文件夹就在哪个文件夹里改名）
+        if script.is_file() and (not renamed_to.exists() or _same(renamed_to, script)):      # 文案的文件名跟项目名走（在哪个文件夹就在哪个文件夹里改名）
             script.rename(renamed_to); moved_script = True
         changed, mentions = [], []
         for doc in sorted([*target.glob('*.md'), *target.glob('*.txt'), *(target / '02_制作').glob('*.md'), *(target / '02_制作').glob('*.txt')]):
@@ -615,8 +620,8 @@ def final_gate(d):
     except (ValueError, OSError): ok = {}
     basis = str(ok.get('via') or ok.get('user_said') or '').strip()
     if not basis:
-        raise RuntimeError('这条片子的成片还没有用户确认过的导出记录（02_制作/自动剪辑/job.json 没有 export_ok）：'
-                           '先请用户在达芬奇里看完审核线、在审片台“审核线”栏点“这一栏定了”，再用 thinkcut-edit 的 export 导出成片，然后存档、上传。'
+        raise RuntimeError('这个项目的成片还没有用户确认过的导出记录（02_制作/自动剪辑/job.json 没有 export_ok）：'
+                           '先请用户在达芬奇里看完审核线、在审片台审片栏点“定稿”，再用 thinkcut-edit 的 export 导出成片，然后存档、上传。'
                            'AI 不能替用户点，对话里转述的话也不算（2026-11-22 用户定：先做出来再改，闸留在导出和上传前）。')
     return f"{basis}（{ok.get('at') or '时间没记'}，时间线 {ok.get('timeline') or '没记'}）"
 
@@ -930,8 +935,8 @@ def main():
         print(json.dumps({'project': str(d), 'name': meta['name'], 'mode': meta['delivery']}, ensure_ascii=False, indent=2))
         if a.cmd == 'init':      # 2026-11-24 用户定：建完项目的下一步是在审片台“文案”栏写文案（写稿 → 和 AI 一起改 → 定稿 → AI 出初稿）
             skill = Path(os.environ.get('THINKCUT_SKILL') or ROOT.parent / '口播自动剪辑' / 'skill' / 'thinkcut-edit')
-            print(f'下一步：打开审片台写文案——python3 "{skill}/scripts/thinkcut_edit.py" workbench "{d}"（这时只有“文案”栏能用：用户在页面里写标题、封面文字、口播正文，'
-                  '点“交给 AI”和 AI 一起改，点“定稿”后 AI 按初稿模式接着做；打开后挂 --wait 等。标题还没定可以先用工作名建项目，定稿后再 rename）')
+            print(f'下一步：打开审片台写文案——python3 "{skill}/scripts/thinkcut_edit.py" workbench "{d}"（这时只有文稿栏能用：用户在页面里写标题、封面文字、口播正文，'
+                  '点“提交 AI”和 AI 一起改，点“定稿”后 AI 按初稿模式接着做；打开后挂 --wait 等。标题还没定可以先用工作名建项目，定稿后再 rename）')
     except (RuntimeError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
         print('停止：' + str(exc), file=sys.stderr); return 1
     except (AttributeError, IndexError, TypeError) as exc:

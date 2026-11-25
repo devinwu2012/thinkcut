@@ -5,9 +5,10 @@
 # 用户逐处点“采纳／不要”，采纳才写进文件。AI 不能直接改文案文件、不能替用户采纳或定稿（采纳、定稿只收页面带口令的请求，见 workbench.py）。
 # 每次采纳、手改一段时间、退回都留一个版本（审片工作台/文案版本/），能看改了哪里、能退回。定稿＝一件交给 AI 的事（--wait 打印“文案定稿了”）。
 # 数据：审片工作台/写稿.json（意见、对话、改写建议、版本目录）。说明见 references/审片工作台.md「文案栏」。
+import threading
 import difflib, re, time
 from pathlib import Path
-from .common import rj, wj, say, die
+from .common import keep_backup, read_data, rj, wj, say, die
 from . import board
 from .board import Oops
 
@@ -30,8 +31,8 @@ def lite(job): return getattr(job, 'lite', False)
 
 
 def load(job):
-    f = data_file(job); d = rj(f) if f.exists() else {}
-    d.setdefault('说明', '审片台“文案”栏（数据里叫 写稿）：用户的意见、和 AI 的对话、AI 的改写建议、文案的版本目录。格式见 skill/thinkcut-edit/references/审片工作台.md')
+    f = data_file(job); d = read_data(f)
+    d.setdefault('说明', '审片台文稿栏（数据里叫 写稿）：用户的意见、和 AI 的对话、AI 的改写建议、文案的版本目录。格式见 skill/thinkcut-edit/references/审片工作台.md')
     d.setdefault('schema', 1); d.setdefault('notes', []); d.setdefault('versions', [])
     return d
 
@@ -40,7 +41,7 @@ def edit(job, fn):
     """和 标记.json、审片台.json 同一把文件锁。不要嵌套着调（同一把锁会等死）。"""
     from .workbench import _flock
     with _flock(job):
-        d = load(job); out = fn(d); wj(data_file(job), d); return out
+        d = load(job); out = fn(d); keep_backup(data_file(job)); wj(data_file(job), d); return out
 
 
 def note(d, nid):
@@ -137,10 +138,13 @@ def _change(job, kind, why, fn, merge=False):
     return out, rec
 
 
+_save_lock = threading.Lock()       # 页面离开时标题、正文几段同时存（keepalive 并发到）：文案文件是“读—改一节—写回”，不排队会互相盖掉（2026-11-25 修页面实测）
+
+
 def save(job, field, value):
     """页面上手改一类字（自动保存）。"""
     if field not in FIELDS: raise Oops('文案只能改 标题、封面文字、口播正文')
-    _change(job, '手改', '你手改的', lambda: _write(job, field, value), merge=True)
+    with _save_lock: _change(job, '手改', '你手改的', lambda: _write(job, field, value), merge=True)
     return {'ok': True}
 
 
@@ -363,7 +367,7 @@ def reply(job, nid, text, status=None, options=None):
             n['thread'].append({'who': 'AI', 'text': text, 'at': now(), 'kind': st, **({'options': opts} if opts else {})})
         edit(job, g)
     except Oops as e: die(str(e))
-    say(f'{nid} 已回复' + ('；页面上这条变成“待你看”，等用户回答（回答后他点“交给 AI”，--wait 会打印）' if st == '问你' else ''))
+    say(f'{nid} 已回复' + ('；页面上这条变成“待审阅”，等用户回答（回答后他点“提交 AI”，--wait 会打印）' if st == '问你' else ''))
 
 
 def rewrite_cli(job, nid, file, note_text_=''):
@@ -373,7 +377,7 @@ def rewrite_cli(job, nid, file, note_text_=''):
     except (OSError, ValueError) as e: die(f'读不了 {file}：{e}')
     try: n = propose(job, nid, spec, note_text_)
     except Oops as e: die(str(e))
-    say(f'{nid} 的改写建议已交到审片台“文案”栏：{n} 处。用户逐处点“采纳／不要”，采纳的才写进文案文件；页面 3 秒内自动显示。接着挂 --wait 等。')
+    say(f'{nid} 的改写建议已交到审片台文稿栏：{n} 处。用户逐处点“采纳／不要”，采纳的才写进文案文件；页面 3 秒内自动显示。接着挂 --wait 等。')
 
 
 # ---------- 用户点采纳／不要（只收页面的请求） ----------
@@ -456,12 +460,12 @@ def settle_why(job, busy):
     """现在不能点“定稿”的原因（能点返回 ''）。"""
     try: cur = read(job)
     except Oops as e: return str(e)
-    if not cur['fields']['标题'].strip() or not cur['fields']['口播正文'].strip(): return '标题和口播正文都写了才能定稿'
+    if not cur['fields']['标题'].strip() or not cur['fields']['口播正文'].strip(): return '标题和口播正文完成后方可定稿'
     d = load(job); ask = sum(n['status'] == '问你' for n in d['notes']); wait = sum(len(pending(n)) for n in d['notes'])
-    if busy.get('unsent'): return '这一栏有你提的意见、改的字还没交给 AI：先点“交给 AI”（不想提了就把那条删掉）'
-    if busy.get('sent') or busy.get('doing'): return 'AI 还在改：等它交回来你看过再定'
-    if wait: return f'AI 的改写建议还有 {wait} 处没点：逐处点“采纳”或“不要”'
-    if ask: return f'AI 问了你 {ask} 个问题：回答它，或把那条意见删掉'
+    if busy.get('unsent'): return '本栏有待提交的意见或修改：请先点“提交 AI”（不需要的意见可删除）'
+    if busy.get('sent') or busy.get('doing'): return 'AI 正在处理：待交回并审阅后再定稿'
+    if wait: return f'AI 的改写建议还有 {wait} 处未处理：请逐处点“采纳”或“不要”'
+    if ask: return f'AI 提出了 {ask} 个问题：请回答，或删除该意见'
     return ''
 
 
@@ -490,7 +494,7 @@ def kick_info(job):
 
 def kickoff(job, q):
     """用户点“开工”（只收页面的请求）：定稿以后才能点；带上他写的“素材在哪、要补充什么”。算一件交给 AI 的事（--wait 打印“用户点了开工”）。"""
-    if not lite(job): raise Oops('这条片子已经在做了，不用再点开工')
+    if not lite(job): raise Oops('这个项目已经在做了，不用再点开始制作')
     sg = board.col_sig(job, COL); text = str(q.get('materials') or '').strip()[:4000]
     def g(d):
         r = (d.get('settled') or {}).get(COL)
@@ -502,11 +506,11 @@ def kickoff(job, q):
 def reply_kick(job, text):
     if not text: die('回复要带 --note（接下来做什么）')
     def g(d):
-        if not d.get('kickoff'): raise Oops('用户没有点过“开工”')
+        if not d.get('kickoff'): raise Oops('用户没有点过“开始制作”')
         d['kickoff']['handled'] = {'at': now(), 'note': text}
     try: board.edit(job, g)
     except Oops as e: die(str(e))
-    say('开工已回复')
+    say('开始制作已回复')
 
 
 def on_settle(job):
@@ -587,24 +591,24 @@ def listing(job, only=None, all_notes=False):
         say('整篇先写一版／大改：{"note": "…", "全文": {"标题": "…", "封面文字": ["一行", "一行"], "口播正文": "一段\\n\\n一段"}}（只写要改的那几类；程序逐段比出改动，用户整篇采纳或逐段挑）。回问：--reply 稿N --status 问你 --note "…" --options "A …|B …"；只说明不改：--reply 稿N --note "…"')
     if final:
         rec = recordings(job); st = (board.load(job).get('settled') or {}).get(COL) or {}
-        say(f"【文案定稿了】用户 {st.get('at', '')[5:16]} 在审片台“文案”栏点了“定稿”。文案文件 {cur['path']}（标题：{cur['fields']['标题']}；口播正文 {n} 字，约 {clock(sec)}）")
+        say(f"【文案定稿了】用户 {st.get('at', '')[5:16]} 在审片台文稿栏点了“定稿”。文案文件 {cur['path']}（标题：{cur['fields']['标题']}；口播正文 {n} 字，约 {clock(sec)}）")
         if lite(job):
             pd = board.project_dir(job)
-            say('【先开项，不要开工】（2026-11-24 用户定：“定稿之后……按照咱们最定好的这个封面文字，还有那个标题来开项。开完项之后呢，我们再存资料……我一点开工就直接开工”）'
+            say('【先开项，不要开始制作】（2026-11-24 用户定：“定稿之后……按照咱们最定好的这个封面文字，还有那个标题来开项。开完项之后呢，我们再存资料……我一点开工就直接开工”）'
                 f'现在只做开项：① 项目名和定稿的标题不一样就按 thinkcut-project 的规矩改成“6 位编号＋空格＋标题”（project.py rename；改名会挪项目文件夹：先 workbench {job.dir} --stop，改完用新的项目文件夹、原来的端口重新 workbench 再 --wait，页面会自己连上）；'
                 f'② 把定稿的标题、封面文字登记进 项目.json（{pd / "项目.json" if pd else "项目.json"}）。'
-                '做完回一句，告诉用户项目开好了、素材放哪：把 B-roll、口播录像这些放进项目的 01_原始素材，或在“文案”栏定稿下面“素材在哪”里写路径，备好了点“开工”。**用户点“开工”之前不要剪、不要出初稿。**')
-            say(f'回话：workbench <片子目录> --reply 定稿 --note "项目开好了（项目名 …）。素材放进 01_原始素材，或在这里写路径；备好了点“开工”"（这句话显示在页面上）')
+                '做完回一句，告诉用户项目开好了、素材放哪：把 B-roll、口播录像这些放进项目的 01_原始素材，或在文稿栏定稿下面“素材在哪”里写路径，备好了点“开始制作”。**用户点“开始制作”之前不要剪、不要初剪。**')
+            say(f'回话：workbench <项目文件夹> --reply 定稿 --note "项目开好了（项目名 …）。素材放进 01_原始素材，或在这里写路径；备好了点“开始制作”"（这句话显示在页面上）')
         else:
-            say('这条片子已经在做了：对照“文案”栏的版本看改了哪里，把用到这些字的地方（字幕、封面字、导航条、上传文案）跟着改；不用重出初稿。')
+            say('这个项目已经在做了：对照文稿栏的版本看改了哪里，把用到这些字的地方（字幕、封面字、导航条、上传文案）跟着改；不用重新初剪。')
             say(f'收到后先回一句：workbench {job.dir} --reply 定稿 --note "收到，跟着改"（回了页面上这件事才了结）')
     if kick:
         rec = recordings(job); k = board.load(job)['kickoff']
-        say(f"【用户点了“开工”】{k['at'][5:16]}。文案文件 {cur['path']}（标题：{cur['fields']['标题']}；口播正文 {n} 字，约 {clock(sec)}）")
+        say(f"【用户点了“开始制作”】{k['at'][5:16]}。文案文件 {cur['path']}（标题：{cur['fields']['标题']}；口播正文 {n} 字，约 {clock(sec)}）")
         say('用户写的“素材在哪、要补充什么”：' + (k['materials'].replace('\n', '⏎') if k['materials'] else '（没写）'))
         say((f"项目 01_原始素材 里现在有 {len(rec)} 个视频文件（{'、'.join(rec[:5])}{'…' if len(rec) > 5 else ''}）：先看哪些是口播录像、哪些是 B-roll" if rec
              else '项目 01_原始素材 里现在没有视频文件：用户也没给路径的话就是没有口播录像，按“只有定稿文案”的做法（C：机器配音占位），用户录了再换'))
         from . import materials
         for line in materials.summary(job): say(line)          # 用户在页面上拖进来、或登记路径复制进来的（首页 2026-11-24）
-        say('接下来：① 用户给了素材路径的，按 thinkcut-project 的规矩整理进 01_原始素材（看画面、改名、登记，不动用户的原文件）；② 按初稿模式出初稿（references/初稿模式.md，文案就用这一份，不再问用户），有什么素材用什么，缺的用占位。')
-        say(f'收到后先回一句：workbench {job.dir} --reply 开工 --note "收到，开始整理素材、出初稿"（回了页面上这件事才了结）')
+        say('接下来：① 用户给了素材路径的，按 thinkcut-project 的规矩整理进 01_原始素材（看画面、改名、登记，不动用户的原文件）；② 按初稿模式初剪（references/初稿模式.md，文案就用这一份，不再问用户），有什么素材用什么，缺的用占位。')
+        say(f'收到后先回一句：workbench {job.dir} --reply 开工 --note "收到，开始整理素材、初剪"（回了页面上这件事才了结）')

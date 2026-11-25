@@ -149,7 +149,7 @@ def assume_cmd(job: Job, text=None, clear=False):
     xs = [] if clear else assumptions(job)
     if text and text.strip() and text.strip() not in xs: xs.append(text.strip())
     if text or clear: job.cfg['assumptions'] = xs; job.save()
-    say('全片假设（审片台审核线栏头下面显示）：' + ('；'.join(xs) if xs else '没有'))
+    say('全片假设（审片栏栏头下方显示）：' + ('；'.join(xs) if xs else '没有'))
     return xs
 
 
@@ -164,10 +164,10 @@ def resolve_notes(job: Job):
         k = (r.get('原项目库'), r.get('原工程'))
         if r.get('原工程') and r.get('原工程') != job.get('project') and k not in seen: seen.append(k)
     if seen:
-        out.append('达芬奇被切到了这条片子（切之前都保存过）：原来开着' + '、'.join(f'「{d}」库的《{p}》' for d, p in seen) + '。汇报时跟用户说一句“达芬奇从《…》切到了这条片子，要回去说一声”')
+        out.append('达芬奇被切到了这个项目（切之前都保存过）：原来开着' + '、'.join(f'「{d}」库的《{p}》' for d, p in seen) + '。汇报时跟用户说一句“达芬奇从《…》切到了这个项目，要回去说一声”')
     try: b = (json.loads((root / '项目.json').read_text(encoding='utf-8')).get('resolve') or {}).get('borrowed')
     except (OSError, ValueError): b = None
-    if b: out.append(f"这条片子的工程暂存在「{b.get('库')}」库（建工程时达芬奇开着，登记不了自己的库）；存档后 project.py resolve-library <项目> --migrate 迁回，不迁也不影响用")
+    if b: out.append(f"这个项目的工程暂存在「{b.get('库')}」库（建工程时达芬奇开着，登记不了自己的库）；存档后 project.py resolve-library <项目> --migrate 迁回，不迁也不影响用")
     return out
 
 
@@ -283,7 +283,7 @@ def overview(job: Job, cols=4, cell=480):
 
 # ───────────────────────── 最终闸：整片导出前，用户在审片台点过审核线“这一栏定了” ─────────────────────────
 GATE_WORDS = ('整片导出只认用户在审片台上的确认（2026-11-22 用户定“先做出来再改”：前面都不问、先做成初稿，只在导出、上传前留闸）：'
-              '请用户在达芬奇里看完审核线，在审片台“审核线”栏点栏头的“这一栏定了”。AI 不能替用户点，对话里转述的“可以了”也不算。')
+              '请用户在达芬奇里看完审核线，在审片台审片栏点栏头的“定稿”。AI 不能替用户点，对话里转述的“可以了”也不算。')
 
 
 def export_gate(job: Job, name=None):
@@ -297,10 +297,10 @@ def export_gate(job: Job, name=None):
     except Exception as e:      # 审片台数据读不了：不能当成确认过
         die(f'读不了审片台的确认记录（{type(e).__name__}：{e}）。' + GATE_WORDS)
     if info.get('state') == 'ok':
-        return {'via': '审片台：用户点了审核线“这一栏定了”', 'column': '审核线', 'at': info.get('at')}
+        return {'via': '审片台：用户点了审片栏“定稿”', 'column': '审核线', 'at': info.get('at')}
     why = info.get('why') or ''
     had = (board.load(job).get('settled') or {}).get('审核线')
-    die(('用户之前点过“这一栏定了”，但之后审核线这一栏的内容变了（换了审核线、换轮或有新意见），要重新点。' if had else '用户还没在审片台点审核线“这一栏定了”。')
+    die(('用户之前点过“定稿”，但之后审核线这一栏的内容变了（换了审核线、换轮或有新意见），要重新点。' if had else '用户还没在审片台点审片栏“定稿”。')
         + (f'现在还不能点的原因：{why}。' if why else '') + GATE_WORDS + '只想试导几秒用 --seconds（最多 30 秒）。')
 
 
@@ -321,7 +321,7 @@ def five(job: Job):
     out.append(('动画和画面', b and not lack, (f"{len(shots)} 个画面镜头" + (f"，其中 {len(ph)} 个是占位图" if ph else '')) if b and not lack else
                 (f"占位图还缺：{'、'.join(lack)} → placeholder-images" if lack else '还没总装：写分镜 → beats → 出动画／占位图 → anim-assemble')))
     rv = job.get('review_timeline')
-    out.append(('审核线', bool(rv), f'{rv}（审片台“审核线”栏）' if rv else '还没建：check → review（建好自动打开审片台）'))
+    out.append(('审核线', bool(rv), f'{rv}（审片台审片栏）' if rv else '还没建：check → review（建好自动打开审片台）'))
     covers = sorted((root / '03_成片' / '封面').glob('*.*')) if root and (root / '03_成片' / '封面').is_dir() else []
     out.append(('封面', bool(cols['封面'] or covers), f"审片台“封面”栏 {len(cols['封面'])} 项" + (f"，03_成片/封面 {len(covers)} 张" if covers else '') if (cols['封面'] or covers) else
                 '还没做：thinkcut-cover 出 3 个方向、AI 先挑一个出齐三种比例 → workbench --publish 封面'))
@@ -329,8 +329,8 @@ def five(job: Job):
     if root:
         try: meta = rj(root / '项目.json'); desc, tags = meta.get('description'), meta.get('tags')
         except (ValueError, OSError): pass
-    out.append(('上传文案', bool(desc and tags), '简介、标签已写进 项目.json（审片台“上传文案”栏能直接改）' if desc and tags else
-                '还没写：AI 写一版简介和标签 → project.py copy-apply 写进 项目.json（不用等用户过目，他在“上传文案”栏直接改）'))
+    out.append(('上传文案', bool(desc and tags), '简介、标签已写进 项目.json（审片台发布栏能直接改）' if desc and tags else
+                '还没写：AI 写一版简介和标签 → project.py copy-apply 写进 项目.json（不用等用户过目，他在发布栏直接改）'))
     return out
 
 
@@ -353,4 +353,4 @@ def report(job: Job):
         from . import board
         ok = board.settle_info(job).get('审核线', {}).get('state') == 'ok'
     except Exception: ok = False
-    say('最终闸：' + ('用户已在审片台点了审核线“这一栏定了”，可以整片导出' if ok else '用户还没在审片台点审核线“这一栏定了”——整片 4K 导出、上传存草稿前会被拦（AI 不能替用户点）'))
+    say('最终闸：' + ('用户已在审片台点了审片栏“定稿”，可以整片导出' if ok else '用户还没在审片台点审片栏“定稿”——整片 4K 导出、上传存草稿前会被拦（AI 不能替用户点）'))

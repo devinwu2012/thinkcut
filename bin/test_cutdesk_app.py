@@ -16,6 +16,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'bin'))
+os.environ.setdefault('THINKCUT_APP_FLAVOR', 'release')        # 不管在开发版还是正式版跑，结果一样
+if not os.environ.get('THINKCUT_PROFILES'):                    # 起的首页读测试配置档，不靠这台机器的用户配置档（2026-11-25 起大囍搬出了程序文件夹）
+    import 测试配置档  # noqa: E402
+    os.environ['THINKCUT_PROFILES'] = str(测试配置档.make(Path(tempfile.mkdtemp(prefix='测试配置档_')) / '配置档'))
 import cutdesk_app as A  # noqa: E402
 
 
@@ -91,7 +95,7 @@ class Launch(unittest.TestCase):
         port = free_port()
         r = A.start(port, root=str(self.t / '没有这个文件夹'), wait=3)
         self.assertFalse(r['ok']); self.assertFalse(r['started'])
-        self.assertIn('首页没起来', r['error']); self.assertIn('放片子的文件夹不存在', r['error'])
+        self.assertIn('首页没起来', r['error']); self.assertIn('放项目的文件夹不存在', r['error'])
         self.assertTrue(r['log']); self.assertIsNone(A.ping(port))
 
     def test_起不来_程序文件找不到(self):
@@ -114,14 +118,45 @@ class Launch(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == 'darwin', '只在 Mac 上构建')
 class Build(unittest.TestCase):
+    def build(self, d, flavor=None):
+        env = {k: v for k, v in os.environ.items() if k != 'THINKCUT_APP_FLAVOR'}
+        if flavor: env['THINKCUT_APP_FLAVOR'] = flavor
+        r = subprocess.run(['bash', str(ROOT / 'bin' / 'build_app.sh'), '--out', d], capture_output=True, text=True, errors='replace', stdin=subprocess.DEVNULL, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr); return r
+
+    def test_开发版和正式版分开(self):
+        """2026-11-25 用户同意：开发用的程序文件夹构建出“ThinkCut 开发版”（另一个程序标识、橙色“开发”角标、首页端口 8762），正式版照旧。"""
+        with tempfile.TemporaryDirectory() as d:
+            self.build(d, 'dev'); app = Path(d) / 'ThinkCut 开发版.app'
+            info = plistlib.loads((app / 'Contents' / 'Info.plist').read_bytes())
+            self.assertEqual((info['CFBundleName'], info['CFBundleDisplayName'], info['CFBundleIdentifier'], info['CutdeskFlavor'], info['CutdeskPort']),
+                             ('ThinkCut 开发版', 'ThinkCut 开发版', 'local.cutdesk.app.dev', 'dev', 8762))
+            self.assertIn('ThinkCut 开发版', (app / 'Contents' / 'Resources' / 'zh-Hans.lproj' / 'InfoPlist.strings').read_text())
+            icns = (app / 'Contents' / 'Resources' / 'Cutdesk.icns').read_bytes()
+            self.assertGreater(len(icns), 1000); self.assertNotEqual(icns, (ROOT / 'bin' / 'app' / 'Cutdesk.icns').read_bytes(), '图标叠了角标，和正式版不一样')
+            sig = subprocess.run(['codesign', '-dv', str(app)], capture_output=True, text=True).stderr
+            self.assertIn('Identifier=local.cutdesk.app.dev', sig)
+            self.assertFalse((Path(d) / 'ThinkCut.app').exists(), '开发版不产出、不覆盖正式版')
+        with tempfile.TemporaryDirectory() as d:
+            self.build(d, 'release'); app = Path(d) / 'ThinkCut.app'
+            info = plistlib.loads((app / 'Contents' / 'Info.plist').read_bytes())
+            self.assertEqual((info['CFBundleName'], info['CFBundleIdentifier'], info['CutdeskFlavor'], info['CutdeskPort']), ('ThinkCut', 'local.cutdesk.app', 'release', 8760))
+            self.assertEqual((app / 'Contents' / 'Resources' / 'Cutdesk.icns').read_bytes(), (ROOT / 'bin' / 'app' / 'Cutdesk.icns').read_bytes(), '正式版图标不变')
+        with tempfile.TemporaryDirectory() as d:
+            r = subprocess.run(['bash', str(ROOT / 'bin' / 'build_app.sh'), '--out', d], capture_output=True, text=True, env={**os.environ, 'THINKCUT_APP_FLAVOR': '别的'})
+            self.assertNotEqual(r.returncode, 0)
+
     def test_构建出Cutdesk_app(self):
         with tempfile.TemporaryDirectory() as d:
-            r = subprocess.run(['bash', str(ROOT / 'bin' / 'build_app.sh'), '--out', d], capture_output=True, text=True, errors='replace', stdin=subprocess.DEVNULL)
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            app = Path(d) / 'ThinkCut.app'
+            self.build(d)
+            dev = ROOT.name.endswith('-开发') or (ROOT / '.git').is_file()      # 自己认：开发用的程序文件夹（名字带 -开发 或是 worktree）出开发版，使用版出正式版
+            name = 'ThinkCut 开发版' if dev else 'ThinkCut'
+            app = Path(d) / f'{name}.app'
             info = plistlib.loads((app / 'Contents' / 'Info.plist').read_bytes())
-            self.assertEqual(info['CutdeskProgram'], str(ROOT)); self.assertEqual(info['CFBundleExecutable'], 'Cutdesk'); self.assertEqual((info['CFBundleName'], info['CFBundleDisplayName']), ('ThinkCut', 'ThinkCut'))
+            self.assertEqual(info['CutdeskProgram'], str(ROOT)); self.assertEqual(info['CFBundleExecutable'], 'Cutdesk'); self.assertEqual((info['CFBundleName'], info['CFBundleDisplayName']), (name, name))
             self.assertTrue((app / 'Contents' / 'Resources' / 'Cutdesk.icns').stat().st_size > 1000)
+            self.assertEqual((info['CFBundleDevelopmentRegion'], info['CFBundleLocalizations']), ('zh_CN', ['zh-Hans']), '声明简体中文：系统加进菜单的项才是中文（2026-11-25 用户：全部要汉化）')
+            self.assertTrue((app / 'Contents' / 'Resources' / 'zh-Hans.lproj' / 'InfoPlist.strings').is_file())
             env = {k: v for k, v in os.environ.items() if k != 'CUTDESK_PROGRAM'}
             s = subprocess.run([str(app / 'Contents' / 'MacOS' / 'Cutdesk'), '--selftest'], capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL, timeout=30)
             self.assertEqual(s.returncode, 0, s.stdout + s.stderr); self.assertIn('链接判断、首页判断 ok', s.stdout); self.assertIn(str(ROOT), s.stdout)

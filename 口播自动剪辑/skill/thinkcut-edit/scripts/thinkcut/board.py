@@ -6,7 +6,7 @@
 # 和以前 anim-confirm 记的一样，出片拦截（anim.gate）认它。说明见 references/审片工作台.md。
 import hashlib, json, os, re, shutil, subprocess, sys, time
 from pathlib import Path
-from .common import Job, THINKCUT_DIR, die, rj, wj, say
+from .common import Job, THINKCUT_DIR, die, keep_backup, read_data, rj, wj, say
 
 COLUMNS = ('写稿', '文案', '口播试听', '动画', '审核线', '导航文字', '封面', '上传文案')
 OPTIONAL = ('口播试听',)     # 2026-11-22 用户试用：“这干嘛的……不要也行吧”——只有 AI 发布了要用户听的东西时才出现，平时不占位置
@@ -34,7 +34,7 @@ def sha(f):
 
 
 def load(job):
-    f = board_file(job); d = rj(f) if f.exists() else {}
+    f = board_file(job); d = read_data(f)
     d.setdefault('说明', '审片台的项（发布的图、试听、多选一）和用户改的字（thinkcut_edit.py workbench）。格式见 skill/thinkcut-edit/references/审片工作台.md')
     d.setdefault('schema', 1); d.setdefault('items', []); d.setdefault('edits', []); d.setdefault('drafts', {})
     return d
@@ -44,7 +44,7 @@ def edit(job, fn):
     """和 标记.json 同一把文件锁：锁住 → 读 → 改 → 写回。"""
     from .workbench import _flock
     with _flock(job):
-        d = load(job); out = fn(d); wj(board_file(job), d); return out
+        d = load(job); out = fn(d); keep_backup(board_file(job)); wj(board_file(job), d); return out
 
 
 class Oops(Exception):
@@ -190,19 +190,19 @@ def settle_info(job, waiting=None):
         if c == WRITE:
             from . import writing as X; why = X.settle_why(job, busy)
         elif c in OWN_TEXT:
-            why = ('你写了要求让 AI 改：等它改完你看过再定' if _asked(d, c) else
-                   '这一栏有几个方案要你选：先点“选这个”' if any(latest(x)['kind'] == '多选一' for x in wait) else '')
+            why = ('已提意见请 AI 修改：待修改完成并审阅后再定稿' if _asked(d, c) else
+                   '本栏有多个方案待选择：请先点“选这个”' if any(latest(x)['kind'] == '多选一' for x in wait) else '')
         else:
             # 2026-11-24 用户：“交给AI和确定、不确定不应该是绑定的……没有交给AI的情况下，我也可以点确定”：还没交给 AI 的不再挡“这一栏定了”（定的时候一起交）
-            why = (f'这一栏还有 {len(wait)} 项等你看：先点“可以”“选这个”或写要求' if wait else
-                   'AI 还在处理这一栏：等它改完你看过再定' if busy.get('sent') or busy.get('doing') else '')
+            why = (f'本栏还有 {len(wait)} 项待审阅：请先点“可以”“选这个”或提意见' if wait else
+                   'AI 正在处理本栏：待处理完成并审阅后再定稿' if busy.get('sent') or busy.get('doing') else '')
         out[c] = {'state': 'no', 'why': why} if why else {'state': 'can'}
     return out
 
 
-def _mark_settled(job, column):
+def _mark_settled(job, column, ua=''):
     sig = col_sig(job, column)
-    def g(d): d.setdefault('settled', {})[column] = {'at': now(), 'sig': sig, 'who': WHO}
+    def g(d): d.setdefault('settled', {})[column] = {'at': now(), 'sig': sig, 'who': WHO, **({'ua': str(ua)[:200]} if ua else {})}     # ua：事后能查是哪个浏览器点的
     edit(job, g)
 
 
@@ -224,7 +224,7 @@ def settle(job, column, on=True, ua=''):
         if any(c == column for c, _ in todo_keys(job).values()):
             try: sent = send(job, column, settle_after=False)['n']
             except Oops: sent = 0
-    _mark_settled(job, column)
+    _mark_settled(job, column, ua)
     if column == WRITE:
         from . import writing as X; X.on_settle(job)       # 文案定稿＝一件交给 AI 的事（--wait 打印“文案定稿了：按初稿模式出初稿”）
     return {'ok': True, 'column': column, 'on': True, 'sent': sent}
@@ -237,15 +237,26 @@ def _sent(d):
     return {k: {'at': s.get('at'), 'picked': s.get('picked')} for k in s.get('keys') or []}
 
 
+STALE = float(os.environ.get('THINKCUT_AI_STALE') or 15 * 60)     # AI 接了这么久（秒）还没回话：算“没动静了”，页面能再叫一次或撤回（QA 1.5）
+
+
+def _age(at):
+    """'YYYY-mm-dd HH:MM:SS' 到现在多少秒；看不懂给 0。"""
+    try: return time.time() - time.mktime(time.strptime(str(at), '%Y-%m-%d %H:%M:%S'))
+    except (ValueError, OverflowError): return 0.0
+
+
 def send_info(job):
     """给页面：每件还没处理的事走到哪一步——unsent 还没发给 AI／sent 已发、AI 还没接／doing AI 接了在处理；按页面编号（ids）和按栏目（cols）各一份。
     2026-11-22 用户定：在哪一栏点“发给 AI”就只发这一栏，“总是要给我一个状态”。"""
-    keys = todo_keys(job); sent = _sent(load(job)); ids = {}; cols = {}
+    keys = todo_keys(job); sent = _sent(load(job)); ids = {}; cols = {}; stale = {}
     for k, (c, i) in keys.items():
         r = sent.get(k); st = 'unsent' if not r else 'doing' if r.get('picked') else 'sent'
-        ids[i] = st; cols.setdefault(c, {'unsent': 0, 'sent': 0, 'doing': 0})[st] += 1
+        ids[i] = st; cols.setdefault(c, {'unsent': 0, 'sent': 0, 'doing': 0, 'stale': 0})[st] += 1
+        if r and st != 'unsent' and _age(r.get('picked') or r.get('at')) > STALE:      # 发了／接了很久没动静：stale（分钟数），页面能“再叫一次”或“撤回”
+            stale[i] = int(_age(r.get('picked') or r.get('at')) // 60); cols[c]['stale'] += 1
     return {'pending': len(keys), 'unsent': sum(v['unsent'] for v in cols.values()), 'ids': ids, 'cols': cols,
-            'unsent_ids': sorted(i for i, x in ids.items() if x == 'unsent')}
+            'unsent_ids': sorted(i for i, x in ids.items() if x == 'unsent'), 'stale': stale, 'stale_after': int(STALE)}
 
 
 def send(job, column, settle_after=True):
@@ -257,8 +268,8 @@ def send(job, column, settle_after=True):
     at = now()
     def g(d):
         sent = {k: v for k, v in _sent(d).items() if k in keys}          # 已经处理完的不留
-        go = [k for k in mine if not (sent.get(k) or {}).get('picked')]
-        if not go: raise Oops(f'“{name}”这一栏的都已经发给 AI、它接了在处理')
+        go = [k for k in mine if not (sent.get(k) or {}).get('picked') or _age(sent[k]['picked']) > STALE]      # AI 接了很久没回话的也能再叫一次
+        if not go: raise Oops(f'“{name}”这一栏的都已经提交 AI、它接了在处理')
         for k in go: sent[k] = {'at': at, 'picked': None}
         d['sent'] = sent; d.pop('send', None)
         d.setdefault('sends', []).append({'at': at, 'column': column, 'n': len(go), 'who': WHO}); d['sends'] = d['sends'][-50:]
@@ -268,6 +279,20 @@ def send(job, column, settle_after=True):
         d = load(job)
         if not _waiting(d, column) and not _asked(d, column): _mark_settled(job, column); out['settled'] = True
     return out
+
+
+def unsend(job, column):
+    """用户撤回这一栏发给 AI 的（已发、AI 接了在处理的都算）：回到“待发送”，可以改了再发（QA 1.5：AI 接了活断掉以后状态永久卡住）。只收页面的请求。"""
+    if column not in COLUMNS: raise Oops('不认识的栏目')
+    keys = todo_keys(job); mine = {k for k, (c, _) in keys.items() if c == column}
+    def g(d):
+        sent = {k: v for k, v in _sent(d).items() if k in keys}; back = [k for k in mine if k in sent]
+        if not back: raise Oops('本栏没有可撤回的已提交内容')
+        for k in back: sent.pop(k)
+        d['sent'] = sent; d.pop('send', None)
+        d.setdefault('sends', []).append({'at': now(), 'column': column, 'n': -len(back), 'who': WHO, 'action': '撤回'}); d['sends'] = d['sends'][-50:]
+        return {'ok': True, 'n': len(back), 'column': column}
+    return edit(job, g)
 
 
 def pick(job):
@@ -385,7 +410,7 @@ def column_badge(col, items, extra):
     """栏目旁边的字：等你看 N 项／AI 改中／已定／还没到（灰）。extra：这一栏有没有可以直接改的字（文案、导航、上传文案）。"""
     sts = [state(x)[0] for x in items if x['column'] == col]
     n = sum(s in ('等你看', 'AI 已回复') for s in sts)
-    if n: return {'text': f'等你看 {n} 项', 'kind': 'wait', 'n': n}
+    if n: return {'text': f'待审阅 {n} 项', 'kind': 'wait', 'n': n}
     if not sts and not extra: return {'text': '还没到', 'kind': 'none', 'n': 0}
     if any(s == 'AI 改中' for s in sts): return {'text': 'AI 改中', 'kind': 'ai', 'n': 0}
     return {'text': '已定', 'kind': 'done', 'n': 0}
@@ -458,7 +483,7 @@ def publish(job, column, title, look, kind, files=(), labels=None, key=None, iid
     初稿模式（2026-11-22 用户定“先做出来再改”）：draft＝这一版是 AI 没问用户、按自己判断做的初稿；placeholder＝里面是占位的东西（机器配音、生成图）；
     assume＝“我是这么假设的：……”（AI 拿不准时不问，按最合理的做并写在这里）。三样只是卡片上的小标签和一句话，不是第五种状态。"""
     if column not in COLUMNS: raise Oops(f'栏目只能是：{"、".join(COLUMNS)}')
-    if column == WRITE: raise Oops('“文案”栏（写稿）不发布项：用户在页面上写、提意见，AI 用 --rewrite 稿N --json 改写.json 交改写建议（要用户过一眼老文案用 --publish 文案 --kind 改字）')
+    if column == WRITE: raise Oops('文稿栏（写稿）不发布项：用户在页面上写、提意见，AI 用 --rewrite 稿N --json 改写.json 交改写建议（要用户过一眼老文案用 --publish 文案 --kind 改字）')
     if column == '审核线': raise Oops('审核线那一栏是用户在达芬奇里看片、在全文上打标记，不发布项')
     if kind not in KINDS: raise Oops(f'类型只能是：{"、".join(KINDS)}')
     files = [Path(f).expanduser() for f in files if str(f).strip()]
@@ -779,10 +804,10 @@ def listing(job, all_items=False, only=None):
     for e in eds:
         say(f"[{e['id']}] {e['column']}·{FIELD.get(e['field'], e['field'])}｜{e['at']}｜{'已写回' if e.get('ok') else '没写回：' + (e.get('error') or '')}"
             + f"｜{change(e['old'], e['new'])}" + (f"｜AI：{e['handled']['note']}" if e.get('handled') else ''))
-    if rows or eds: say('处理完逐项回复：workbench <片子目录> --reply 编号 --note "…"（编号是 [] 里的；带 --files 就是换新版）')
+    if rows or eds: say('处理完逐项回复：workbench <项目文件夹> --reply 编号 --note "…"（编号是 [] 里的；带 --files 就是换新版）')
     if only is None:
         ok = [f"{LABEL.get(c, c)}（{v['at'][5:16]}）" for c, v in settle_info(job).items() if v['state'] == 'ok']
-        if ok: say('用户点过“这一栏定了”的栏目：' + '、'.join(ok) + '（之后这一栏内容一变就不算，要用户重新点）')
+        if ok: say('用户点过“定稿”的栏目：' + '、'.join(ok) + '（之后这一栏内容一变就不算，要用户重新点）')
 
 
 FIELD = {'description': '简介', 'tags': '标签'}

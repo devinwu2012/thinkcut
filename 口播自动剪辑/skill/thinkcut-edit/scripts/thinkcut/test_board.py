@@ -50,7 +50,7 @@ class BoardTests(unittest.TestCase):
     # —— 请求 ——
     def req(self, p, body=None, page=True, **headers):
         """page=True：像页面一样带来源和口令（浏览器 fetch 会带 Origin、Sec-Fetch-Site）。返回 (状态码, 内容)。"""
-        h = {'Content-Type': 'application/json', **({'Origin': self.base, 'Sec-Fetch-Site': 'same-origin', 'X-Shenpian-Token': W.TOKEN} if page else {}), **headers}
+        h = {'Content-Type': 'application/json', **({'Origin': self.base, 'Sec-Fetch-Site': 'same-origin', 'Cookie': W.cookie_header(self.base)} if page else {}), **headers}
         q = urllib.request.Request(self.base + p, json.dumps(body or {}).encode() if body is not None else None, h)
         try:
             with urllib.request.urlopen(q) as r: return r.status, json.loads(r.read())
@@ -119,31 +119,31 @@ class BoardTests(unittest.TestCase):
         self.assertTrue(self.act('封1', '写要求', text='选 B，圈再大一点')[1]['ok'])
         self.req('/api/mark', {}, page=True); mid = W.load(self.job)['markers'][-1]['id']; self.req('/api/text', {'id': mid, 'text': '角标去掉'})
         s = send(); self.assertEqual((s['pending'], s['unsent'], s['ids'], s['listening']), (2, 2, {'封1': 'unsent', f'#{mid}': 'unsent'}, False))
-        self.assertEqual(s['cols'], {'封面': {'unsent': 1, 'sent': 0, 'doing': 0}, '审核线': {'unsent': 1, 'sent': 0, 'doing': 0}})
-        self.assertEqual(badge('封面'), '1 条没发给 AI'); self.assertIn('1 条没发给 AI', badge('审核线'))
+        self.assertEqual(s['cols'], {'封面': {'unsent': 1, 'sent': 0, 'doing': 0, 'stale': 0}, '审核线': {'unsent': 1, 'sent': 0, 'doing': 0, 'stale': 0}})
+        self.assertEqual(badge('封面'), '1 条没提交 AI'); self.assertIn('1 条没提交 AI', badge('审核线'))
         r = self.req('/api/send', {'column': '封面'}, page=False); self.assertEqual((r[0], r[1]['ok']), (403, False)); self.assertEqual(send()['unsent'], 2)   # 命令行、curl 不能替用户点“发给 AI”
         (W.home(self.job) / '服务.json').write_text(json.dumps({'pid': os.getpid(), 'port': self.port, 'url': self.base + '/', 'dir': str(self.job.dir)}))
-        r = self.cli('--wait', '--wait-timeout', '1'); self.assertEqual(r.returncode, 0, r.stderr); self.assertIn('用户还没点“发给 AI”', r.stdout)   # 没点：到时间退出
+        r = self.cli('--wait', '--wait-timeout', '1'); self.assertEqual(r.returncode, 0, r.stderr); self.assertIn('用户还没点“提交 AI”', r.stdout)   # 没点：到时间退出
         self.assertTrue(send()['listening'])                                                             # AI 刚来问过：页面写“AI 在等你”
         r = self.req('/api/send', {'column': '封面'})[1]; self.assertEqual((r['ok'], r['n'], r['column'], r['listening']), (True, 1, '封面', True))   # 只发封面这一栏
-        s = send(); self.assertEqual((s['ids'], s['unsent']), ({'封1': 'sent', f'#{mid}': 'unsent'}, 1)); self.assertEqual(badge('封面'), '已发给 AI')
+        s = send(); self.assertEqual((s['ids'], s['unsent']), ({'封1': 'sent', f'#{mid}': 'unsent'}, 1)); self.assertEqual(badge('封面'), '已提交 AI')
         r = self.cli('--wait', '--wait-timeout', '20'); self.assertEqual(r.returncode, 0, r.stderr)
-        for need in ('【用户点了“发给 AI”】栏目：封面，1 件', '[封1] 封面｜封面两个方向', '选 B，圈再大一点'): self.assertIn(need, r.stdout)
+        for need in ('【用户点了“提交 AI”】栏目：封面，1 件', '[封1] 封面｜封面两个方向', '选 B，圈再大一点'): self.assertIn(need, r.stdout)
         self.assertNotIn('角标去掉', r.stdout)                                                           # 审核线那条用户还没发：不给 AI
         s = send(); self.assertEqual(s['ids'], {'封1': 'doing', f'#{mid}': 'unsent'}); self.assertEqual(badge('封面'), 'AI 在处理 1 条')
         self.assertFalse(self.req('/api/send', {'column': '封面'})[1]['ok'])                              # AI 已经接了：不用再发
         r = self.req('/api/send', {'column': '审核线'})[1]; self.assertEqual((r['ok'], r['n']), (True, 1))
         r = self.cli('--wait', '--wait-timeout', '20'); self.assertIn('栏目：审核线，1 件', r.stdout); self.assertIn('角标去掉', r.stdout); self.assertNotIn('[封1]', r.stdout)
         self.assertTrue(self.act('封1', '写要求', text='选 B，圈再大一点，字也加粗')[1]['ok'])           # 发过以后又改了要求：又算没发
-        self.assertEqual(send()['ids']['封1'], 'unsent'); self.assertEqual(badge('封面'), '1 条没发给 AI')
+        self.assertEqual(send()['ids']['封1'], 'unsent'); self.assertEqual(badge('封面'), '1 条没提交 AI')
         self.req('/api/send', {'column': '封面'}); self.assertEqual(send()['ids']['封1'], 'sent')
         self.assertIn('封1', self.cli('--list').stdout); self.assertEqual(send()['ids']['封1'], 'doing')  # AI 手动 --list 也算接了
         B.reply(self.job, '封1', '圈放大了、字加粗了', [b, a]); s = send(); self.assertNotIn('封1', s['ids'])   # AI 回了新版：这件事了结，轮到用户看
-        self.assertEqual(badge('封面'), '等你看 1 项')
+        self.assertEqual(badge('封面'), '待审阅 1 项')
         old = {'at': '2026-11-22 19:52:33', 'keys': ['x@1'], 'picked': None}                             # 当天早些时候的老格式照样读得了
         B.edit(self.job, lambda d: (d.pop('sent', None), d.update(send=old))); self.assertEqual(send()['unsent'], 1)
         page = W.PAGE.read_text(encoding='utf-8')
-        for need in ('data-main="封面"', '交给 AI（${n.unsent}）', 'AI 没在等', "'待发送'", "'AI 在改'", "'待你看'"): self.assertIn(need, page)   # 审片台 v2：栏头主按钮“交给 AI（N）”，4 个状态
+        for need in ('data-main="封面"', '提交 AI（${n.unsent}）', 'AI 没在等', "'待发送'", "'AI 在改'", "'待你看'"): self.assertIn(need, page)   # 审片台 v2：栏头主按钮“交给 AI（N）”，4 个状态
 
     def test_column_settled_only_by_user(self):
         """2026-11-22 用户：“‘已定’是怎么确定的？这件事已定了，是不是应该有个标签或者有方法能让我确定啊？”
@@ -151,24 +151,24 @@ class BoardTests(unittest.TestCase):
         meta = lambda: self.req('/api/data', None, page=False)[1]['board']
         a = img(self.tmp / '封A.jpg'); b = img(self.tmp / '封B.jpg', (1, 2, 3))
         self.cli('--publish', '封面', '--kind', '多选一', '--title', '封面两个方向', '--look', '选一个', '--files', f'{a},{b}')
-        m = meta(); self.assertEqual(m['settle']['封面']['state'], 'no'); self.assertIn('还有 1 项等你看', m['settle']['封面']['why'])
+        m = meta(); self.assertEqual(m['settle']['封面']['state'], 'no'); self.assertIn('还有 1 项待审阅', m['settle']['封面']['why'])
         self.assertFalse(self.req('/api/settle', {'column': '封面'})[1]['ok'])                           # 还有等你看的：不能定
         self.act('封1', '选这个', pick='B'); self.assertEqual(meta()['settle']['封面']['state'], 'can')    # 2026-11-24 起：还没交给 AI 的不挡“这一栏定了”
-        self.req('/api/send', {'column': '封面'}); self.assertIn('AI 还在处理', meta()['settle']['封面']['why'])
+        self.req('/api/send', {'column': '封面'}); self.assertIn('AI 正在处理本栏', meta()['settle']['封面']['why'])
         B.reply(self.job, '封1', '收到，按 B 往下做'); m = meta()
         self.assertEqual((m['badges']['封面']['text'], m['settle']['封面']['state']), ('你已定', 'can'))   # 每一项都点过：栏目写“你已定”
         self.assertEqual(m['badges']['上传文案']['text'], '没有待办'); self.assertEqual(m['settle']['上传文案']['state'], 'can')   # 没人确认过：不写“已定”
         self.assertEqual(self.req('/api/settle', {'column': '上传文案'}, page=False)[0], 403)            # 命令行不能替用户点
         self.assertTrue(self.req('/api/settle', {'column': '上传文案'})[1]['ok']); m = meta()
-        self.assertEqual((m['badges']['上传文案']['text'], m['settle']['上传文案']['state']), ('你定了 ✓', 'ok'))
-        self.assertIn('用户点过“这一栏定了”的栏目：上传文案', self.cli('--list').stdout)
+        self.assertEqual((m['badges']['上传文案']['text'], m['settle']['上传文案']['state']), ('已定稿 ✓', 'ok'))
+        self.assertIn('用户点过“定稿”的栏目：上传文案', self.cli('--list').stdout)
         self.assertTrue(self.req('/api/upload-copy', {'description': '改了一版简介，说清楚为什么要到现场调灯。', 'tags': ['别墅装修', '灯光设计', '大平层', '射灯', '装修避坑', '全屋灯光', '设计师', '现场调试']})[1]['ok'])
         m = meta(); self.assertNotEqual(m['settle']['上传文案']['state'], 'ok')                           # 定了以后内容变了：不算，要重新点
         self.assertFalse(self.req('/api/settle', {'column': '文案'})[1]['ok'])                           # 口播剪辑栏不用点（它的确认是“保存到达芬奇”）
         self.req('/api/settle', {'column': '封面'}); self.assertEqual(meta()['settle']['封面']['state'], 'ok')
         self.req('/api/settle', {'column': '封面', 'on': False}); self.assertEqual(meta()['settle']['封面']['state'], 'can')   # 能取消
         page = W.PAGE.read_text(encoding='utf-8')
-        for need in ('class="btn mainbtn', '这一栏定了', '✓ 已定 · ', '取消'): self.assertIn(need, page)   # 审片台 v2：主按钮“这一栏定了”→“✓ 已定 · 时间”，旁边“取消”
+        for need in ('class="btn mainbtn', '这一栏定了', '✓ 已定稿 · ', '取消'): self.assertIn(need, page)   # 审片台 v2：主按钮“这一栏定了”→“✓ 已定 · 时间”，旁边“取消”
 
     def test_own_text_columns_settle_directly(self):
         """2026-11-22 用户：“导航文字这里，有的是我写的。我写完之后，没法点确定，也没法发给AI……要么直接点确定，要么发给AI。我发给AI基本上也就定了，因为内容都是我写完了的。”"""
@@ -179,17 +179,17 @@ class BoardTests(unittest.TestCase):
         r = self.req('/api/settle', {'column': '导航文字'})[1]; self.assertEqual((r['ok'], r['sent']), (True, 2))   # 卡片替用户点成“可以”，连同改的字一起发给 AI
         self.assertEqual(B.state(B.item(B.load(self.job), '导1')), ('你已定', True))
         m = meta(); self.assertEqual((m['settle']['导航文字']['state'], m['send']['ids']), ('ok', {'导1': 'sent', '导航条': 'sent'}))
-        self.assertEqual(m['badges']['导航文字']['text'], '已发给 AI')                                    # AI 还没接：先写发送状态
+        self.assertEqual(m['badges']['导航文字']['text'], '已提交 AI')                                    # AI 还没接：先写发送状态
         B.reply(self.job, '导1', '按你改的字出好了'); self.cli('--reply', '导航条', '--note', '已做进审核线')
-        m = meta(); self.assertEqual((m['badges']['导航文字']['text'], m['settle']['导航文字']['state']), ('你定了 ✓', 'ok'))   # AI 照做完：还是你定了
+        m = meta(); self.assertEqual((m['badges']['导航文字']['text'], m['settle']['导航文字']['state']), ('已定稿 ✓', 'ok'))   # AI 照做完：还是你定了
         self.req('/api/nav', {'labels': {'q': '挑空到底怎么照亮'}}, page=False); self.assertNotEqual(meta()['settle']['导航文字']['state'], 'ok')   # 又改了字：要重新定
         r = self.req('/api/send', {'column': '导航文字'})[1]; self.assertEqual((r['ok'], r.get('settled')), (True, True))    # 只发自己写的字：发了也就定了
         self.assertEqual(meta()['settle']['导航文字']['state'], 'ok')
         self.cli('--publish', '导航文字', '--id', '导1', '--kind', '改字', '--title', '请确认导航短标签', '--look', '再看', '--note', '换了分段')
         self.act('导1', '写要求', text='分成 4 段'); m = meta()
-        self.assertEqual(m['settle']['导航文字']['state'], 'no'); self.assertIn('让 AI 改', m['settle']['导航文字']['why'])   # 写了要求是让 AI 改：不算定
+        self.assertEqual(m['settle']['导航文字']['state'], 'no'); self.assertIn('请 AI 修改', m['settle']['导航文字']['why'])   # 写了要求是让 AI 改：不算定
         r = self.req('/api/send', {'column': '导航文字'})[1]; self.assertTrue(r['ok']); self.assertFalse(r.get('settled'))
-        page = W.PAGE.read_text(encoding='utf-8'); self.assertIn("own?'定稿'", page); self.assertNotIn('就用这些字', page)   # 审片台 v2：只留栏头一个“定稿”
+        page = W.PAGE.read_text(encoding='utf-8'); self.assertIn("word='定稿'", page); self.assertNotIn('就用这些字', page)   # 审片台 v2：只留栏头一个“定稿”
 
     def test_upload_copy_column_takes_no_screenshot(self):
         """2026-11-22 用户：“你不用非得给我一张截图，你就直接写在里边，有问题我直接在里边改了，或者我直接给你写要求让你改就完了。”"""
@@ -229,10 +229,10 @@ class BoardTests(unittest.TestCase):
         self.assertEqual((len(it['versions']), B.state(it)[0]), (2, '等你看'))
         self.assertTrue(self.act('动1', '选这个', pick='B')[1]['ok']); self.assertEqual(B.state(B.item(B.load(self.job), '动1')), ('你已定', True))
         d = self.req('/api/data', None, page=False)[1]['board']                                                       # 给页面的数据：栏目状态
-        self.assertEqual(d['columns'], list(B.COLUMNS)); self.assertEqual(d['badges']['动画']['text'], '1 条没发给 AI'); self.assertEqual(d['badges']['封面']['text'], '还没到')
-        self.assertEqual(d['badges']['文案']['text'], '没有待办'); self.assertEqual(d['badges']['口播试听']['text'], '1 条没发给 AI')   # 点了“可以”还没发给 AI（2026-11-22 起要点“发给 AI”）
+        self.assertEqual(d['columns'], list(B.COLUMNS)); self.assertEqual(d['badges']['动画']['text'], '1 条没提交 AI'); self.assertEqual(d['badges']['封面']['text'], '还没到')
+        self.assertEqual(d['badges']['文案']['text'], '没有待办'); self.assertEqual(d['badges']['口播试听']['text'], '1 条没提交 AI')   # 点了“可以”还没发给 AI（2026-11-22 起要点“发给 AI”）
         B.publish(self.job, '封面', '封面', '选一个', '多选一', [p1, p2]); d = self.req('/api/data', None, page=False)[1]['board']
-        self.assertEqual((d['badges']['封面']['text'], d['waiting']), ('等你看 1 项', 1))
+        self.assertEqual((d['badges']['封面']['text'], d['waiting']), ('待审阅 1 项', 1))
 
     def _audio(self, name):
         f = self.tmp / f'{name}.m4a'; f.write_bytes(b'\x00\x00\x00\x18ftypM4A ' + os.urandom(3000)); return f
@@ -293,7 +293,12 @@ class BoardTests(unittest.TestCase):
             self.assertEqual(self.cli(*args).returncode, 0)
         self.assertEqual(B.state(B.item(B.load(self.job), '封1'))[0], '等你看')                                       # 回复不会变成“你已定”
         self.assertFalse([x for x in B.item(B.load(self.job), '封1')['events'] if x['type'] == 'user'])
-        html = urllib.request.urlopen(self.base + '/').read().decode(); self.assertIn(W.TOKEN, html); self.assertNotIn('__SHENPIAN_TOKEN__', html)
+        with urllib.request.urlopen(self.base + '/') as r: html = r.read().decode(); ck = r.headers['Set-Cookie']
+        self.assertNotIn(W.TOKEN, html); self.assertIn(W.SESSION, html); self.assertNotIn('__SHENPIAN_TOKEN__', html)      # QA 第四节：口令不在页面里
+        self.assertIn(f'={W.TOKEN};', ck); self.assertIn('HttpOnly', ck); self.assertIn('SameSite=Strict', ck)                 # 只在 HttpOnly cookie 里，浏览器自己带
+        data = urllib.request.urlopen(self.base + '/api/data').read().decode(); self.assertNotIn(W.TOKEN, data)                  # 也不在 /api/data 里
+        code, out = self.req('/api/settle', {'column': '封面'}, page=False, Origin=self.base, **{'Sec-Fetch-Site': 'same-origin', 'X-Shenpian-Token': W.SESSION})
+        self.assertEqual(code, 403)                                                                                       # 拿页面里公开的编号冒充也不行
 
     # —— 文案：只改对应小节 ——
     def test_script_edit_only_that_section(self):
@@ -338,7 +343,7 @@ class BoardTests(unittest.TestCase):
     # —— 导航文字栏：和原来一样 ——
     def test_nav_same_as_before(self):
         r = self.req('/api/nav', {'labels': {'q': ' 挑空难照亮 ', 'zz': 'x'}}, page=False)[1]; self.assertEqual(r['nav_labels'], {'q': '挑空难照亮'})
-        d = self.req('/api/data', None, page=False)[1]; self.assertEqual(d['nav_labels'], {'q': '挑空难照亮'}); self.assertEqual(d['board']['badges']['导航文字']['text'], '1 条没发给 AI')     # 2026-11-22：改了没发，不再写“已定”
+        d = self.req('/api/data', None, page=False)[1]; self.assertEqual(d['nav_labels'], {'q': '挑空难照亮'}); self.assertEqual(d['board']['badges']['导航文字']['text'], '1 条没提交 AI')     # 2026-11-22：改了没发，不再写“已定”
         with urllib.request.urlopen(urllib.request.Request(self.base + '/api/navshot', b'{}', {'Content-Type': 'application/json'})) as x: self.assertEqual(x.headers['Content-Type'], 'image/jpeg')
         self.assertIn('用户改的导航条文字：{"q": "挑空难照亮"}', self.cli('--list').stdout)
         # 261122：AI 照改完没法标成已处理，页面一直挂着“1 条没发给 AI”。--reply 导航条 了结；用户再改又是新的一件；导航条已经是这些字也算了结
@@ -346,7 +351,7 @@ class BoardTests(unittest.TestCase):
         self.assertNotEqual(self.cli('--reply', '导航条').returncode, 0)                                   # 要带说明
         r = self.cli('--reply', '导航条', '--note', '4 段导航条已做进审核线第 7 版'); self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(badge(), '没有待办'); self.assertIn('AI：4 段导航条已做进审核线第 7 版', self.cli('--list').stdout)
-        self.req('/api/nav', {'labels': {'q': '挑空怎么照亮'}}, page=False); self.assertEqual(badge(), '1 条没发给 AI')
+        self.req('/api/nav', {'labels': {'q': '挑空怎么照亮'}}, page=False); self.assertEqual(badge(), '1 条没提交 AI')
         same = {c['id']: c['label'] for c in W.chapters(self.job)}
         W.edit(self.job, lambda d: d.update(nav_labels={'q': same['q']})); self.assertEqual(badge(), '没有待办')     # “已定”只认用户的确认，没人确认过写“没有待办”
 
@@ -447,7 +452,7 @@ class BoardTests(unittest.TestCase):
         self.assertTrue(self.req('/api/publish/set', {'mode': 'schedule', 'time': '2000-01-01T20:00', 'note': '只发抖音和小红书'})[1]['ok'])
         m = meta()['publish']; self.assertEqual((m['settings']['mode'], m['settings']['time'], m['gate']['ok']), ('schedule', '2000-01-01 20:00', False))
         r = self.req('/api/publish/request', {})[1]; self.assertFalse(r['ok']); self.assertIn('10 分钟以后', r['error'])   # 时间过了
-        r = self.req('/api/publish/request', {'mode': 'draft'})[1]; self.assertFalse(r['ok']); self.assertIn('确定此栏', r['error'])   # 审核线没定
+        r = self.req('/api/publish/request', {'mode': 'draft'})[1]; self.assertFalse(r['ok']); self.assertIn('定稿', r['error'])   # 审核线没定
         self.assertEqual(self.req('/api/publish/request', {'mode': 'draft'}, page=False)[0], 403)
         self.assertTrue(self.req('/api/settle', {'column': '审核线'})[1]['ok']); self.assertTrue(meta()['publish']['gate']['ok'])
         import datetime; later = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%dT20:00')
@@ -465,11 +470,11 @@ class BoardTests(unittest.TestCase):
     def test_page_words(self):
         """页面上 4 个状态词齐；老状态词不再出现在给用户看的文字里（只在把服务端老说法换成新说法的那一行 FIX 里）。"""
         page = W.PAGE.read_text(encoding='utf-8')
-        for w in ('待你看', '待发送', 'AI 在改', '已定', '还没到', '提意见', '交给 AI', '确定此栏', '定稿', '全部摆开', '这条还不行'): self.assertIn(w, page)
-        # 2026-11-24 用户定“第一次看就懂”：页面上显示 等你看／还没交给 AI／AI 修改中／已定、等你处理、AI 已连／AI 未连、达芬奇已断开（数据里的名字不变）
-        for w in ("'待你看':'等你看'", "'待发送':'还没交给 AI'", "'AI 在改':'AI 修改中'", '等你处理', "'AI 已连':'AI 未连'", '达芬奇已断开'): self.assertIn(w, page)
+        for w in ('待你看', '待发送', 'AI 在改', '已定', '未开始', '提意见', '提交 AI', '定稿', '全部摆开', '这条还不行'): self.assertIn(w, page)
+        # 2026-11-25 用户批准改名表：页面上显示 待审阅／待提交／AI 处理中／已定稿、AI 在线／AI 离线、达芬奇已断开（数据里的名字不变）
+        for w in ("'待你看':'待审阅'", "'待发送':'待提交'", "'AI 在改':'AI 处理中'", '待审阅', 'AI 离线', 'AI 在线', '达芬奇已断开'): self.assertIn(w, page)
         rest = '\n'.join(l for l in page.split('\n') if not l.startswith('const FIX='))
-        for old in ('AI 改中', '还没发给 AI', '已发给 AI', 'AI 已回复', '没有待办', '你定了', '你已定', '发给 AI', 'AI 改完了', '已发', '写要求', 'AI 没在等', '达芬奇连不上'):
+        for old in ('AI 改中', '还没发给 AI', 'AI 已回复', '没有待办', '你定了', '你已定', '发给 AI', 'AI 改完了', '已发', '写要求', 'AI 没在等', '达芬奇连不上'):
             hits = [l.strip()[:80] for l in rest.split('\n') if old in l and "action==='写要求'" not in l and "action:'写要求'" not in l and "action!=='写要求'" not in l and 'action 仍是 写要求' not in l]
             self.assertFalse(hits, (old, hits))
 

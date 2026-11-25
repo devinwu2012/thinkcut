@@ -113,7 +113,7 @@ class ProjectTests(unittest.TestCase):
         p.write_json(job, {'review_timeline': 'v1_卡点审核'})
         with patch.object(p, 'command') as cmd:
             for execute in (False, True):
-                with self.assertRaisesRegex(RuntimeError, '(?s)没有 export_ok.*这一栏定了.*AI 不能替用户点'): p.upload(self.d, self.meta, execute=execute)
+                with self.assertRaisesRegex(RuntimeError, '(?s)没有 export_ok.*定稿.*AI 不能替用户点'): p.upload(self.d, self.meta, execute=execute)
             cmd.assert_not_called()
         p.write_json(job, {'export_ok': {'timeline': 'v1_卡点审核', 'via': '审片台：用户点了审核线“这一栏定了”', 'at': '2026-11-23 10:00:00'}})
         self.assertIn('审片台：用户点了审核线“这一栏定了”（2026-11-23 10:00:00，时间线 v1_卡点审核）', p.final_gate(self.d))

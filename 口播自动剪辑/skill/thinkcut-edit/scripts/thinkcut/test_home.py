@@ -81,7 +81,7 @@ class ServerTests(Base):
 
     def req(self, path, body=None, page=True, origin=None):
         h = {'Content-Type': 'application/json'}
-        if page: h.update({'Origin': origin or f'http://127.0.0.1:{self.port}', 'X-Shenpian-Token': HM.TOKEN})
+        if page: h.update({'Origin': origin or f'http://127.0.0.1:{self.port}', 'Cookie': HM.cookie_header(self.port)})
         q = urllib.request.Request(f'http://127.0.0.1:{self.port}{path}', None if body is None else json.dumps(body).encode(), h)
         try:
             with urllib.request.urlopen(q, timeout=20) as r: return r.status, json.loads(r.read())
@@ -89,7 +89,7 @@ class ServerTests(Base):
 
     def test_page_list_open_reuse(self):
         c, page = 200, urllib.request.urlopen(f'http://127.0.0.1:{self.port}/').read().decode()
-        self.assertIn(f"const TOKEN='{HM.TOKEN}'", page); self.assertIn('新建片子', page)
+        self.assertIn(f"const TOKEN='{HM.SESSION}'", page); self.assertNotIn(HM.TOKEN, page); self.assertIn('新建项目', page)   # 页面里只有公开的编号，口令在 HttpOnly cookie
         fid, job = self.film('打开试试'); self.jobs.append(job)
         c, r = self.req('/api/films'); self.assertEqual([x['id'] for x in r['films']], [fid])
         c, r = self.req('/api/open', {'id': fid}); self.assertTrue(r['ok'], r)
@@ -130,7 +130,7 @@ class MaterialTests(Base):
     def upload(self, name, data, page=True, length=None):
         c = http.client.HTTPConnection('127.0.0.1', self.port, timeout=30)
         h = {'Content-Length': str(len(data) if length is None else length)}
-        if page: h.update({'Origin': f'http://127.0.0.1:{self.port}', 'X-Shenpian-Token': W.TOKEN})
+        if page: h.update({'Origin': f'http://127.0.0.1:{self.port}', 'Cookie': W.cookie_header(self.port)})
         from urllib.parse import quote
         c.putrequest('POST', '/api/material/upload?name=' + quote(name))
         for k, v in h.items(): c.putheader(k, v)
@@ -211,13 +211,157 @@ class OldServerTests(Base):
                 url = HM.ensure(job, self.ports)
             port = int(url.rsplit(':', 1)[1].strip('/'))
             self.assertTrue(W.same_program(port), '首页换成了现在的程序起的审片台'); self.assertEqual(p.wait(5), -15, '老服务被停掉了')
-            with urllib.request.urlopen(url, timeout=5) as r: self.assertIn('全部片子', r.read().decode(), '页面打得开，有“← 全部片子”')
+            with urllib.request.urlopen(url, timeout=5) as r: self.assertIn('全部项目', r.read().decode(), '页面打得开，有“全部项目”')
             with contextlib.redirect_stdout(io.StringIO()): self.assertEqual(HM.ensure(job, self.ports), url, '同一版就复用')
         finally:
             if p.poll() is None: p.kill()
 
     def test_lite_format_matches_init(self):
         fid, job = self.film('画幅'); self.assertEqual(job.get('format'), '3:4满屏')
+
+
+class IPTests(Base):
+    """切 IP（2026-11-24 用户定）：左上角列出所有 IP、点一个看它的片子；新建 IP 只填名字；新片子归当前 IP；记住上次选的（本机.json）；--root 钉死不能切；home --wait 看所有 IP。
+    用临时配置档（甲是默认 IP、乙），片子文件夹都在临时目录，不碰真配置档和真片子。"""
+    def setUp(self):
+        super().setUp()
+        cc = HM.cfg(); self.prof = self.root.parent / '配置档'; self.prof.mkdir()
+        pub = cc._read(Path(cc.PROGRAM) / '配置档' / '公共.json'); pub.update({'默认IP': '甲', '片子文件夹': str(self.root.parent / '{IP}视频'), '回收站': str(self.root.parent / '回收站')}); (self.root.parent / '回收站').mkdir()
+        (self.prof / '公共.json').write_text(json.dumps(pub, ensure_ascii=False), encoding='utf-8')
+        for n in ('甲', '乙'): (self.prof / n).mkdir(); (self.prof / n / 'ip.json').write_text(json.dumps({'名字': n}, ensure_ascii=False), encoding='utf-8')
+        (self.prof / '本机.json').write_text(json.dumps({'_说明': '这台机器的'}, ensure_ascii=False), encoding='utf-8')
+        self.old = {k: os.environ.get(k) for k in ('THINKCUT_PROFILES', 'THINKCUT_IP', 'THINKCUT_VIDEO_ROOT', 'THINKCUT_RECYCLE_ROOT')}
+        os.environ['THINKCUT_PROFILES'] = str(self.prof); os.environ['THINKCUT_RECYCLE_ROOT'] = str(self.root.parent / '回收站'); os.environ.pop('THINKCUT_IP', None); os.environ.pop('THINKCUT_VIDEO_ROOT', None)
+        self.srvs = []
+
+    def tearDown(self):
+        for s in self.srvs: s.shutdown(); s.server_close()
+        for k, v in self.old.items():
+            if v is None: os.environ.pop(k, None)
+            else: os.environ[k] = v
+        super().tearDown()
+
+    def serve(self, root=None):
+        s = HM.make_server(root, 0, self.ports); self.srvs.append(s); threading.Thread(target=s.serve_forever, daemon=True).start(); return s.server_address[1]
+
+    def req(self, port, path, body=None, page=True):
+        h = {'Content-Type': 'application/json'}
+        if page: h.update({'Origin': f'http://127.0.0.1:{port}', 'Cookie': HM.cookie_header(port)})
+        q = urllib.request.Request(f'http://127.0.0.1:{port}{path}', None if body is None else json.dumps(body).encode(), h)
+        try:
+            with urllib.request.urlopen(q, timeout=20) as r: return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e: return e.code, json.loads(e.read())
+
+    def local(self): return json.loads((self.prof / '本机.json').read_text(encoding='utf-8'))
+
+    def new(self, port, title, ip):
+        c, r = self.req(port, '/api/new', {'title': title, 'ip': ip}); self.assertTrue(r['ok'], r)
+        self.jobs.append(W.open_film(self.root.parent / f'{ip}视频' / r['id'])); return r['id']
+
+    def test_switch_new_film_and_remember(self):
+        jia, yi = (self.root.parent / '甲视频').resolve(), (self.root.parent / '乙视频').resolve()
+        p = self.serve()
+        c, r = self.req(p, '/api/ips'); self.assertEqual((r['current'], r['ips'], r['pinned']), ('甲', ['乙', '甲'], False), '没选过：默认 IP；列出所有 IP')
+        c, r = self.req(p, '/api/films'); self.assertEqual((r['ip'], r['root'], r['exists'], r['films']), ('甲', str(jia), False, []), '片子文件夹还没有：空列表，不报错')
+        a = self.new(p, '甲的片子', '甲')
+        self.assertEqual(rj(jia / a / '项目.json')['ip'], '甲', '新片子归当前 IP')
+        c, r = self.req(p, '/api/ip', {'name': '乙'}); self.assertTrue(r['ok'], r); self.assertEqual((r['ip'], r['root']), ('乙', str(yi)))
+        self.assertEqual(self.local(), {'_说明': '这台机器的', '首页IP': '乙'}, '记在 本机.json，别的键留着')
+        c, r = self.req(p, '/api/films'); self.assertEqual((r['ip'], r['films']), ('乙', []), '切过去只看乙的片子')
+        b = self.new(p, '乙的片子', '乙')
+        self.assertEqual(rj(yi / b / '项目.json')['ip'], '乙'); self.assertFalse((jia / b).exists(), '不串到甲的文件夹')
+        c, r = self.req(p, '/api/films'); self.assertEqual([x['id'] for x in r['films']], [b])
+        c, r = self.req(p, '/api/rename', {'id': b, 'title': '改个名', 'ip': '甲'}); self.assertFalse(r['ok'], '页面还停在甲、首页已经切到乙：不动'); self.assertIn('乙', r['error'])
+        c, r = self.req(p, '/api/ip', {'name': '没有这个'}); self.assertFalse(r['ok'])
+        c, r = self.req(p, '/api/ip', {'name': '甲'}, page=False); self.assertEqual(c, 403, '命令行不能替用户切')
+        c, r = self.req(p, '/api/ips'); self.assertEqual(r['current'], '乙')
+        p2 = self.serve(); c, r = self.req(p2, '/api/ips'); self.assertEqual(r['current'], '乙', '下次打开还是上次选的')
+        c, r = self.req(p2, '/api/ping'); self.assertEqual((r['ip'], r['pin']), ('乙', ''))
+        shutil.rmtree(self.prof / '乙'); p3 = self.serve(); c, r = self.req(p3, '/api/ips'); self.assertEqual(r['current'], '甲', '记的 IP 没了：回默认')
+
+    def test_new_ip(self):
+        p = self.serve()
+        c, r = self.req(p, '/api/ip-new', {'name': '丙'}); self.assertTrue(r['ok'], r); self.assertEqual(r['ip'], '丙', '建好自动切过去')
+        raw = json.loads((self.prof / '丙' / 'ip.json').read_text(encoding='utf-8'))
+        self.assertEqual({k: v for k, v in raw.items() if not k.startswith('_')}, {'名字': '丙'}, '只写名字，其余跟公共层')
+        self.assertEqual(self.local()['首页IP'], '丙')
+        c, r = self.req(p, '/api/ips'); self.assertEqual((r['current'], r['ips']), ('丙', ['丙', '乙', '甲']))
+        f = self.new(p, '丙的第一条', '丙'); self.assertEqual(rj(self.root.parent / '丙视频' / f / '项目.json')['ip'], '丙')
+        for bad in ('丙', '甲', '', 'a/b', '.x'):
+            c, r = self.req(p, '/api/ip-new', {'name': bad}); self.assertFalse(r['ok'], bad)
+        c, r = self.req(p, '/api/ip-new', {'name': '丁'}, page=False); self.assertEqual(c, 403); self.assertFalse((self.prof / '丁').exists())
+
+    def test_started_server_follows_ip(self):
+        """home 命令起的后台首页（不带 --root）：跟着 IP 走，不是钉死在当前文件夹。"""
+        port = next(p for p in range(19900, 20000) if W.port_free(p))
+        with contextlib.redirect_stdout(io.StringIO()): HM.start(None, port)
+        try:
+            pg = HM.ping(port); self.assertEqual((pg['pin'], pg['ip'], pg['root']), ('', '甲', str((self.root.parent / '甲视频').resolve())))
+            with contextlib.redirect_stdout(io.StringIO()): self.assertEqual(HM.start(None, port)[1], True, '再起：复用')
+            with self.assertRaises(SystemExit): HM.start(self.root, port)
+        finally:
+            with contextlib.redirect_stdout(io.StringIO()): HM.stop(port)
+
+    def test_delete_ip(self):
+        """删除 IP…：配置挪回收站、片子不动、能撤销；默认 IP 不能删；删的是正在看的就回默认 IP；命令行不能替用户删。"""
+        p = self.serve(); self.req(p, '/api/ip', {'name': '乙'}); b = self.new(p, '乙的片子', '乙')
+        c, r = self.req(p, '/api/ips'); self.assertEqual(r['default'], '甲')
+        c, r = self.req(p, '/api/ip-info?name=' + urllib.parse.quote('乙')); self.assertEqual((r['films'], r['root']), (1, str((self.root.parent / '乙视频').resolve())))
+        c, r = self.req(p, '/api/ip-del', {'name': '乙'}, page=False); self.assertEqual(c, 403); self.assertTrue((self.prof / '乙').is_dir())
+        c, r = self.req(p, '/api/ip-del', {'name': '甲'}); self.assertFalse(r['ok'], '默认 IP 不能删'); self.assertIn('默认', r['error'])
+        c, r = self.req(p, '/api/ip-del', {'name': '乙'}); self.assertTrue(r['ok'], r)
+        self.assertEqual(r['ip'], '甲', '删的是正在看的：回默认 IP'); self.assertFalse((self.prof / '乙').exists())
+        self.assertTrue(Path(r['to']).is_relative_to(self.root.parent / '回收站')); self.assertTrue((self.root.parent / '乙视频' / b / '项目.json').is_file(), '片子不动')
+        self.assertNotIn('首页IP', self.local())
+        c, r2 = self.req(p, '/api/ips'); self.assertEqual(r2['ips'], ['甲'])
+        c, u = self.req(p, '/api/ip-undel', {'to': r['to']}); self.assertTrue(u['ok'], u); self.assertTrue((self.prof / '乙' / 'ip.json').is_file(), '撤销：还原')
+        self.req(p, '/api/ip', {'name': '乙'}); c, f = self.req(p, '/api/films'); self.assertEqual([x['id'] for x in f['films']], [b], '还原以后片子照旧看得到')
+        p2 = self.serve(self.root); c, r = self.req(p2, '/api/ip-del', {'name': '乙'}); self.assertFalse(r['ok'], '--root 钉死时不能删')
+
+    def test_recycle_bin(self):
+        """回收站…：列出删掉的片子（带它属于哪个 IP）和 IP；还原放回原处；片子的 IP 也删了就先要还原 IP；命令行不能替用户拿。"""
+        p = self.serve(); c, r = self.req(p, '/api/bin'); self.assertEqual(r['items'], [], '空的')
+        a = self.new(p, '甲的片子', '甲'); self.req(p, '/api/ip', {'name': '乙'}); b = self.new(p, '乙的片子', '乙')
+        c, t = self.req(p, '/api/trash', {'id': b, 'ip': '乙'}); self.assertTrue(t['ok'], t)
+        self.req(p, '/api/ip', {'name': '甲'}); c, t2 = self.req(p, '/api/trash', {'id': a, 'ip': '甲'}); self.assertTrue(t2['ok'], t2)
+        c, d = self.req(p, '/api/ip-del', {'name': '乙'}); self.assertTrue(d['ok'], d)
+        c, r = self.req(p, '/api/bin'); its = r['items']
+        self.assertEqual(sorted((x['kind'], x['name'], x['ip']) for x in its), sorted([('film', a, '甲'), ('film', b, '乙'), ('ip', '乙', '乙')]))
+        self.assertTrue(all(its[i]['at'] >= its[i + 1]['at'] for i in range(len(its) - 1)), '新删的在前')
+        fb = next(x for x in its if x['name'] == b); fi = next(x for x in its if x['kind'] == 'ip')
+        c, r = self.req(p, '/api/bin-restore', {'to': fb['to'], 'kind': 'film'}); self.assertFalse(r['ok'], '片子的 IP 也删了'); self.assertIn('先把这个 IP 还原', r['error'])
+        c, r = self.req(p, '/api/bin-restore', {'to': fi['to'], 'kind': 'ip'}, page=False); self.assertEqual(c, 403)
+        c, r = self.req(p, '/api/bin-restore', {'to': fi['to'], 'kind': 'ip'}); self.assertTrue(r['ok'], r); self.assertIn('乙', HM.cfg().ips())
+        c, r = self.req(p, '/api/bin-restore', {'to': fb['to'], 'kind': 'film'}); self.assertTrue(r['ok'], r)
+        self.assertEqual(r['ip'], '乙'); self.assertTrue((self.root.parent / '乙视频' / b / '项目.json').is_file(), '回到它那个 IP 的文件夹，不是当前看的甲')
+        c, r = self.req(p, '/api/films'); self.assertEqual(r['films'], [], '首页还在看甲')
+        fa = next(x for x in its if x['name'] == a); c, r = self.req(p, '/api/bin-restore', {'to': fa['to'], 'kind': 'film'}); self.assertTrue(r['ok'], r)
+        c, r = self.req(p, '/api/films'); self.assertEqual([x['id'] for x in r['films']], [a])
+        c, r = self.req(p, '/api/bin'); self.assertEqual(r['items'], [], '都已还原')
+        c, r = self.req(p, '/api/bin-restore', {'to': '/etc/passwd_20260101-000000', 'kind': 'film'}); self.assertFalse(r['ok'])
+
+    def test_pinned_root_unchanged(self):
+        """给了 --root：只看这一个文件夹、不能切；新片子照旧归默认 IP（和以前一样）。"""
+        p = self.serve(self.root)
+        c, r = self.req(p, '/api/ips'); self.assertEqual((r['pinned'], r['current'], r['ips']), (True, '甲', ['甲']))
+        c, r = self.req(p, '/api/ip', {'name': '乙'}); self.assertFalse(r['ok']); self.assertIn('--root', r['error'])
+        c, r = self.req(p, '/api/ip-new', {'name': '丙'}); self.assertFalse(r['ok']); self.assertFalse((self.prof / '丙').exists())
+        c, r = self.req(p, '/api/new', {'title': '钉死的'}); self.assertTrue(r['ok'], r); self.jobs.append(W.open_film(self.root / r['id']))
+        self.assertEqual(rj(self.root / r['id'] / '项目.json')['ip'], '甲'); self.assertNotIn('首页IP', self.local())
+        c, r = self.req(p, '/api/ping'); self.assertEqual(r['pin'], str(self.root.resolve()))
+
+    def test_wait_all_sees_every_ip(self):
+        """AI 的 home --wait（不带 --root）看所有 IP：首页切在甲，乙的片子点了“交给 AI”也接得到。"""
+        p = self.serve(); self.req(p, '/api/ip', {'name': '乙'}); b = self.new(p, '乙要AI', '乙'); jb = self.jobs[-1]
+        c, r = self.req(p, '/api/open', {'id': b}); self.assertTrue(r['ok'], r)
+        self.req(p, '/api/ip', {'name': '甲'})
+        self.assertEqual(HM.all_roots(), [(self.root.parent / n).resolve() for n in ('乙视频', '甲视频')])
+        HM.ensure(jb, self.ports); writing.note_add(jb, {'text': '先写一版'}); board.send(jb, '写稿')
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): got = HM.wait_all([self.root.parent / '甲视频'], 1, p)
+        self.assertIsNone(got, '只给甲的文件夹：看不到乙的')
+        with contextlib.redirect_stdout(out): got = HM.wait_all(HM.all_roots(), 10, p)
+        self.assertEqual(got.dir, jb.dir); self.assertIn('乙要AI', out.getvalue())
 
 
 class WaitAllTests(Base):
@@ -228,16 +372,16 @@ class WaitAllTests(Base):
             a, ja = self.film('第一条'); b, jb = self.film('第二条'); self.jobs += [ja, jb]
             for f in (a, b): HM.make_handler  # noqa
             urls = [json.loads(urllib.request.urlopen(urllib.request.Request(f'http://127.0.0.1:{hp}/api/open', json.dumps({'id': f}).encode(),
-                    {'Origin': f'http://127.0.0.1:{hp}', 'X-Shenpian-Token': HM.TOKEN}), timeout=20).read())['url'] for f in (a, b)]
+                    {'Origin': f'http://127.0.0.1:{hp}', 'Cookie': HM.cookie_header(hp)}), timeout=20).read())['url'] for f in (a, b)]
             out = io.StringIO()
             with contextlib.redirect_stdout(out): self.assertIsNone(HM.wait_all(self.root, 1, hp), '没人点：到时间退出')
-            self.assertIn('哪条片子都还没人点', out.getvalue())
+            self.assertIn('哪个项目都还没人点', out.getvalue())
             self.assertTrue(W.ping(int(urls[1].rsplit(':', 1)[1].strip('/')))['listening'], '等所有片子时，每条片子的审片台都显示“AI 在等”')
             writing.note_add(jb, {'text': '先写一版'}); board.send(jb, '写稿')
             out = io.StringIO()
             with contextlib.redirect_stdout(out): got = HM.wait_all(self.root, 10, hp)
             t = out.getvalue()
-            self.assertEqual(got.dir, jb.dir); self.assertIn(f'【片子】{b}', t); self.assertIn('栏目：文案，1 件', t); self.assertIn('home --wait', t)
+            self.assertEqual(got.dir, jb.dir); self.assertIn(f'【项目】{b}', t); self.assertIn('栏目：文案，1 件', t); self.assertIn('home --wait', t)
             self.assertEqual(board.pick(jb), [], '接过了，不会再打印一次')
             out = io.StringIO()
             with contextlib.redirect_stdout(out): self.assertIsNone(HM.wait_all(self.root, 1, hp))
@@ -251,11 +395,11 @@ class WaitAllTests(Base):
         HM.ensure(ja, self.ports); writing.note_add(ja, {'text': '改改'}); board.send(ja, '写稿')
         out = io.StringIO()
         with contextlib.redirect_stdout(out): W.wait(ja, 5)
-        self.assertIn('【用户点了“发给 AI”】栏目：文案', out.getvalue()); self.assertIn('再起一次 --wait', out.getvalue())
+        self.assertIn('【用户点了“提交 AI”】栏目：文案', out.getvalue()); self.assertIn('再起一次 --wait', out.getvalue())
 
 
 class ManageTests(Base):
-    """2026-11-24 方向 C：右键改名、移到“做完的”／移回来、移到 NAS 回收站（能拿回来）、封面小图、点开先到 /open 再跳。达芬奇库列表指到临时文件夹，不碰真的。"""
+    """2026-11-24 方向 C：右键改名、移到“做完的”／移回来、移到 NAS 回收站（能还原）、封面小图、点开先到 /open 再跳。达芬奇库列表指到临时文件夹，不碰真的。"""
     def setUp(self):
         super().setUp()
         self.rl = board._pm('resolve_library'); self.old_prefs = self.rl.PREFS
@@ -301,13 +445,17 @@ class ManageTests(Base):
         fid, job = self.film('删掉它'); self.jobs.append(job); HM.ensure(job, self.ports); port = HM.server_of(job)['port']
         (self.root / fid / '01_原始素材' / 'a.txt').write_text('留着', encoding='utf-8')
         c, r = self.req('/api/trash', {'id': fid}); self.assertTrue(r['ok'], r)
-        to = Path(r['to']); self.assertEqual(to.parent, self.bin / '口播台'); self.assertRegex(to.name, '^' + fid + r'_\d{8}-\d{6}$')
+        to = Path(r['to']); self.assertEqual(to.parent, self.bin / 'ThinkCut'); self.assertRegex(to.name, '^' + fid + r'_\d{8}-\d{6}$')
         self.assertFalse((self.root / fid).exists()); self.assertEqual((to / '01_原始素材' / 'a.txt').read_text(encoding='utf-8'), '留着', '整个文件夹原样挪过去')
         self.assertIsNone(W.ping(port, 0.3), '先停掉了在跑的审片台'); self.assertEqual(HM.scan(self.root), [])
-        c, b = self.req('/api/restore', {'to': '/etc', 'from': fid}); self.assertFalse(b['ok'], '只认回收站 口播台/ 里的')
+        c, b = self.req('/api/restore', {'to': '/etc', 'from': fid}); self.assertFalse(b['ok'], '只认回收站 ThinkCut/ 里的')
         c, b = self.req('/api/restore', {'to': r['to'], 'from': '别的名字'}); self.assertFalse(b['ok'], '名字对不上原位置不动')
         c, b = self.req('/api/restore', {'to': r['to'], 'from': r['from']}); self.assertTrue(b['ok'], b)
         self.assertEqual((self.root / fid / '01_原始素材' / 'a.txt').read_text(encoding='utf-8'), '留着'); self.assertFalse(to.exists())
+        old = self.bin / '口播台'; old.mkdir(exist_ok=True)                 # 改名前删的片子在 #recycle/口播台/ 里：照样列得出、还原得回来
+        c, r = self.req('/api/trash', {'id': fid}); os.rename(r['to'], old / Path(r['to']).name); src = old / Path(r['to']).name
+        self.assertEqual([x['to'] for x in HM.recycled([self.root])], [str(src)])
+        c, b = self.req('/api/restore', {'to': str(src), 'from': fid}); self.assertTrue(b['ok'], b); self.assertTrue((self.root / fid).is_dir()); self.assertTrue(old.is_dir(), '旧文件夹空了也留着')
 
     def test_trash_needs_recycle(self):
         fid, _ = self.film('回收站不在'); shutil.rmtree(self.bin)
@@ -341,13 +489,14 @@ class ManageTests(Base):
             def redirect_request(self, *a): return None
         op = urllib.request.build_opener(NoRedirect)
         q = f'http://127.0.0.1:{self.port}/open?id=' + urllib.parse.quote(fid)
-        with self.assertRaises(urllib.error.HTTPError) as e: op.open(q)
-        self.assertEqual(e.exception.code, 403, '没有页面口令不开')
-        with self.assertRaises(urllib.error.HTTPError) as e: op.open(q + '&t=' + HM.TOKEN + '&col=' + urllib.parse.quote('写稿'))
+        with self.assertRaises(urllib.error.HTTPError) as e: op.open(q + '&t=' + HM.SESSION)
+        self.assertEqual((e.exception.code, e.exception.headers['Location']), (302, '/'), '没有页面的 cookie（首页重启过、命令行）不开：回首页重新打开（QA 2.6）')
+        ck = {'Cookie': HM.cookie_header(self.port)}
+        with self.assertRaises(urllib.error.HTTPError) as e: op.open(urllib.request.Request(q + '&t=' + HM.SESSION + '&col=' + urllib.parse.quote('写稿'), headers=ck))
         loc = e.exception.headers['Location']; self.assertEqual(e.exception.code, 302)
         self.assertRegex(loc, r'^http://127\.0\.0\.1:\d+/\?home=http%3A%2F%2F127\.0\.0\.1%3A\d+#%E5%86%99%E7%A8%BF$')
         self.assertEqual(HM.status(self.root, fid)['url'], loc.split('?')[0], '审片台起好了，下次页面直接开它')
-        with self.assertRaises(urllib.error.HTTPError) as e: op.open(f'http://127.0.0.1:{self.port}/open?new=&t={HM.TOKEN}')
+        with self.assertRaises(urllib.error.HTTPError) as e: op.open(urllib.request.Request(f'http://127.0.0.1:{self.port}/open?new=&t={HM.SESSION}', headers=ck))
         new = [x for x in HM.scan(self.root) if x['id'].endswith(' 未命名')]; self.assertEqual(len(new), 1, '/open?new= 建一条新片子'); self.jobs.append(W.open_film(self.root / new[0]['id']))
 
     def test_cli_cannot_manage(self):

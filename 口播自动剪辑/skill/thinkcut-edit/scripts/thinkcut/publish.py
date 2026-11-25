@@ -55,15 +55,15 @@ def check_time(s, now=None):
 
 def gate(job):
     """整片导出的闸：审核线点过“确定此栏”且之后没变。返回 (能不能, 为什么不能)。"""
-    if not job.get('review_timeline'): return False, '这条片子还没有审核线（还没出初稿）'
+    if not job.get('review_timeline'): return False, '这个项目还没有审核线（还没初剪）'
     info = (board.settle_info(job) or {}).get('审核线') or {}
     if info.get('state') == 'ok': return True, ''
-    return False, '先在“审核线”栏点“确定此栏”（整片导出只认这个）'
+    return False, '先在审片栏点“定稿”（整片导出只认这个）'
 
 
 def key(job, d=None):
     d = d or board.load(job); r = d.get('publish_req')
-    if not r or r.get('handled'): return None
+    if not r or r.get('handled') or r.get('cancelled'): return None
     return f"发布@{board._h([r.get('at'), r.get('mode'), r.get('time'), r.get('note')])}"
 
 
@@ -84,11 +84,28 @@ def request(job, q, ua=''):
     return {'ok': True}
 
 
+def cancel(job):
+    """用户取消这次“存到蚁小二草稿”（只收页面的请求）：AI 接了没回话、或不想发了。已经回过话的不用取消。之后能重新点“存到蚁小二草稿”（QA 1.5）。"""
+    def g(d):
+        r = d.get('publish_req')
+        if not r or r.get('handled') or r.get('cancelled'): raise Oops('当前没有等待 AI 处理的存草稿请求')
+        r['cancelled'] = {'at': board.now(), 'who': board.WHO}
+        return {'ok': True}
+    return board.edit(job, g)
+
+
 def info(job):
-    """给页面：设置、这一次请求（AI 回了什么）、导出闸。"""
-    d = board.load(job); r = d.get('publish_req'); ok, why = gate(job)
-    return {'settings': settings(d), 'gate': {'ok': ok, 'why': why},
-            'req': ({'at': r['at'], 'mode': r.get('mode'), 'time': r.get('time'), 'note': r.get('note'), 'handled': r.get('handled')} if r else None)}
+    """给页面：设置、这一次请求（AI 回了什么／接了没有／是不是很久没动静／取消了没有）、导出闸。
+    req.state：waiting 等 AI 接／doing AI 接了在做／stale 接了（或发出）超过 board.STALE 秒没回话（页面给“再叫一次”“取消”）／done 回过话／cancelled 用户取消了。"""
+    d = board.load(job); r = d.get('publish_req'); ok, why = gate(job); req = None
+    if r:
+        k = key(job, d); s = board._sent(d).get(k) if k else None
+        state = 'cancelled' if r.get('cancelled') else 'done' if r.get('handled') else 'doing' if s and s.get('picked') else 'waiting'
+        age = board._age((s or {}).get('picked') or (s or {}).get('at') or r['at'])
+        if state in ('waiting', 'doing') and age > board.STALE: state = 'stale'
+        req = {'at': r['at'], 'mode': r.get('mode'), 'time': r.get('time'), 'note': r.get('note'), 'handled': r.get('handled'), 'cancelled': r.get('cancelled'),
+               'picked': (s or {}).get('picked'), 'state': state, 'minutes': int(age // 60)}
+    return {'settings': settings(d), 'gate': {'ok': ok, 'why': why}, 'req': req}
 
 
 def listing(job, only=None):
@@ -99,7 +116,7 @@ def listing(job, only=None):
     when = f"定时发布：{r['time']}（upload 加 --schedule \"{r['time']}\"）" if r.get('mode') == 'schedule' else '只存草稿（不定时，用户自己在蚁小二客户端点发布）'
     say(f"【用户要存到蚁小二草稿】{r['at'][5:16]} 在审片台“发布”栏点了“存到蚁小二草稿”。{when}")
     say('给发布 AI 的话：' + (r['note'].replace('\n', '⏎') if r.get('note') else '（没写；按这个 IP 配好的平台全发）'))
-    say('照 thinkcut-upload 技能做：① 用户已在审核线点过“确定此栏”，导出 4K 成片（export）；② register-final 登记定稿、标题简介标签用“发布”栏里定稿的那一版（项目.json）；'
+    say('照 thinkcut-upload 技能做：① 用户已在审片栏点过“定稿”，导出 4K 成片（export）；② register-final 登记定稿、标题简介标签用“发布”栏里定稿的那一版（项目.json）；'
         '③ archive → archive-stills 看图验收 → seal；④ upload 预检 → upload --execute' + (f' --schedule "{r["time"]}"' if r.get('mode') == 'schedule' else '')
         + '；给发布 AI 的话里说只发哪几个平台的，临时只开那几个 target。只存草稿，绝不调用发布。')
     say(f'做完（或卡住）回一句，显示在“发布”栏：workbench {job.dir} --reply 发布 --note "存好了：抖音、快手…（N 个平台），定时 …；在蚁小二客户端点发布"')
@@ -109,6 +126,7 @@ def reply(job, text):
     if not text: die('回复要带 --note（存进了哪些平台、定时几点，或卡在哪）')
     def g(d):
         if not d.get('publish_req'): raise Oops('用户没有点过“存到蚁小二草稿”')
+        if d['publish_req'].get('cancelled'): raise Oops('用户已经取消了这次“存到蚁小二草稿”：别再存了；用户重新点了会再交给你')
         d['publish_req']['handled'] = {'at': board.now(), 'note': text}
     try: board.edit(job, g)
     except Oops as e: die(str(e))

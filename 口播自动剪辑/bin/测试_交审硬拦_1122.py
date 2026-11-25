@@ -49,7 +49,7 @@ real = guard.rules_digest()
 if (guard.THINKCUT_DIR / '内部' / '架构审查交接.md').exists():      # 内部记录只在内部版；导出的干净版没有，状态里就不打这一段
   check(len(real) >= 10 and any(x.startswith('音效：') and '≤8' in x for x in real) and any('不写成 MD' in x for x in real), '真的交接文件读得出规矩（音效 ≤8 个、不写 MD 等）')
   _, out = said(status.rules_banner)
-  check(out.startswith('【这条片子要遵守的已定规矩】') and '  - 音效：' in out, 'status 开头打印“这条片子要遵守的已定规矩”')
+  check(out.startswith('【这个项目要遵守的已定规矩】') and '  - 音效：' in out, 'status 开头打印“这个项目要遵守的已定规矩”')
 
 with tempfile.TemporaryDirectory() as t:
     d = film(t); job = Job(d); mk = d.parent

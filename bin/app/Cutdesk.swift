@@ -16,6 +16,8 @@ import AppKit
 import WebKit
 
 let python = "/usr/bin/python3"
+let appName = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "ThinkCut"   // 正式版“ThinkCut”，开发版“ThinkCut 开发版”（build_app.sh 写进 Info.plist）
+let defaultPort = (Bundle.main.object(forInfoDictionaryKey: "CutdeskPort") as? Int) ?? 8760          // 首页端口：正式版 8760，开发版 8762（两个能同时开、不串）
 let checkDir = ProcessInfo.processInfo.environment["CUTDESK_CHECK"]     // 只给验收用（见文件末尾 Check）；平时不设
 let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev"
 let toolbarHeight: CGFloat = 52
@@ -97,7 +99,7 @@ addEventListener('dblclick',e=>{if(zone(e))post({action:'zoom'})});})();
 let newFilmJS = """
 (()=>{const e=new CustomEvent('cutdesk:new-film',{cancelable:true});dispatchEvent(e);if(e.defaultPrevented)return 'page';
 const p=document.getElementById('newpop');if(p){p.open=true;return 'fallback'}
-const b=[...document.querySelectorAll('button,summary,a')].find(x=>x.textContent.includes('新建片子'));if(b){b.click();return 'button'}return 'none'})()
+const b=[...document.querySelectorAll('button,summary,a')].find(x=>(x.textContent.includes('新建项目')||x.textContent.includes('新建片子')));if(b){b.click();return 'button'}return 'none'})()
 """
 
 final class CutWeb: WKWebView {
@@ -132,7 +134,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
 final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
     var home: Win!                  // 唯一的窗口
     let bridge = Bridge()
-    var port = Int(arg("--port") ?? "") ?? 8760
+    var port = Int(arg("--port") ?? "") ?? defaultPort
     var root = arg("--root")
     var program: String?
     var ours: Int?          // 自己起的首页的 pid；别人起的是 nil，退出时不停
@@ -150,11 +152,11 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         cfg.userContentController.addUserScript(WKUserScript(source: pageScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         if checkDir != nil { Check.install(cfg) }
         home = makeWindow(CutWeb(frame: .zero, configuration: cfg), size: NSSize(width: 1400, height: 900), min: NSSize(width: 960, height: 600))
-        home.title = "ThinkCut"
+        home.title = appName
         home.isExcludedFromWindowsMenu = true            // 窗口菜单里用“全部片子 ⌘0”叫它
         titleWatch = home.web.observe(\.title) { [weak self] w, _ in       // 窗口标题（窗口菜单、调度中心里看得到）跟着页面：首页“ThinkCut”，片子里是片名
             guard let self = self else { return }
-            self.home.title = (w.title?.isEmpty == false ? w.title! : "ThinkCut")
+            self.home.title = (w.title?.isEmpty == false ? w.title! : appName)
         }
         home.center()
         home.setFrameAutosaveName("CutdeskMain")       // 记住大小位置
@@ -223,9 +225,15 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         if let u = home.homeURL { home.web.load(URLRequest(url: u)) } else { connect() }
     }
 
+    /// 现在显示的是外壳自己的提示页（正在打开、连不上），不是首页或审片台
+    var onNotice: Bool { home.web.url == nil || home.web.url?.scheme == "about" }
+
+    /// ⌘R：连不上的是首页（或首页还没起来过）＝重新起首页；连不上的是审片台＝让首页按端口找回是哪条片子、起好再跳过去（首页也不认识就回首页）。QA 1.7
     @objc func reload(_ s: Any?) {
-        if home.web.url == nil || home.web.url?.scheme == "about" {
-            if let u = home.failedURL { home.web.load(URLRequest(url: u)) } else { connect() }
+        if onNotice {
+            if let u = home.failedURL, !isHomePage(u, port: port), let p = u.port, let h = home.homeURL,
+               let back = URL(string: "/reopen?port=\(p)", relativeTo: h) { home.web.load(URLRequest(url: back.absoluteURL)) }
+            else { connect() }
         } else { home.web.reload() }
     }
 
@@ -234,7 +242,8 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     /// ⌘W：在片子里＝回首页（不关窗口）；已经在首页（或是外壳自己的提示页）＝照常关窗口，程序不退出
     @objc func closeOrHome(_ s: Any?) {
         guard let w = NSApp.keyWindow else { return }
-        if w === home, home.isVisible, !onHome, home.homeURL != nil { goHome() } else { w.performClose(s) }
+        let homeDown = onNotice && (home.failedURL == nil || isHomePage(home.failedURL, port: port))     // 首页自己起不来／连不上：⌘W 直接关窗口，不再去载入连不上的首页（QA 1.7）
+        if w === home, home.isVisible, !onHome, !homeDown, home.homeURL != nil { goHome() } else { w.performClose(s) }
     }
 
     @objc func newFilm(_ s: Any?) {
@@ -248,6 +257,29 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     func applicationShouldHandleReopen(_ s: NSApplication, hasVisibleWindows v: Bool) -> Bool {
         if !v { home.makeKeyAndOrderFront(nil) }          // 点程序坞图标：窗口关了就拿出来（停在关之前那一页）
         return true
+    }
+
+    /// 退出、关窗口前先让页面把没存的字发出去（页面的 window.cutdeskFlush，最多等 3 秒；WKWebView 关掉时不一定触发 pagehide，QA 1.3）
+    func flush(_ then: @escaping () -> Void) {
+        var done = false
+        let finish = { if !done { done = true; then() } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5, execute: finish)
+        home.web.callAsyncJavaScript("if (window.cutdeskFlush) await Promise.race([window.cutdeskFlush(), new Promise(r => setTimeout(r, 3000))]);",
+                                     arguments: [:], in: nil, in: .page) { _ in DispatchQueue.main.async(execute: finish) }
+    }
+
+    var flushedQuit = false
+    func applicationShouldTerminate(_ s: NSApplication) -> NSApplication.TerminateReply {
+        if flushedQuit || home == nil || onNotice { return .terminateNow }
+        flush { self.flushedQuit = true; NSApp.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
+    }
+
+    var flushedClose = false
+    func windowShouldClose(_ w: NSWindow) -> Bool {
+        if flushedClose || w !== home || onNotice { flushedClose = false; return true }
+        flush { self.flushedClose = true; w.performClose(nil) }
+        return false
     }
 
     func applicationWillTerminate(_ n: Notification) {
@@ -286,7 +318,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         let bad = (e as NSError).userInfo[NSURLErrorFailingURLErrorKey] as? URL; home.failedURL = bad
         let film = !isHomePage(bad, port: port) && home.homeURL != nil
         let why = (e as NSError).code == NSURLErrorCannotConnectToHost ? (film ? "它的审片台没在运行（可能已经停了）。" : "首页没在运行。") : e.localizedDescription
-        w.loadHTMLString(notice(film ? "连不上这条片子的审片台" : "连不上 ThinkCut", "<p>\(esc(why))</p><p>按 ⌘R 再试一次\(film ? "，或按 ⌘W 回到全部片子" : "")。</p>"), baseURL: nil)
+        w.loadHTMLString(notice(film ? "无法连接本项目的审片台" : "无法连接 ThinkCut", "<p>\(esc(why))</p><p>按 ⌘R 重试\(film ? "，或按 ⌘W 返回全部项目" : "")。</p>"), baseURL: nil)
     }
 
     // —— 页面里的提示框、确认框、输入框、选文件 ——
@@ -321,15 +353,15 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
             }
             let it = NSMenuItem(); it.submenu = m; bar.addItem(it); return m
         }
-        _ = menu("ThinkCut", [("关于 ThinkCut", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""), ("-", nil, ""),
-                         ("隐藏 ThinkCut", #selector(NSApplication.hide(_:)), "h"), ("退出 ThinkCut", #selector(NSApplication.terminate(_:)), "q")])
-        _ = menu("文件", [("新建片子", #selector(newFilm(_:)), "n"), ("-", nil, ""), ("关闭", #selector(closeOrHome(_:)), "w")], mine: ["新建片子", "关闭"])
+        _ = menu(appName, [("关于 \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""), ("-", nil, ""),
+                         ("隐藏 \(appName)", #selector(NSApplication.hide(_:)), "h"), ("退出 \(appName)", #selector(NSApplication.terminate(_:)), "q")])
+        _ = menu("文件", [("新建项目", #selector(newFilm(_:)), "n"), ("-", nil, ""), ("关闭", #selector(closeOrHome(_:)), "w")], mine: ["新建项目", "关闭"])
         _ = menu("编辑", [("撤销", Selector(("undo:")), "z"), ("重做", Selector(("redo:")), "Z"), ("-", nil, ""),
                         ("剪切", #selector(NSText.cut(_:)), "x"), ("拷贝", #selector(NSText.copy(_:)), "c"),
                         ("粘贴", #selector(NSText.paste(_:)), "v"), ("全选", #selector(NSText.selectAll(_:)), "a")])
         _ = menu("显示", [("重新载入", #selector(reload(_:)), "r")], mine: ["重新载入"])
         let wm = menu("窗口", [("最小化", #selector(NSWindow.performMiniaturize(_:)), "m"), ("缩放", #selector(NSWindow.performZoom(_:)), ""), ("-", nil, ""),
-                             ("全部片子", #selector(showHome(_:)), "0")], mine: ["全部片子"])
+                             ("全部项目", #selector(showHome(_:)), "0")], mine: ["全部项目"])
         NSApp.mainMenu = bar; NSApp.windowsMenu = wm
     }
 }
@@ -337,7 +369,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
 // —— 验收通道：设了 CUTDESK_CHECK=<文件夹> 才开。往里放 cmd.json，程序执行后写 out.json。
 //   {"snap": "图片路径"} 给窗口内容拍照；{"js": "表达式", "frame": "8765"} 在页面（或网址含这个字的内嵌框）里算 JS；
 //   {"drop": [x, y], "files": ["路径"]} 在窗口内容的 (x, y)（左上角起）模拟从访达拖文件进来（走窗口真正的拖放入口）；{"frames": true} 列出内嵌框；
-//   {"windows": true} 列出窗口；{"key": "0", "mods": ["cmd"], "front": false} 把按键交给菜单（"front": false＝不先把窗口拿到前面，测关了的窗口能不能叫回）；
+//   {"windows": true} 列出窗口；{"menus": true} 列出菜单栏里每个菜单的每一项（含 macOS 自己加进去的）；{"key": "0", "mods": ["cmd"], "front": false} 把按键交给菜单（"front": false＝不先把窗口拿到前面，测关了的窗口能不能叫回）；
 //   {"click": [x, y], "count": 2} 在窗口 (x, y)（左上角起）模拟鼠标点一下（count 2＝双击）（走窗口真正的事件入口，标题栏区域也一样）；{"hit": [x, y]} 看那一点归哪个视图。
 final class Check: NSObject, WKScriptMessageHandler, NSDraggingInfo {
     static let shared = Check()
@@ -374,6 +406,9 @@ final class Check: NSObject, WKScriptMessageHandler, NSDraggingInfo {
         guard let app = app, let data = FileManager.default.contents(atPath: p) else { return }
         try? FileManager.default.removeItem(atPath: p); try? FileManager.default.removeItem(atPath: dir + "/out.json")
         guard let c = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return done("cmd.json 不是 JSON") }
+        if c["menus"] != nil {          // 菜单栏每个菜单里的每一项（含系统自己加的，查有没有英文）
+            return done((NSApp.mainMenu?.items ?? []).map { ["menu": $0.submenu?.title ?? $0.title, "items": $0.submenu?.items.filter { !$0.isSeparatorItem && !$0.isHidden && !$0.isAlternate }.map { $0.title } ?? []] as [String: Any] })
+        }
         if c["windows"] != nil {
             return done([app.home].map(describe) + [["windowCount": NSApp.windows.filter { $0 is Win }.count], ["windowsMenu": NSApp.windowsMenu?.items.map { $0.title } ?? [], "active": NSApp.isActive]])
         }

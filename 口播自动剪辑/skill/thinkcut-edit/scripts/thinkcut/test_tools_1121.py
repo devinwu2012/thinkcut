@@ -440,7 +440,7 @@ class UnseenTests(unittest.TestCase):
         un = check.unseen_samples(self.job); self.assertEqual(len(un), 1); self.assertIn('B01', un[0][1])
         # 2026-11-22 规矩变了（用户定“先做出来再改”）：样张不再是导出前单独的一道闸。以前这里是“样张用户还没看过…--未看样张用户同意”拦导出；
         # 现在导出只有一道闸——用户在审片台点审核线“这一栏定了”（整片都看过了）。没点：拦；点了：没单独看过样张的镜头只记进导出记录、不拦。
-        with self.assertRaisesRegex(SystemExit, '这一栏定了'): resolve.export(self.job, name='审核线', user_ok='OK')
+        with self.assertRaisesRegex(SystemExit, '“定稿”'): resolve.export(self.job, name='审核线', user_ok='OK')
         with self.assertRaisesRegex(SystemExit, '(?s)样张用户还没看过.*Blender_灯 B01.*--未看样张用户同意'): resolve.unseen_gate(self.job)      # 这个检查本身没变（没给说明就停）
         self.job.cfg['review_timeline'] = '审核线'; settle(self.job)
         self.addCleanup(setattr, resolve, 'project', resolve.project)
@@ -579,7 +579,7 @@ class Polish1122Tests(unittest.TestCase):
         from thinkcut import guard
         miss, note = guard.polish_missing(self.job); self.assertIn('voice-polish', miss); self.assertIn('免修音', miss); self.assertIsNone(note)
         for k, v, want in (('voice_polish', {'file': '/x.wav'}, (None, None)), ('免修音', '这条不修了', '免修音 放行'),
-                           ('export_ok', {'at': '2026-11-20 10:00:00'}, '老片子')):
+                           ('export_ok', {'at': '2026-11-20 10:00:00'}, '老项目')):
             j = Job(self.d); j.cfg[k] = v; got = guard.polish_missing(j)
             if isinstance(want, tuple): self.assertEqual(got, want)
             else: self.assertIsNone(got[0]); self.assertIn(want, got[1])
@@ -589,7 +589,7 @@ class Polish1122Tests(unittest.TestCase):
         self.addCleanup(setattr, resolve, 'project', resolve.project)
         def stop(*a, **k): raise Reached()
         resolve.project = stop
-        with self.assertRaisesRegex(SystemExit, '这一栏定了'): resolve.export(self.job, user_ok='OK')      # 2026-11-22 规矩变了：光有转述的原话不导，先被最终闸拦
+        with self.assertRaisesRegex(SystemExit, '“定稿”'): resolve.export(self.job, user_ok='OK')      # 2026-11-22 规矩变了：光有转述的原话不导，先被最终闸拦
         settle(self.job)                                                                              # 用户在审片台定了以后，修音的拦截照旧
         with self.assertRaisesRegex(SystemExit, '口播还没修音'): resolve.export(self.job, user_ok='OK')
         with self.assertRaises(Reached): quiet(resolve.export, self.job, seconds=5)                 # 试导几秒不拦

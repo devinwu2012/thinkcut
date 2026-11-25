@@ -137,7 +137,7 @@ def run_cmd(job: Job, name=None, amount=AMOUNT):
     d = job.p('合成', '人声', 'x').parent; N = int(job['frames'])
     r, pm, p = R.project(job); tl = R.timeline(p, name); p.SetCurrentTimeline(tl)
     if tl.GetEndFrame() - tl.GetStartFrame() != N:
-        die(f'审核线「{name}」现在 {tl.GetEndFrame() - tl.GetStartFrame()} 帧，片子记录 {N} 帧（审核线上剪过）：修音口播要和成片等长，先弄清长度再做')
+        die(f'审核线「{name}」现在 {tl.GetEndFrame() - tl.GetStartFrame()} 帧，项目记录 {N} 帧（审核线上剪过）：修音口播要和成片等长，先弄清长度再做')
     raw = isolate(r, pm, p, tl, d, amount)
     iso = d / '人声隔离.wav'
     run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', str(raw), '-vn', '-ar', '48000', '-c:a', 'pcm_s24le', str(iso)]); raw.unlink()

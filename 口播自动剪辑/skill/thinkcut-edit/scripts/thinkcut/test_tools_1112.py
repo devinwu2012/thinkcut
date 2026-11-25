@@ -289,7 +289,7 @@ class JobTests(JobBase):
     def test_export_refuses_preview_size(self):
         wj(self.d / '分镜.json', {'shots': [{'id': 'A10', 'kind': 'B', 'a': 1, 'b': 2}]})
         wj(self.d / '合成' / '渲染尺寸.json', {'items': [{'name': 'Blender_通风', 'shot': 'A10', 'file': '/x.mov', 'scale': 50}]})
-        with self.assertRaisesRegex(SystemExit, '这一栏定了'): resolve.export(self.job, user_ok='用户说 OK')      # 2026-11-22 规矩变了：转述的原话不算，先被最终闸拦
+        with self.assertRaisesRegex(SystemExit, '“定稿”'): resolve.export(self.job, user_ok='用户说 OK')      # 2026-11-22 规矩变了：转述的原话不算，先被最终闸拦
         settle(self.job)                                                                                     # 用户在审片台定了：预览分辨率照旧拦
         with self.assertRaisesRegex(SystemExit, '预览分辨率'): resolve.export(self.job, user_ok='用户说 OK')
 

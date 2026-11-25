@@ -324,6 +324,9 @@ r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_writi
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台文案栏测试（thinkcut/test_writing.py：读写各节、空白和贴进来、意见进 --wait、改写只有采纳才落盘、版本退回、定稿）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_animclip'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '动画栏带口播播放测试（thinkcut/test_animclip.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+# 2026-11-25 发布前 QA 的后台问题：口令只在 HttpOnly cookie、job.json 现读、闲置退出和端口回收、坏文件能恢复、发布卡住能撤回、新建加锁去重、撤销回原 IP、长题目、编号不重用
+r = subprocess.run([sys.executable, '-B', '-W', 'ignore', '-m', 'unittest', 'thinkcut.test_qa_1125'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '发布前 QA 回归测试（thinkcut/test_qa_1125.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
 r = subprocess.run([sys.executable, '-B', '-W', 'ignore', '-m', 'unittest', 'thinkcut.test_home'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '首页测试（thinkcut/test_home.py：扫片子和四步阶段、按需起单片审片台并复用、新建片子、右键改名／移到做完的／移到 NAS 回收站再拿回来、封面小图、点开先到 /open 再跳、备料拖进来和登记路径（同名不覆盖、大文件、半截不留）、等所有片子、命令行不能替用户点）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
 # 2026-11-21 新19：导航条底（nav_bg）。不连达芬奇，只用 ffmpeg 造假导航条

@@ -1,5 +1,5 @@
 # 公用：片子目录（job.json）、帧与秒换算、ffmpeg/ffprobe、读写 json
-import hashlib, json, os, shutil, subprocess, sys, tempfile
+import contextlib, hashlib, json, os, shutil, subprocess, sys, tempfile, threading, time
 from fractions import Fraction
 from pathlib import Path
 from . import formats
@@ -53,10 +53,46 @@ def rj(p):
 
 def wj(p, obj, indent=1):
     p = Path(p); p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + '.tmp')
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(obj, f, ensure_ascii=False, indent=indent)
-    os.replace(tmp, p)
+    tmp = p.with_name(f'.{p.name}.{os.getpid()}.{os.urandom(3).hex()}.tmp')     # 临时文件名不固定：两个进程同时写同一个文件不会撞（QA 2.1）
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(obj, f, ensure_ascii=False, indent=indent)
+        for k in range(6):          # 网络盘（SMB）上目标正被别人读写时 rename 会报“已存在”／“没权限”：等一下再试（2026-11-25 在 NAS 上实测）
+            try: os.replace(tmp, p); break
+            except (FileExistsError, PermissionError):
+                if k == 5: raise
+                time.sleep(0.05 * (k + 1))
+    finally:
+        with contextlib.suppress(FileNotFoundError): tmp.unlink()
+
+
+class Broken(Exception):
+    """片子的数据文件坏了（不是合法的 JSON）：页面显示是哪个文件、能不能从上一版恢复（QA 2.4）。"""
+    def __init__(self, f, err):
+        self.file = Path(f); self.err = err; self.backup = backup_of(f).is_file()
+        super().__init__(f'{self.file.name} 已损坏，无法读取（{err}）')
+
+
+def backup_of(f): f = Path(f); return f.with_name('.' + f.name + '.上一版')
+
+
+def read_data(f):
+    """读一个数据文件（标记／审片台／写稿／备料）：没有给 {}；坏了抛 Broken（不再让整个服务断开）。"""
+    f = Path(f)
+    if not f.exists(): return {}
+    try: d = rj(f)
+    except (ValueError, UnicodeDecodeError) as e: raise Broken(f, e) from None
+    if not isinstance(d, dict): raise Broken(f, '最外层不是 {…}')
+    return d
+
+
+def keep_backup(f):
+    """改之前留一份上一版（已经读成功过的那份）：文件坏了能退回去。"""
+    f = Path(f)
+    with contextlib.suppress(OSError):
+        if f.is_file(): shutil.copyfile(f, backup_of(f))
+
+
 
 
 def run(cmd, **kw):

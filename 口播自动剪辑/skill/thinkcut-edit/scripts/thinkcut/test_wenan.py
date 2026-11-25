@@ -102,7 +102,7 @@ class Base(unittest.TestCase):
 
     def page(self, path, body):
         """像审片台页面那样发：本服务的来源、页面口令、浏览器标的同源。"""
-        return self.req(path, body, {'Origin': f'http://127.0.0.1:{self.port}', 'X-Shenpian-Token': W.TOKEN, 'Sec-Fetch-Site': 'same-origin'})
+        return self.req(path, body, {'Origin': f'http://127.0.0.1:{self.port}', 'Cookie': W.cookie_header(self.port), 'Sec-Fetch-Site': 'same-origin'})
 
 
 import urllib.parse  # noqa: E402
@@ -160,7 +160,7 @@ class ForwardTests(Base):
 
     def test_editor_page_has_token_and_preview_length(self):
         code, h, b = self.req('/文案剪辑.html'); page = b.decode()
-        self.assertEqual(code, 200); self.assertIn(f"const SHENPIAN_TOKEN='{W.TOKEN}'", page); self.assertNotIn('__SHENPIAN_TOKEN__', page)
+        self.assertEqual(code, 200); self.assertIn(f"const SHENPIAN_TOKEN='{W.SESSION}'", page); self.assertNotIn(W.TOKEN, page); self.assertNotIn('__SHENPIAN_TOKEN__', page)
         self.assertIn('data-segment-seconds="12.012" data-source-duration="132.5"', page); self.assertNotIn('src="/source.mp4"', page)
         for want in ('id="saveResolve" class="btn primary"', 'location.replace', "'X-Shenpian-Token'", 'wenanShown'):
             self.assertIn(want, page)
@@ -203,7 +203,7 @@ class LiteTests(Base):
         self.assertFalse(koubo.info(a)['ready']); self.assertIn('还没剪完', koubo.info(a)['why'])
 
     def test_not_a_film_dir_is_refused(self):
-        with self.assertRaisesRegex(SystemExit, '不是片子目录'): W.open_film(self.tmp)
+        with self.assertRaisesRegex(SystemExit, '不是项目文件夹'): W.open_film(self.tmp)
 
     def test_after_init_the_same_data_carries_on(self):
         a = standard(self.tmp / '项目'); job = W.open_film(a)
@@ -236,7 +236,7 @@ class LiteTests(Base):
         r = subprocess.run([sys.executable, '-B', str(S), 'workbench', str(a), '--column', '文案'], capture_output=True, text=True, timeout=60, env=env, stdin=subprocess.DEVNULL)
         film = self.tmp / '项目' / '02_制作' / '自动剪辑'
         try:
-            self.assertEqual(r.returncode, 0, r.stderr); self.assertIn('还没建片子目录，只有“文案”栏和“口播剪辑”栏能用', r.stdout); self.assertIn('#%E6%96%87%E6%A1%88', r.stdout)   # 2026-11-24 起多了第一栏“文案”
+            self.assertEqual(r.returncode, 0, r.stderr); self.assertIn('还没建项目文件夹，只有文稿栏和口播精剪栏能用', r.stdout); self.assertIn('#%E6%96%87%E6%A1%88', r.stdout)   # 2026-11-24 起多了第一栏“文案”
             info = rj(film / '审片工作台' / '服务.json'); self.assertTrue(W.ping(info['port'])['lite'])
             self.assertEqual(koubo.pointer(a)['url'], info['url'])                                         # 剪口播后台直接打开时据此指到审片台
             wj(film / 'job.json', {'fps': '30000/1001', 'format': '3:4', 'aroll': str(a), 'project': 'p', 'frames': 300})

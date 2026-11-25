@@ -42,6 +42,12 @@ def port_busy(port):
         except OSError: return True
 
 
+def mine(prog_dir):
+    """首页 ping 里的程序文件夹是不是这一份程序里的。"""
+    try: Path(prog_dir).resolve().relative_to(PROGRAM.resolve()); return True
+    except (ValueError, OSError): return False
+
+
 def log_path(port):
     return Path(os.environ.get('TMPDIR', '/tmp')) / f'ThinkCut首页_{port}.log'      # 和 home.start 写的是同一份
 
@@ -59,6 +65,9 @@ def start(port=PORT, root=None, script=THINKCUT_EDIT, python=sys.executable, wai
     if pg and pg.get('app') == '首页':
         if root and pg.get('root') != str(Path(root).expanduser().resolve()):
             out['error'] = f"{port} 端口上已经有一个首页，看的是 {pg.get('root')}，不是 {root}。先关掉它，或换一个端口。"; return out
+        other = (pg.get('prog') or {}).get('dir')
+        if other and not mine(other):          # 别的程序文件夹（开发版／某个 worktree）起的首页：不复用，免得用的是哪份代码没人知道（QA 第一节）
+            out['error'] = f"{port} 端口上的首页是另一份程序起的（{other}），不是这一份（{PROGRAM}）。先关掉它，或换一个端口。"; return out
         out.update(ok=True, pid=pg.get('pid')); return out
     if pg or port_busy(port):
         out['error'] = f'{port} 端口被别的程序占着（不是首页）。关掉那个程序，或换一个端口再打开。'; return out

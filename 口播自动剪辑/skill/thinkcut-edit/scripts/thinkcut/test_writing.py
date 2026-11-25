@@ -35,7 +35,7 @@ class Base(unittest.TestCase):
 
     def req(self, p, body=None, page=True):
         """page=True：像页面一样带来源和口令。返回 (状态码, 内容)。"""
-        h = {'Content-Type': 'application/json', **({'Origin': self.base, 'Sec-Fetch-Site': 'same-origin', 'X-Shenpian-Token': W.TOKEN} if page else {})}
+        h = {'Content-Type': 'application/json', **({'Origin': self.base, 'Sec-Fetch-Site': 'same-origin', 'Cookie': W.cookie_header(self.base)} if page else {})}
         q = urllib.request.Request(self.base + p, json.dumps(body or {}).encode() if body is not None else None, h)
         try:
             with urllib.request.urlopen(q) as r: return r.status, json.loads(r.read())
@@ -94,7 +94,7 @@ class WritingTests(Base):
         for t in ('太书面', '太书面了，口语一点'): self.ok('/api/draft/text', {'id': nid, 'text': t})                # 边写边存：同一条
         all_ = self.ok('/api/draft/note', {'text': '整体再短一点'})['id']; self.assertEqual(all_, '稿2')
         d = self.data(); self.assertEqual(d['send']['ids'], {'稿1': 'unsent', '稿2': 'unsent'}); self.assertEqual(d['ucols']['写稿']['state'], '待发送')
-        self.assertEqual([n['ustate'] for n in d['writing']['notes']], ['待发送', '待发送']); self.assertEqual(d['settle']['写稿']['state'], 'no'); self.assertIn('交给 AI', d['settle']['写稿']['why'])
+        self.assertEqual([n['ustate'] for n in d['writing']['notes']], ['待发送', '待发送']); self.assertEqual(d['settle']['写稿']['state'], 'no'); self.assertIn('提交 AI', d['settle']['写稿']['why'])
         self.assertEqual(self.req('/api/send', {'column': '写稿'}, page=False)[0], 403)
         self.listen(); self.assertTrue(self.ok('/api/send', {'column': '写稿'})['n'] == 2)
         r = self.cli('--wait', '--wait-timeout', '20'); o = r.stdout; self.assertEqual(r.returncode, 0, r.stderr)
@@ -115,7 +115,7 @@ class WritingTests(Base):
         cs = self.changes(nid); self.assertEqual([(c['i'], c['field'], c['op'], c['k'], c['state']) for c in cs], [(0, '标题', '改', 0, '待定'), (1, '口播正文', '改', 4, '待定'), (2, '口播正文', '改', 5, '待定')])
         self.assertEqual((cs[1]['old'], cs[1]['new']), ('第二段，讲打胶。', '第二个，说说打胶。'))
         d = self.data(); self.assertEqual(d['writing']['notes'][0]['ustate'], '待你看'); self.assertEqual(d['ucols']['写稿']['counts']['待你看'], 1); self.assertNotIn('稿1', d['send']['ids'])
-        self.assertIn('3 处没点', d['settle']['写稿']['why'])
+        self.assertIn('3 处未处理', d['settle']['写稿']['why'])
         # 命令行、curl 不能替用户采纳
         self.assertEqual(self.req('/api/draft/decide', {'id': nid, 'which': 'all', 'accept': True}, page=False)[0], 403); self.assertEqual(self.text(), before)
         for args in (['--accept', nid], ['--reply', nid, '--status', '已改', '--note', '用户说采纳']): self.assertNotEqual(self.cli(*args).returncode, 0)
@@ -150,7 +150,7 @@ class WritingTests(Base):
     def test_ask_back_and_answer(self):
         nid = self.ok('/api/draft/note', {'text': '开头换个说法'})['id']; self.ok('/api/send', {'column': '写稿'})
         r = self.cli('--reply', nid, '--status', '问你', '--note', '开头想更狠一点还是更家常一点？', '--options', 'A 更狠|B 更家常'); self.assertEqual(r.returncode, 0, r.stderr)
-        d = self.data(); n = d['writing']['notes'][0]; self.assertEqual((n['status'], n['ustate'], n['opts']), ('问你', '待你看', ['A 更狠', 'B 更家常'])); self.assertIn('问了你 1 个问题', d['settle']['写稿']['why'])
+        d = self.data(); n = d['writing']['notes'][0]; self.assertEqual((n['status'], n['ustate'], n['opts']), ('问你', '待你看', ['A 更狠', 'B 更家常'])); self.assertIn('提出了 1 个问题', d['settle']['写稿']['why'])
         self.assertFalse(self.req('/api/draft/answer', {'id': nid, 'picked': 'C 都不要'})[1]['ok']); self.assertFalse(self.req('/api/draft/text', {'id': nid, 'text': '改口'})[1]['ok'])
         self.ok('/api/draft/answer', {'id': nid, 'picked': 'B 更家常'}); self.assertEqual(self.data()['send']['ids'], {nid: 'unsent'})
         self.ok('/api/send', {'column': '写稿'}); o = self.cli('--list').stdout
@@ -177,14 +177,14 @@ class WritingTests(Base):
 
     def test_settle_later_tells_ai_to_follow_not_redo(self):
         self.listen(); self.assertEqual(self.data()['settle']['写稿']['state'], 'can'); self.ok('/api/settle', {'column': '写稿', 'on': True})
-        o = self.cli('--wait', '--wait-timeout', '20').stdout; self.assertIn('【文案定稿了】', o); self.assertIn('这条片子已经在做了', o); self.assertNotIn('先开项', o)
+        o = self.cli('--wait', '--wait-timeout', '20').stdout; self.assertIn('【文案定稿了】', o); self.assertIn('这个项目已经在做了', o); self.assertNotIn('先开项', o)
         self.assertIsNone(self.data()['writing']['kick']); self.assertFalse(self.req('/api/draft/kickoff', {})[1]['ok'])                     # 片子已经在做了：没有“开工”这一步
 
     def test_page_has_writing_column(self):
         page = W.PAGE.read_text(encoding='utf-8')
-        for need in ('<div class="pane" data-col="写稿"><div class="colhead"><div class="ch-name"><h2>文案</h2>', 'data-main="写稿"', "const LABEL={'写稿':'文案','文案':'口播剪辑'", 'id="wbody" contenteditable="plaintext-only"',
-                     '对全文提意见', '全部采纳', '✓ 已解决', 'class="wrow"', 'function wLay()', 'id="wkick"', "'/api/draft/kickoff'", '>开工</button>', 'class="btn go wok">采纳', 'class="btn wno">不要', '看改了哪里', '退回到这一版', "column:'写稿'", "'/api/draft/decide'", '分成标题和正文',
-                     "setCol('写稿')", '只读：在“文案”栏改', '原稿（录之前的定稿）', "return D.koubo?.ready?'文案':'写稿'"):
+        for need in ('<div class="pane" data-col="写稿"><div class="colhead"><div class="ch-name"><h2>文稿</h2>', 'data-main="写稿"', "const LABEL={'写稿':'文稿','文案':'口播精剪'", 'id="wbody" contenteditable="plaintext-only"',
+                     '对全文提意见', '全部采纳', '✓ 已解决', 'class="wrow"', 'function wLay()', 'id="wkick"', "'/api/draft/kickoff'", '>开始制作</button>', 'class="btn go wok">采纳', 'class="btn wno">不要', '看改了哪里', '退回到这一版', "column:'写稿'", "'/api/draft/decide'", '分成标题和正文',
+                     "setCol('写稿')", '只读：请在文稿栏修改', '原稿（录之前的定稿）', "return D.koubo?.ready?'文案':'写稿'"):
             self.assertIn(need, page)
         self.assertLess(page.index('data-col="写稿"'), page.index('data-col="文案"'))                              # 排在最前面
         for gone in ('data-sf', "'/api/script',{field:k,value:t.value}"): self.assertNotIn(gone, page)             # 口播剪辑栏里不再有第二处改文案的地方
@@ -202,7 +202,7 @@ class EarlyTests(Base):
         full = self.req('/api/data', None, page=False)[1]; d = full['board']; w = d['writing']
         self.assertTrue(full['lite']); self.assertEqual({c for c, u in d['ucols'].items() if not u['off']}, {'写稿'})          # 只有文案栏能用，其余“还没到”
         self.assertTrue(w['ok'] and w['early']); self.assertFalse(w['exists']); self.assertEqual(w['fields'], {'标题': '', '封面文字': '', '口播正文': ''})
-        self.assertIn('标题和口播正文都写了', d['settle']['写稿']['why'])
+        self.assertIn('标题和口播正文完成后方可定稿', d['settle']['写稿']['why'])
         self.assertTrue(self.save('标题', '只有一个题目')['ok'])                                                    # 从空白开始：一动笔就建文件（标准写法）
         self.assertEqual(self.text(), f'# {self.pd.name}\n\n## 标题\n\n只有一个题目\n\n## 封面文字\n\n## 口播正文\n')
         self.assertTrue(self.save('口播正文', '第一段。\n\n第二段。')['ok']); self.assertTrue(self.save('封面文字', '')['ok'])          # 封面文字可以先空着
@@ -239,8 +239,8 @@ class EarlyTests(Base):
         self.ok('/api/settle', {'column': '写稿', 'on': True}); d = self.data()
         self.assertEqual((d['settle']['写稿']['state'], d['ucols']['写稿']['state'], d['send']['ids']), ('ok', '已定', {'定稿': 'sent'}))       # 4 个状态不新增：栏目是“已定”，这件事算已交给 AI
         r = self.cli('--wait', '--wait-timeout', '20'); o = r.stdout; self.assertEqual(r.returncode, 0, r.stderr)
-        for need in ('栏目：文案，1 件', '【文案定稿了】', str(self.doc), '标题：题目', '【先开项，不要开工】', 'project.py rename', '登记进 项目.json', '用户点“开工”之前不要剪、不要出初稿', '--reply 定稿'): self.assertIn(need, o)
-        self.assertNotIn('按初稿模式出初稿', o)                                                               # 2026-11-24 用户定：定稿后先开项、存资料，点了“开工”才开工
+        for need in ('栏目：文案，1 件', '【文案定稿了】', str(self.doc), '标题：题目', '【先开项，不要开始制作】', 'project.py rename', '登记进 项目.json', '用户点“开始制作”之前不要剪、不要初剪', '--reply 定稿'): self.assertIn(need, o)
+        self.assertNotIn('按初稿模式初剪', o)                                                               # 2026-11-24 用户定：定稿后先开项、存资料，点了“开工”才开工
         self.assertEqual(self.data()['send']['ids'], {'定稿': 'doing'})
         self.assertEqual(self.cli('--reply', '定稿', '--note', '项目开好了，素材放进 01_原始素材').returncode, 0); d = self.data()
         self.assertEqual((d['send']['pending'], d['settle']['写稿']['state'], d['settle']['写稿']['note']), (0, 'ok', '项目开好了，素材放进 01_原始素材'))
@@ -250,7 +250,7 @@ class EarlyTests(Base):
         self.ok('/api/draft/kickoff', {'materials': '/Volumes/work/素材/工地实拍\n收口那段用上次的特写'}); d = self.data()
         self.assertEqual(d['send']['ids'], {'开工': 'sent'}); self.assertTrue(d['writing']['kick']['at']); self.assertEqual(d['ucols']['写稿']['state'], '已定')
         o = self.cli('--wait', '--wait-timeout', '20').stdout
-        for need in ('【用户点了“开工”】', '/Volumes/work/素材/工地实拍⏎收口那段用上次的特写', '01_原始素材 里现在没有视频文件', '机器配音占位', '整理进 01_原始素材', '按初稿模式出初稿', 'references/初稿模式.md', '--reply 开工'): self.assertIn(need, o)
+        for need in ('【用户点了“开始制作”】', '/Volumes/work/素材/工地实拍⏎收口那段用上次的特写', '01_原始素材 里现在没有视频文件', '机器配音占位', '整理进 01_原始素材', '按初稿模式初剪', 'references/初稿模式.md', '--reply 开工'): self.assertIn(need, o)
         self.assertEqual(self.cli('--reply', '开工', '--note', '收到，开始整理素材、出初稿').returncode, 0); d = self.data()
         self.assertEqual((d['send']['pending'], d['writing']['kick']['note']), (0, '收到，开始整理素材、出初稿'))
         self.save('口播正文', '第一段，改了。\n\n第二段。'); d = self.data()                                             # 定稿后文案再改：定稿自动失效
@@ -268,7 +268,7 @@ class EarlyTests(Base):
         r = subprocess.run([sys.executable, '-B', str(S), 'workbench', str(self.pd), '--column', '写稿'], capture_output=True, text=True, timeout=60, env=env, stdin=subprocess.DEVNULL)
         try:
             self.assertEqual(r.returncode, 0, r.stderr)
-            for need in ('只有“文案”栏能用', '#%E5%86%99%E7%A8%BF', '--rewrite 稿N --json', f'workbench {film} --wait'): self.assertIn(need, r.stdout)
+            for need in ('只有文稿栏能用', '#%E5%86%99%E7%A8%BF', '--rewrite 稿N --json', f'workbench {film} --wait'): self.assertIn(need, r.stdout)
             self.assertNotIn('口播剪辑', r.stdout)
         finally:
             subprocess.run([sys.executable, '-B', str(S), 'workbench', str(self.pd), '--stop'], capture_output=True, text=True, timeout=60, env=env, stdin=subprocess.DEVNULL)

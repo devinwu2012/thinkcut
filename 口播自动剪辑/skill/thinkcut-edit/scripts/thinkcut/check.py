@@ -176,7 +176,7 @@ def flower_few(rows, frames, fps):
     其实选点不依赖露脸或实拍——口播说到数字、并列列举、注意事项的那一刻，只要这一刻画面上动画自己没有大字就能配（keywords、number、note、statement 四种）。"""
     dur = frames / fps; need = int(-(-dur // 30)); have = len(rows)
     if dur < 30 or have >= need: return None
-    return f'花字偏少：全片 {dur:.0f} 秒，包装规矩大约每 20–30 秒一个（至少 {need} 个），现在 {have} 个。动画镜头不是不能配：口播说到数字、并列列举、注意事项的那一刻，动画自己没有大字就配 keywords、number、note、statement（详见 初稿模式.md“全是动画的片子”）；确实配不了的写进全片假设'
+    return f'花字偏少：全片 {dur:.0f} 秒，包装规矩大约每 20–30 秒一个（至少 {need} 个），现在 {have} 个。动画镜头不是不能配：口播说到数字、并列列举、注意事项的那一刻，动画自己没有大字就配 keywords、number、note、statement（详见 初稿模式.md“全是动画的项目”）；确实配不了的写进全片假设'
 
 
 def flower_blue(rows, subs):
@@ -371,7 +371,7 @@ def run(job: Job):
     if kinds: say('花字类型：' + '、'.join(f'{k} {v} 条' for k, v in kinds.items()))
     if unseen:
         say(f'【用户没看过样张】{len(unseen)} 个镜头：' + '；'.join(f'{p} {s}（{why}）' for p, s, _, why in unseen)
-            + '。交审时把这些样张发到审片台“动画”栏，用户点了“可以”就算看过；不单独拦导出（2026-11-22）：用户点了审核线“这一栏定了”就算整片看过')
+            + '。交审时把这些样张发到审片台“动画”栏，用户点了“可以”就算看过；不单独拦导出（2026-11-22）：用户点了审核线“定稿”就算整片看过')
     from .draft import placeholders      # 占位（机器配音、占位图）：只列出来，交片时在对话里也要跟用户说清（2026-11-22 用户定：占位标清楚，有了真的再换）
     for ph in placeholders(job): say('【占位】' + ph['text'])
     say('音效密度：' + density)

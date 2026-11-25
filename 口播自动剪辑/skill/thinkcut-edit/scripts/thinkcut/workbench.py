@@ -4,11 +4,11 @@
 # “口播剪辑”栏下半是剪口播的文字剪辑器（2026-11-22 用户定，最早的审核网页并进来）：页面 文案剪辑.html，请求转给剪口播后台（koubo.py）。
 # 还没 init 建 job.json 的片子也能开审片台（Lite，见 open_film）：只有项目文件夹时只有“文案”栏（写稿，writing.py）能用；剪完口播多一个“口播剪辑”栏。
 # 纯标准库 HTTP 服务，只听 127.0.0.1；用户的确认、改字只收本页面带口令的请求（命令行只能发布和回复，不能替用户点）。
-import contextlib, fcntl, hashlib, json, os, re, signal, socket, subprocess, sys, threading, time, urllib.request
+import contextlib, fcntl, hashlib, http.cookies, json, os, re, shutil, signal, socket, subprocess, sys, threading, time, traceback, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from fractions import Fraction
-from .common import Job, ASSETS, DEFAULTS, cutdesk_config, die, rj, wj, say
+from .common import Job, ASSETS, DEFAULTS, Broken, backup_of, cutdesk_config, die, keep_backup, read_data, rj, wj, say
 from . import board, formats, koubo, materials, publish, writing
 
 PAGE = ASSETS / '审片工作台' / 'index.html'
@@ -76,18 +76,18 @@ def open_film(d, aroll=None):
     if (d / 'job.json').is_file():
         job = Job(d)
         if aroll and job.get('aroll') and Path(job['aroll']).resolve() != Path(aroll).expanduser().resolve():
-            say(f"提醒：这条片子的 job.json 记的剪口播工程是 {job['aroll']}，审片台口播剪辑栏用它（不是 {aroll}）")
+            say(f"提醒：这个项目的 job.json 记的剪口播工程是 {job['aroll']}，审片台口播精剪栏用它（不是 {aroll}）")
         return job
     rec = d / '审片工作台' / '口播工程.json'
     if aroll: aroll = Path(aroll).expanduser().resolve()
     elif rec.is_file():
         with contextlib.suppress(Exception): aroll = Path(rj(rec)['aroll'])
     if not aroll and not project_root(d):
-        die(f'{d} 不是片子目录：没有 job.json，也不是剪口播工程（<片名>_AI剪辑）或项目。剪口播用 edit_project.py serve --project-dir <剪口播工程> 打开审片台')
+        die(f'{d} 不是项目文件夹：没有 job.json，也不是剪口播工程（<项目名>_AI剪辑）或项目。剪口播用 edit_project.py serve --project-dir <剪口播工程> 打开审片台')
     job = Lite(d, aroll)
     if aroll and (not rec.is_file() or rj(rec).get('aroll') != str(aroll)):
         rec.parent.mkdir(parents=True, exist_ok=True)
-        wj(rec, {'说明': '口播阶段（还没 init）这条片子的剪口播工程；有 job.json 以后以 job.json 的 aroll 为准', 'aroll': str(aroll)})
+        wj(rec, {'说明': '口播阶段（还没 init）这个项目的剪口播工程；有 job.json 以后以 job.json 的 aroll 为准', 'aroll': str(aroll)})
     return job
 
 
@@ -108,22 +108,43 @@ def adopt(job):
     if running(old): stop(old)
     import shutil
     shutil.move(str(src / '审片工作台'), str(home(job)))
-    say(f'口播阶段的审片台数据从 {src} 搬进了片子目录 {job.dir}（标记、确认、改字记录接着用）')
+    say(f'口播阶段的审片台数据从 {src} 搬进了项目文件夹 {job.dir}（标记、确认、改字记录接着用）')
 
 
 # ---------- 数据：标记.json（服务和命令行都经过这把文件锁读改写，不会互相盖掉） ----------
+_locks = {}; _locks_guard = threading.Lock()
+
+
 @contextlib.contextmanager
 def _flock(job):
     home(job).mkdir(parents=True, exist_ok=True)          # 口播阶段的片子目录（02_制作/自动剪辑）可能还没建
-    with open(home(job) / '.标记.lock', 'w') as f:
+    with _locks_guard: mine = _locks.setdefault(str(home(job)), threading.Lock())
+    with mine, open(home(job) / '.标记.lock', 'w') as f:   # 同一个进程里先用线程锁排队：网络盘上的文件锁不一定管用（2026-11-25 NAS 实测两个请求同时写 标记.json）
         fcntl.flock(f, fcntl.LOCK_EX)
         try: yield
         finally: fcntl.flock(f, fcntl.LOCK_UN)
 
 
+DATA_FILES = {'标记': lambda job: data_file(job), '审片台': lambda job: board.board_file(job), '写稿': lambda job: writing.data_file(job), '备料': lambda job: materials.record_file(job)}
+
+
+def repair(job, which):
+    """坏掉的数据文件：原样改名留着（<名字>.坏的_时间），有上一版就退回上一版，没有就从空的开始。返回说明。"""
+    if which not in DATA_FILES: raise Oops('不认识的数据文件')
+    f = DATA_FILES[which](job)
+    with _flock(job):
+        try: read_data(f); return {'ok': True, 'restored': False, 'note': f'{f.name} 没坏'}
+        except Broken: pass
+        keep = f.with_name(f'{f.name}.坏的_{time.strftime("%Y%m%d-%H%M%S")}'); os.replace(f, keep); b = backup_of(f); restored = False
+        if b.is_file():
+            try: read_data(b); shutil.copyfile(b, f); restored = True
+            except Broken: pass
+    return {'ok': True, 'restored': restored, 'kept': str(keep)}
+
+
 def load(job):
     f = data_file(job)
-    d = rj(f) if f.exists() else {}
+    d = read_data(f)
     d.setdefault('说明', '审片工作台的标记（thinkcut_edit.py workbench）。格式见 skill/thinkcut-edit/references/审片工作台.md')
     d.setdefault('schema', 1); d.setdefault('round', 1); d.setdefault('markers', []); d.setdefault('nav_labels', {})
     return d
@@ -132,7 +153,7 @@ def load(job):
 def edit(job, fn):
     """锁住 → 读 → fn(data) 改 → 写回；返回 fn 的结果。"""
     with _flock(job):
-        d = load(job); out = fn(d); wj(data_file(job), d); return out
+        d = load(job); out = fn(d); keep_backup(data_file(job)); wj(data_file(job), d); return out
 
 
 def marker(d, mid):
@@ -158,7 +179,16 @@ def _prog():
 
 
 PROG = _prog()
-TOKEN = os.urandom(12).hex()               # 页面口令：服务每次启动换一个，嵌在页面里；用户的确认、改字请求要带它
+TOKEN = os.urandom(12).hex()               # 页面口令：服务每次启动换一个；只放在 HttpOnly cookie 里（QA 第四节：以前嵌在页面和 /api/data 里，AI curl 一下就能拿到、冒充用户点“确定此栏”）
+SESSION = hashlib.sha256(TOKEN.encode()).hexdigest()[:16]    # 公开的“这一次服务”的编号：页面里、/api/data 的 board.token 给的是它（页面拿它判断服务重启了没有），不能拿来确认
+COOKIE = 'thinkcut_wb'                     # cookie 名字后面接端口（127.0.0.1 上不同端口的 cookie 是共用的）
+IDLE = float(os.environ.get('THINKCUT_WB_IDLE') or 45 * 60)    # 审片台闲这么久（秒；页面没开、没人来问）自己退出（QA 1.2）
+
+def cookie_header(x):
+    """测试、自检用：带上本服务页面的 cookie（x＝端口或网址）。浏览器打开页面时服务自己发这个 cookie。"""
+    port = x if isinstance(x, int) else int(str(x).rstrip('/').rsplit(':', 1)[1].split('/')[0])
+    return f'{COOKIE}_{port}={TOKEN}'
+
 MEDIA = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif',
          '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.aac': 'audio/aac',
          '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm'}
@@ -288,7 +318,7 @@ class DV:
         except Exception:
             self.r = None; raise Oops('和达芬奇的连接断了，再试一次')
         if not p: raise Oops('达芬奇里没有打开工程')
-        if p.GetName() != self.job['project']: raise Oops(f"达芬奇开着的工程是「{p.GetName()}」，不是这条片子的「{self.job['project']}」")
+        if p.GetName() != self.job['project']: raise Oops(f"达芬奇开着的工程是「{p.GetName()}」，不是这个项目的「{self.job['project']}」")
         if not tl: raise Oops('达芬奇里没有打开时间线')
         return self.r, p, tl, float(tl.GetSetting('timelineFrameRate'))
 
@@ -460,7 +490,8 @@ def page_data(job, heard=False):
     d = load(job); f = data_file(job); W, H = job.W, job.H; src, lines = script(job)
     d.update(script=lines, script_src=src)
     sp = board.script_path(job); pd = board.project_dir(job); pj = pd / '项目.json' if pd else None
-    watch = (f, board.board_file(job), writing.data_file(job), materials.record_file(job), *script_files(job), *(x for x in (sp, pj) if x), job.dir / '分镜.json')
+    watch = (f, board.board_file(job), writing.data_file(job), materials.record_file(job), *script_files(job), *(x for x in (sp, pj) if x), job.dir / '分镜.json',
+             job.dir / 'job.json', job.dir / '导航' / 'project.json')
     kb = koubo.info(aroll_of(job))
     d.update(version=sum(x.stat().st_mtime_ns for x in watch if x.exists()) + int(kb['ready']) + 3 * int(heard), title=job.get('title', job.dir.name), W=W, H=H, nav=list(job.fmt['nav']),
              dur=round(job.get('frames', 0) / float(job.fps), 3), chapters=chapters(job), review_timeline=job.get('review_timeline', ''), lite=lite(job), koubo=kb, shots=shot_spans(job), placeholders=placeholders_of(job))
@@ -490,13 +521,13 @@ def board_meta(job, d, heard=False):
     snd = {**board.send_info(job), 'listening': heard}
     for c, v in snd['cols'].items():                 # 每栏一个明确的状态：有等你看的先写等你看；再是 没发给 AI → 已发给 AI → AI 在处理
         if c not in cols or cols[c]['kind'] == 'none' or cols[c]['n']: continue
-        word = f"{v['unsent']} 条没发给 AI" if v['unsent'] else '已发给 AI' if v['sent'] else f"AI 在处理 {v['doing']} 条"
+        word = f"{v['unsent']} 条没提交 AI" if v['unsent'] else '已提交 AI' if v['sent'] else f"AI 在处理 {v['doing']} 条"
         cols[c] = {**cols[c], 'text': (f"第 {d['round']} 轮 · " if c == '审核线' else '') + word, 'kind': 'wait' if v['unsent'] else 'ai'}
     stl = board.settle_info(job, {c: v['n'] for c, v in cols.items()})
     for c, v in cols.items():           # “已定”只认用户的确认（2026-11-22 用户定）：点过“这一栏定了”，或这一栏每一项都点过可以／选这个；否则写“没有待办”
         if v['kind'] != 'done': continue
         mine = [x for x in items if x['column'] == c]
-        if (stl.get(c) or {}).get('state') == 'ok': cols[c] = {**v, 'text': ('第 %s 轮 · ' % d['round'] if c == '审核线' else '') + '你定了 ✓'}
+        if (stl.get(c) or {}).get('state') == 'ok': cols[c] = {**v, 'text': ('第 %s 轮 · ' % d['round'] if c == '审核线' else '') + '已定稿 ✓'}
         elif mine and all(x['state'] == '你已定' for x in mine): cols[c] = {**v, 'text': '你已定'}
         else: cols[c] = {**v, 'text': v['text'] if c == '审核线' else '没有待办', 'kind': 'idle'}
     # 审片台 v2（2026-11-22 用户定）：页面只用 4 个状态。上面的 badges 等老字段照旧给（命令行、老页面、测试认它们），页面用下面算好的 ustate／ucols／totals
@@ -518,13 +549,43 @@ def board_meta(job, d, heard=False):
     totals = {'轮到你': sum(ucols[c]['counts']['待你看'] + ucols[c]['counts']['待发送'] for c in vis if not ucols[c]['off']),
               'AI 在改': sum(ucols[c]['counts']['AI 在改'] for c in vis if not ucols[c]['off'])}
     return {'send': snd, 'settle': stl, 'columns': vis, 'badges': cols, 'items': items, 'edits': b['edits'][-60:], 'drafts': b['drafts'], 'script': sc, 'upload': up,
-            'name': name, 'waiting': sum(v['n'] for v in cols.values()), 'token': TOKEN, 'ucols': ucols, 'totals': totals, 'writing': wr, 'publish': publish.info(job),
+            'name': name, 'waiting': sum(v['n'] for v in cols.values()), 'token': SESSION, 'ucols': ucols, 'totals': totals, 'writing': wr, 'publish': publish.info(job),
             'materials': materials.info(job) if wr.get('kick') else None}     # 备料（定稿以后）：收到了哪些、放在哪、正在传的进度
 
 
 # ---------- 页面服务 ----------
+def page_cookie(h):
+    """请求带的本服务 cookie（没有给 None）。"""
+    try: c = http.cookies.SimpleCookie(h.headers.get('Cookie') or '')
+    except http.cookies.CookieError: return None
+    v = c.get(f'{COOKIE}_{h.server.server_address[1]}'); return v.value if v else None
+
+
+_refresh_lock = threading.Lock()
+
+
+def refresh(job):
+    """job.json 改了（AI 建了第二轮审核线、换了导出设置）就重读（QA 1.4：以前服务一直用启动时读到的，“确定此栏”和导出对不上）。返回是不是换了。"""
+    if lite(job): return False
+    try: mt = (job.dir / 'job.json').stat().st_mtime_ns
+    except OSError: return False
+    if getattr(job, '_mt', None) == mt: return False
+    with _refresh_lock:
+        if getattr(job, '_mt', None) == mt: return False
+        first = getattr(job, '_mt', None) is None
+        try: Job.__init__(job, job.dir)
+        except (SystemExit, ValueError, KeyError): return False       # 正写到一半：下次再读
+        job._mt = mt; return not first
+
+
+activity = {'t': time.time()}              # 最近一次有人用（页面拿数据、点东西）；ping、AI 的 --wait 不算
+
+
 def make_handler(job, dv):
     big = threading.Lock()                 # 达芬奇脚本接口一次只走一个请求
+    refresh(job)
+    def dv_reset():                        # job.json 换了：达芬奇子进程按新的 job.json 重开（它读审核线名字）
+        if hasattr(dv, 'reset'): dv.reset()
     backends = {}                          # 剪口播后台（按剪口播工程目录，一个就够）
     ears = {'t': 0.0}                      # AI 的 --wait 最近一次来问的时刻（页面据此写“AI 在等”还是“AI 没在等”）
 
@@ -701,9 +762,9 @@ def make_handler(job, dv):
         f = home(job) / 'tmp' / '导航底图.jpg'; call(dv.still, f); return f
 
     def from_page(h):
-        """请求是本页面发的吗：有来源（own_page 已查过是本服务）、带页面里的口令、浏览器标的是同源。"""
+        """请求是本页面发的吗：有来源（own_page 已查过是本服务）、带着打开页面时发的 HttpOnly cookie（页面脚本也读不到，只有浏览器自己带）、浏览器标的是同源。"""
         o = h.headers.get('Origin'); site = h.headers.get('Sec-Fetch-Site')
-        return o is not None and h.headers.get('X-Shenpian-Token') == TOKEN and (site is None or site == 'same-origin')
+        return o is not None and page_cookie(h) == TOKEN and (site is None or site == 'same-origin')
 
     def strict(fn):
         """用户的确认、改字：只收本页面发来的（带本页面的来源和页面里的口令）。命令行、curl 这类没有来源或口令的一律不收——AI 不能替用户点。"""
@@ -730,16 +791,36 @@ def make_handler(job, dv):
     STRICT['/api/send'] = strict(send_ai)
     STRICT['/api/settle'] = strict(lambda q, h: board.settle(job, str(q.get('column') or ''), bool(q.get('on', True)), h.headers.get('User-Agent') or ''))
     STRICT['/api/material/paths'] = strict(lambda q, h: materials.add_paths(job, q.get('text')))      # 备料：登记本机路径，程序在后台复制
+    STRICT['/api/unsend'] = strict(lambda q, h: board.unsend(job, str(q.get('column') or '')))          # “AI 在处理”撤回：这一栏发出去的收回来，回到待发送（QA 1.5）
+    STRICT['/api/send/cancel'] = STRICT['/api/unsend']                                                  # 同一个，页面用的名字
+    STRICT['/api/publish/cancel'] = strict(lambda q, h: publish.cancel(job))                            # 发布栏：取消这次“存到蚁小二草稿”
+    STRICT['/api/repair'] = strict(lambda q, h: repair(job, str(q.get('file') or '')))                  # 数据文件坏了：留着坏的、退回上一版（QA 2.4）
     POST = {'/api/mark': mark, '/api/markrange': mark_range, '/api/range': set_range, '/api/shot': shot, '/api/upload': upload, '/api/delimg': del_img, '/api/text': set_text, '/api/delete': delete, '/api/again': again, '/api/nav': nav, '/api/markkind': set_kind, '/api/answer': answer, '/api/replyimg': reply_img,
             '/api/goto': lambda q: call(dv.goto, float(q['t'])), '/api/play': lambda q: call(dv.toggle_play), '/api/navshot': navshot}
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *_): pass
 
-        def send(self, body, kind='application/json; charset=utf-8', code=200):
+        def send(self, body, kind='application/json; charset=utf-8', code=200, cookie=False):
             if not isinstance(body, bytes): body = json.dumps(body, ensure_ascii=False).encode()
             self.send_response(code); self.send_header('Content-Type', kind); self.send_header('Content-Length', str(len(body)))
+            if cookie: self.send_header('Set-Cookie', f'{COOKIE}_{self.server.server_address[1]}={TOKEN}; Path=/; HttpOnly; SameSite=Strict')
             self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
+
+        def guarded(self, fn):
+            """每个请求：记活动时间（ping、AI 的 --wait 不算：页面关了没人能点）；job.json 变了就重读（QA 1.4）；出了没料到的错回一句中文 500、记日志，不断开（QA 2.4/2.5）。"""
+            p = self.path.split('?')[0]
+            if p not in ('/api/ping', '/api/wait'): activity['t'] = time.time()
+            try:
+                if refresh(job): dv_reset()
+                return fn()
+            except Broken as e:
+                return self.send({'ok': False, 'code': 'broken_file', 'file': e.file.name, 'which': next((k for k, v in DATA_FILES.items() if v(job) == e.file), ''),
+                                  'can_restore': e.backup, 'error': str(e)}, code=500)
+            except (BrokenPipeError, ConnectionResetError): return None
+            except Exception as e:
+                traceback.print_exc()
+                with contextlib.suppress(Exception): return self.send({'ok': False, 'code': 'internal', 'error': f'审片台出错：{type(e).__name__}：{e}'}, code=500)
 
         def media(self, rel):
             """发布到审片台的图片、视频、音频（审片工作台/审片台/ 下面）；视频、音频支持分段读（Range），页面里能拖进度条。"""
@@ -747,12 +828,21 @@ def make_handler(job, dv):
             if root not in f.parents or not f.is_file(): return self.send({'ok': False, 'error': '找不到这个文件'}, code=404)
             ext = f.suffix.lower(); kind = MEDIA.get(ext, 'application/octet-stream'); size = f.stat().st_size
             m = re.match(r'bytes=(\d*)-(\d*)$', self.headers.get('Range') or '')
-            if not m: return self.send(f.read_bytes(), kind)
-            a = int(m[1]) if m[1] else max(0, size - int(m[2] or 0)); b = min(size - 1, int(m[2])) if m[1] and m[2] else size - 1
-            if a >= size: self.send_response(416); self.send_header('Content-Range', f'bytes */{size}'); self.end_headers(); return
-            with open(f, 'rb') as x: x.seek(a); body = x.read(b - a + 1)
-            self.send_response(206); self.send_header('Content-Type', kind); self.send_header('Content-Range', f'bytes {a}-{b}/{size}')
-            self.send_header('Accept-Ranges', 'bytes'); self.send_header('Content-Length', str(len(body))); self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
+            if m and not (m[1] or m[2]): m = None
+            if not m: a, b, code = 0, size - 1, 200
+            else:
+                a = int(m[1]) if m[1] else max(0, size - int(m[2])); b = min(size - 1, int(m[2])) if m[1] and m[2] else size - 1; code = 206
+                if a >= size or b < a:            # 反着写的范围（bytes=500-100）、超出文件的：416，不断开（QA 2.5）
+                    self.send_response(416); self.send_header('Content-Range', f'bytes */{size}'); self.send_header('Content-Length', '0'); self.end_headers(); return
+            self.send_response(code); self.send_header('Content-Type', kind)
+            if code == 206: self.send_header('Content-Range', f'bytes {a}-{b}/{size}')
+            self.send_header('Accept-Ranges', 'bytes'); self.send_header('Content-Length', str(b - a + 1)); self.send_header('Cache-Control', 'no-store'); self.end_headers()
+            with open(f, 'rb') as x:                 # 分块写出，不把整个视频读进内存
+                x.seek(a); left = b - a + 1
+                while left > 0:
+                    chunk = x.read(min(left, 1 << 20))
+                    if not chunk: break
+                    self.wfile.write(chunk); left -= len(chunk)
 
         def image(self, f):
             if not f.is_file(): return self.send({'ok': False, 'error': '找不到这张图'}, code=404)
@@ -767,11 +857,11 @@ def make_handler(job, dv):
         def editor_page(self):
             a = self.koubo_ready()
             if not a: return
-            page = EDITOR.read_text(encoding='utf-8').replace('__SHENPIAN_TOKEN__', TOKEN)
+            page = EDITOR.read_text(encoding='utf-8').replace('__SHENPIAN_TOKEN__', SESSION)
             pi = backend(a).page_info()                      # 预览片段多长、原片多长（剪口播后台给；起不来就不放预览，页面上会显示后台的报错）
             if pi.get('segment_seconds'):
                 page = page.replace('src="/source.mp4"', f'data-segment-seconds="{pi["segment_seconds"]}" data-source-duration="{pi["source_duration"]}"')
-            self.send(page.encode(), 'text/html; charset=utf-8')
+            self.send(page.encode(), 'text/html; charset=utf-8', cookie=True)
 
         def proxy(self, method, path, body=None):
             """原样转给剪口播后台，回话原样交回（状态码、409 的 reload、报错文字、预览片段的分段读）。"""
@@ -792,14 +882,18 @@ def make_handler(job, dv):
                         if not chunk: break
                         self.wfile.write(chunk)
 
-        def do_GET(self):
+        def do_GET(self): return self.guarded(self._get)
+        def do_POST(self): return self.guarded(self._post)
+
+        def _get(self):
             from urllib.parse import unquote
             p = unquote(self.path.split('?')[0])
             # GET 也查 Host（2026-11-21）：必须是本机地址加本端口，防 DNS 重绑定（别的网站把自己的域名指到 127.0.0.1 来读标记和截图）。
             # 浏览器打开页面、页面拿数据和图片、程序自己 ping 的 Host 都是 127.0.0.1:端口 或 localhost:端口；没有 Host 头的照旧放行
             if not self.own_host(): return self.send({'ok': False, 'error': '只接受本机地址的请求（Host 不是本机的审片工作台）'}, code=403)
-            if p in ('/', '/index.html'): return self.send(PAGE.read_bytes().replace(b'__SHENPIAN_TOKEN__', TOKEN.encode()), 'text/html; charset=utf-8')
-            if p == '/api/ping': return self.send({'app': '审片工作台', 'dir': str(job.dir), 'pid': os.getpid(), 'lite': lite(job), 'page_seen': None if seen['t'] is None else round(time.time() - seen['t'], 1), 'listening': listening(), 'prog': PROG})
+            if p in ('/', '/index.html'): return self.send(PAGE.read_bytes().replace(b'__SHENPIAN_TOKEN__', SESSION.encode()), 'text/html; charset=utf-8', cookie=True)
+            if p == '/api/ping': return self.send({'app': '审片工作台', 'dir': str(job.dir), 'pid': os.getpid(), 'lite': lite(job), 'page_seen': None if seen['t'] is None else round(time.time() - seen['t'], 1),
+                                                   'listening': listening(), 'prog': PROG, 'idle': round(time.time() - activity['t'], 1)})
             if p == '/api/material': return self.send(materials.info(job))       # 备料：正在传、复制的进度（页面传东西时每秒来问）
             if p == '/api/data':
                 seen['t'] = time.time(); return self.send(meta())
@@ -819,7 +913,7 @@ def make_handler(job, dv):
             if p == '/文案剪辑.html': return self.editor_page()
             if koubo.GET.match(p): return self.proxy('GET', self.path)
             if p == '/api/dv':
-                if lite(job): return self.send({'ok': False, 'lite': True, 'error': '口播阶段：还没建片子目录，审核线还没到'})
+                if lite(job): return self.send({'ok': False, 'lite': True, 'error': '口播阶段：还没建项目文件夹，审核线还没到'})
                 try: return self.send({'ok': True, **call(dv.status)})
                 except Oops as e: return self.send({'ok': False, 'error': str(e)})
             if p.startswith('/图/') and '/' not in p[3:] and not p[3:].startswith('.'): return self.image(home(job) / '图' / p[3:])
@@ -852,7 +946,7 @@ def make_handler(job, dv):
             """Host 头是本机地址加本端口（GET、POST 都查）；没有 Host 头的放行。"""
             host = self.headers.get('Host'); return host is None or host.strip().lower() in self.mine()
 
-        def do_POST(self):
+        def _post(self):
             if self.path.split('?')[0] == '/api/material/upload': return self.material_upload()
             try: raw = self.rfile.read(int(self.headers.get('Content-Length') or 0))
             except ValueError: return self.send({'ok': False, 'error': '格式不对'}, code=400)
@@ -862,12 +956,13 @@ def make_handler(job, dv):
                 return self.proxy('POST', self.path.split('?')[0], raw)
             try: q = json.loads(raw or b'{}')
             except ValueError: return self.send({'ok': False, 'error': '格式不对'}, code=400)
+            if not isinstance(q, dict): return self.send({'ok': False, 'error': '格式不对'}, code=400)
             path = self.path.split('?')[0]; fn = POST.get(path)
             if path in STRICT: fn = lambda q, f=STRICT[path]: f(q, self)
             if not fn: return self.send({'ok': False, 'error': '没有这个地址'}, code=404)
             try: out = fn(q)
-            except Refuse as e: return self.send({'ok': False, 'error': str(e)}, code=403)
-            except Oops as e: return self.send({'ok': False, 'error': str(e)})
+            except Refuse as e: return self.send({'ok': False, 'code': 'stale_page' if page_cookie(self) is not None and page_cookie(self) != TOKEN else 'not_page', 'error': str(e)}, code=403)
+            except (Oops, board.Oops) as e: return self.send({'ok': False, 'error': str(e)})
             except (KeyError, ValueError, TypeError): return self.send({'ok': False, 'error': '请求缺内容'}, code=400)
             if isinstance(out, Path): return self.image(out)
             self.send(out if 'ok' in out else {'ok': True, **out})
@@ -914,6 +1009,10 @@ class DVProxy:
         if kind == 'err': raise Oops(val)
         return val
 
+    def reset(self):
+        p, self.p = self.p, None
+        if p is not None and p.is_alive(): p.terminate()
+
     def status(self): return self._call('status')
     def goto(self, t): return self._call('goto', t)
     def still(self, out): return self._call('still', out)
@@ -930,7 +1029,7 @@ class DVProxy:
 class NoDV:
     """口播阶段（Lite）：还没有审核线，不连达芬奇。"""
     def __getattr__(self, name):
-        def no(*_): raise Oops('口播阶段：还没建片子目录（init），审核线、达芬奇这些还没到')
+        def no(*_): raise Oops('口播阶段：还没建项目文件夹（init），审核线、达芬奇这些还没到')
         return no
 
 
@@ -948,6 +1047,11 @@ def serve(d, port):
             if rj(info).get('pid') == os.getpid(): info.unlink()
         os._exit(0)
     signal.signal(signal.SIGTERM, bye); signal.signal(signal.SIGINT, bye)
+    def idle():                            # 闲太久（页面关了、没人来用）自己退出，端口还回去（QA 1.2）；下次首页点开会重起，数据都在片子文件里
+        while True:
+            time.sleep(max(1.0, min(30.0, IDLE / 4)))
+            if time.time() - activity['t'] > IDLE: say(f'审片台闲了 {int(IDLE)} 秒，自己退出'); bye()
+    if IDLE > 0: threading.Thread(target=idle, daemon=True).start()
     say(f'审片台 http://127.0.0.1:{port}/  {job.dir}'); srv.serve_forever()
 
 
@@ -980,10 +1084,33 @@ def pick_port(job, want=None, ports=None):
     if want:
         if port_free(want): return want
         pg = ping(want)
-        die(f"端口 {want} 被占了：" + (f"那是另一条片子的审片工作台（{pg['dir']}）" if pg and pg.get('app') == '审片工作台' else '是别的程序在用') + '；换一个 --port，或不写 --port 自动找空的')
+        die(f"端口 {want} 被占了：" + (f"那是另一个项目的审片工作台（{pg['dir']}）" if pg and pg.get('app') == '审片工作台' else '是别的程序在用') + '；换一个 --port，或不写 --port 自动找空的')
     for p in ports:
         if port_free(p): return p
+    p = reclaim(ports)
+    if p: return p
     die(f'{ports[0]}–{ports[-1]} 端口都被占了，用 --port 指定一个空的')
+
+
+RECLAIM_MIN = 120          # 端口满了停最久没用的审片台：至少闲了这么久（秒）的才停，正在用的不停
+
+
+def reclaim(ports, prog=None):
+    """端口都满了：停掉这份程序起的、闲得最久的那个审片台（别的程序文件夹起的不碰），返回空出来的端口；没有能停的给 None。"""
+    prog = prog or PROG; best = None
+    for p in ports:
+        pg = ping(p, 0.3)
+        if not pg or pg.get('app') != '审片工作台' or (pg.get('prog') or {}).get('dir') != prog['dir']: continue
+        idle = pg.get('idle')
+        if idle is None or idle < RECLAIM_MIN: continue
+        if not best or idle > best[1]: best = (p, idle, pg)
+    if not best: return None
+    p, idle, pg = best
+    with contextlib.suppress(ProcessLookupError, TypeError): os.kill(pg['pid'], signal.SIGTERM)
+    for _ in range(50):
+        if port_free(p): say(f"端口都满了：停掉了闲了 {int(idle // 60)} 分钟的审片台（{pg['dir']}），用它的端口 {p}"); return p
+        time.sleep(0.1)
+    return None
 
 
 def same_program(port):
@@ -995,9 +1122,13 @@ def start(job, port=None, ports=None, fresh=False):
     """fresh：首页用。已在跑的是别的版本程序起的（发版前的老服务、或从已删掉的 worktree 起的）就停掉、用现在的程序重起；数据都在片子文件里，不丢。"""
     info = running(job)
     if info and fresh and not same_program(info['port']):
-        say(f"这条片子的审片台（端口 {info['port']}）是别的版本的程序起的，换成现在的程序重起（标记、确认、文案都在片子文件里，不丢）"); stop(job); info = None
+        other = (ping(info['port']) or {}).get('prog') or {}
+        if other.get('dir') and other['dir'] != PROG['dir'] and Path(other['dir']).is_dir():
+            # 另一个程序文件夹（正式版／开发版）正开着这条片子：不去停它（QA 1.1：以前两边来回互相停，页面上没存的字会丢）
+            die(f"该项目正在另一个 ThinkCut 中打开（{other['dir']}，端口 {info['port']}）：请先在那边关闭，或等其闲置自动退出后再打开")
+        say(f"这个项目的审片台（端口 {info['port']}）是别的版本的程序起的，换成现在的程序重起（标记、确认、文案都在项目文件里，不丢）"); stop(job); info = None
     if info and (ping(info['port']) or {}).get('lite', False) != lite(job):     # 口播阶段起的服务，init 建了 job.json 以后换成完整的（数据不动）
-        say('这条片子已经建好片子目录（job.json），审片台换成完整的（其余栏目也能用了）'); stop(job); info = None
+        say('这个项目已经建好项目文件夹（job.json），审片台换成完整的（其余栏目也能用了）'); stop(job); info = None
     if info:
         if port and port != info['port']: say(f"提醒：本片的审片台已经在 {info['port']} 端口跑着，直接用它（要换端口先 --stop）")
         return info['url'], True
@@ -1130,12 +1261,12 @@ def reply(job, mid, status, note, where=None, options=None):
         if touched is not None: m['touched'] = touched
     try: edit(job, f)
     except Oops as e: die(str(e))
-    say(f'第 {mid} 条已回写：{status}' + (f'（改了 {len(touched)} 处）' if touched else '') + ('；页面上这条变成“待你看”，等用户在卡片上回答（回答后用户点“交给 AI”，--wait 会打印回答）' if status == '问你' else ''))
+    say(f'第 {mid} 条已回写：{status}' + (f'（改了 {len(touched)} 处）' if touched else '') + ('；页面上这条变成“待审阅”，等用户在卡片上回答（回答后用户点“提交 AI”，--wait 会打印回答）' if status == '问你' else ''))
 
 
 def wait(job, timeout=0):
     """AI 用：挂着等用户在页面上点“发给 AI”。点了就打印清单、退出（Claude Code 里放后台跑，退出会叫醒 AI）。timeout 秒（0 = 一直等）到了没点也退出。"""
-    info = running(job) or die(f'这条片子的审片台没在跑：先 workbench {job.dir}')
+    info = running(job) or die(f'这个项目的审片台没在跑：先 workbench {job.dir}')
     t0 = time.time(); miss = 0
     while True:
         try:
@@ -1147,14 +1278,14 @@ def wait(job, timeout=0):
         got = board.pick(job)
         if got: return report(job, got)
         if timeout and time.time() - t0 > timeout:
-            say(f'等了 {int(timeout)} 秒，用户还没点“发给 AI”。要接着等就再跑一次 --wait'); return
+            say(f'等了 {int(timeout)} 秒，用户还没点“提交 AI”。要接着等就再跑一次 --wait'); return
         time.sleep(2)
 
 
 def report(job, got, again='再起一次 --wait 接着等'):
     """用户点了“交给 AI”：打印这次发来的那几件（--wait 和首页的“等所有片子” home --wait 都用它）。"""
     only = {i for _, i in got}; names = [board.LABEL.get(c, c) for c in board.COLUMNS if any(c == x for x, _ in got)]
-    say(f"【用户点了“发给 AI”】栏目：{'、'.join(names)}，{len(got)} 件。只处理下面这些（别的栏目用户还没发，可能还在写，先别动）；逐项处理、逐项 --reply，处理完{again}：")
+    say(f"【用户点了“提交 AI”】栏目：{'、'.join(names)}，{len(got)} 件。只处理下面这些（别的栏目用户还没发，可能还在写，先别动）；逐项处理、逐项 --reply，处理完{again}：")
     mine = {i for i in only if i in ('定稿', '开工') or re.fullmatch(r'稿\d+', i)}      # 文案栏（写稿）的意见、定稿
     pub = {i for i in only if i == '发布'}                                             # 发布栏：存到蚁小二草稿
     if any(i.startswith('#') or i == '导航条' for i in only): listing(job, only=only)
@@ -1215,7 +1346,7 @@ def cli(job, a):
         board.pick(job)                     # AI 读过了：页面上“已发给 AI”变成“AI 在处理”
         listing(job, a.all); say(''); board.listing(job, a.all); writing.listing(job, all_notes=a.all); publish.listing(job)
         un = board.send_info(job)['unsent_ids']
-        if un: say(f"【注意】这几件用户还没点“发给 AI”（可能还在写），先别动：{'、'.join(un)}")
+        if un: say(f"【注意】这几件用户还没点“提交 AI”（可能还在写），先别动：{'、'.join(un)}")
         return
     launch(job, a.port, a.column)
 
@@ -1255,18 +1386,18 @@ def launch(job, port=None, column=None):
     url, reused = start(job, port); d = load(job); page = url + ('#' + quote(column) if column else ''); opened = open_page(page)
     if lite(job):
         kb = koubo.info(aroll_of(job))
-        say(f"审片台{'已经在跑（复用）' if reused else '已启动'}（还没建片子目录，只有“文案”栏" + ('和“口播剪辑”栏' if kb['ready'] else '') + f"能用）：{page}"
+        say(f"审片台{'已经在跑（复用）' if reused else '已启动'}（还没建项目文件夹，只有文稿栏" + ('和口播精剪栏' if kb['ready'] else '') + f"能用）：{page}"
             + ('，已在浏览器打开' if opened else '；没能自动打开浏览器：AI 去打开这个网址（或发给用户）') + '\n'
-            + "文案栏：用户在页面里写标题、封面文字、口播正文，选一段字或针对全文提意见，点“交给 AI”；AI 用 --rewrite 稿N --json 改写.json 交改写建议，用户逐处点“采纳”才写进文案文件；写好点“定稿”。\n"
-            + (f"口播剪辑栏：剪口播的文字剪辑器（{kb['dir']}）：删句、恢复、拖小句调顺序、改字幕、分段，点“保存到达芬奇”更新主线和字幕。\n" if kb['ready'] else '')
-            + f"【等用户】现在就挂着等 workbench {job.dir} --wait（用户点“交给 AI”或“定稿”它就打印要做的事并退出；Codex 加 --wait-timeout 1500）。\n"
-            + f"片子目录 {job.dir}：init 建 job.json 后其余栏目才有，审片台的数据接着用。停服务：workbench {job.dir} --stop")
+            + "文稿栏：用户在页面里写标题、封面文字、口播正文，选一段字或针对全文提意见，点“提交 AI”；AI 用 --rewrite 稿N --json 改写.json 交改写建议，用户逐处点“采纳”才写进文案文件；写好点“定稿”。\n"
+            + (f"口播精剪栏：剪口播的文字剪辑器（{kb['dir']}）：删句、恢复、拖小句调顺序、改字幕、分段，点“保存到达芬奇”更新主线和字幕。\n" if kb['ready'] else '')
+            + f"【等用户】现在就挂着等 workbench {job.dir} --wait（用户点“提交 AI”或“定稿”它就打印要做的事并退出；Codex 加 --wait-timeout 1500）。\n"
+            + f"项目文件夹 {job.dir}：init 建 job.json 后其余栏目才有，审片台的数据接着用。停服务：workbench {job.dir} --stop")
         return page
     say(f"审片台{'已经在跑（复用）' if reused else '已启动'}：{page}  第 {d['round']} 轮"
         + ('，已在浏览器打开' + (f'“{column}”栏' if column else '') if opened else '；没能自动打开浏览器：AI 去打开这个网址（或发给用户）') + '\n'
         f"审核线：用户在达芬奇里看审核线（停在“剪辑”页）；页面上有整条口播全文：点一句达芬奇跳过去，句子上能直接记标记；也能点“这一帧有问题”。\n"
         f"其余栏目：AI 用 --publish 发布要用户看的（图、视频、试听、多选一），用户点“可以”“选这个”就是确认。\n"
-        f"【等用户】用户写完、点完会点页面顶上的“发给 AI”：现在就挂着等 workbench {job.dir} --wait（Claude Code 放后台跑，它一退出就是用户发来了，按打印的清单改；Codex 前台跑加 --wait-timeout 1500）。\n"
+        f"【等用户】用户写完、点完会点页面顶上的“提交 AI”：现在就挂着等 workbench {job.dir} --wait（Claude Code 放后台跑，它一退出就是用户发来了，按打印的清单改；Codex 前台跑加 --wait-timeout 1500）。\n"
         f"读结果：workbench {job.dir} --list；回写：--reply 编号 --note 说明（审核线标记再加 --status 已改/没改）；停服务：--stop")
     return page
 

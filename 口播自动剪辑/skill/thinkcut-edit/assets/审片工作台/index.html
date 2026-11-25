@@ -314,7 +314,7 @@ section h2 .sq{font-size:12px;font-weight:400;color:var(--s-todo);margin-left:8p
 #cols .cn{font-size:13px;font-weight:500}#cols button.on .cn{font-weight:600}
 #cols .cs{font-size:12px;min-height:0;gap:4px}#cols .cw{display:none}#cols .cnum{display:inline;font-weight:600}
 #cols .u-none .cs{display:none}
-.tb-title{flex-basis:180px}
+.tb-title{flex-basis:180px}.tb-title h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tb-title h1 .cn{letter-spacing:.06em}
 /* 工具栏放不下就先省：轮到你／AI 在改是 0 时不占地方；AI、达芬奇只留小灯和短字 */
 .topbar .totals{font-size:13px}.topbar .bar-sep{display:none}#tTurn:not(.on-turn),#tAi:not(.on-ai){display:none}
 .topbar .dvsum{font-size:12px;padding:4px 6px;gap:5px}.topbar #clock{display:none}
@@ -428,52 +428,58 @@ section h2 .sq{font-size:12px;font-weight:400;color:var(--s-todo);margin-left:8p
 .wtrack .tnote{font-size:12px;margin:0 0 8px;white-space:normal}.wtrack .tk{display:inline-flex;gap:4px;margin-left:6px;vertical-align:2px}
 .wtrack .tk button{width:22px;height:22px;border-radius:11px;border:1px solid var(--fill-2);background:var(--surface);cursor:pointer;font-size:12px;line-height:1;padding:0;color:var(--text)}
 .wtrack .tok:hover{background:var(--s-ok-bg);color:var(--s-ok)}.wtrack .tno:hover{background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red)}
+/* 状态条（连不上、数据出错、读取中）、转圈、未保存 */
+.netbar{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:7px 20px;font-size:13px;border-bottom:1px solid var(--line)}.netbar span{flex:1;min-width:0}
+.netbar.err{background:var(--red-bg);color:var(--red-text)}.netbar.warn{background:var(--s-todo-bg);color:var(--s-todo)}.netbar.wait{background:var(--chip);color:var(--text-2)}
+.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}.wunsaved{color:var(--s-todo)!important}
 </style>
-<header class="topbar"><button id="goHome" class="tbicon" hidden title="全部片子：回首页看所有片子、新建片子（这条片子的状态都留着）" aria-label="全部片子"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2" width="5.5" height="5.5" rx="1.3"/><rect x="9" y="2" width="5.5" height="5.5" rx="1.3"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.3"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.3"/></svg></button><div class="tb-title"><span id="filmname" class="film"></span><h1>审片台</h1></div><nav id="cols" aria-label="栏目"></nav>
-<div class="totals"><button id="tTurn" class="tt" title="等你看＋还没交给 AI：点了跳到第一处">等你处理 <b>0</b></button><span class="bar-sep">｜</span><button id="tAi" class="tt" title="已交给 AI 的：点了跳到第一处">AI 修改中 <b>0</b></button></div>
-<details id="aipop" class="pop ovl"><summary class="dvsum" title="AI 在不在等：点开看怎么连"><i id="aidot" class="dvdot"></i><span id="aiword">AI</span></summary><div class="pop-body aibody" id="aibody"></div></details>
+<header class="topbar"><button id="goHome" class="tbicon" hidden title="全部项目：返回首页查看所有项目、新建项目（本项目的状态均保留）" aria-label="全部项目"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2" width="5.5" height="5.5" rx="1.3"/><rect x="9" y="2" width="5.5" height="5.5" rx="1.3"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.3"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.3"/></svg></button><div class="tb-title"><span id="filmname" class="film"></span><h1>ThinkCut<span class="cn"> 思刻</span> · 审片台</h1></div><nav id="cols" aria-label="栏目"></nav>
+<div class="totals"><button id="tTurn" class="tt" title="待审阅与待提交的事项：点击跳到第一处">待审阅 <b>0</b></button><span class="bar-sep">｜</span><button id="tAi" class="tt" title="已提交 AI 的事项：点击跳到第一处">AI 处理中 <b>0</b></button></div>
+<details id="aipop" class="pop ovl"><summary class="dvsum" title="AI 是否在线：点击查看连接方法"><i id="aidot" class="dvdot"></i><span id="aiword">AI</span></summary><div class="pop-body aibody" id="aibody"></div></details>
 <details id="dvpop" class="pop ovl"><summary class="dvsum" title="达芬奇：点开看详情"><i id="dvdot" class="dvdot"></i><span id="dvword">达芬奇</span><span id="clock"></span></summary><div class="pop-body">
 <p id="dvnote">正在连达芬奇…</p>
 <h3>和达芬奇联动</h3><ul>
-<li>在达芬奇里打开审核线、停在“剪辑”页。</li>
-<li>审核线栏：页面上按<b>空格</b>（或点“▶ 播放／暂停”）让达芬奇播放，再按一次暂停；正在写字时空格就是空格。第一次用要在系统设置里给“辅助功能”权限，页面上会说怎么给。</li>
-<li>在达芬奇里播放或拖动，审核线全文里黑底白字的那一小句跟着走（自己翻页时先停 6 秒不跟）；在这里点字、点意见卡、点时间条，达芬奇跳过去。</li>
+<li>在达芬奇中打开审核线（审片用的时间线），停在“剪辑”页。</li>
+<li>审片栏：在页面上按<b>空格</b>（或点“▶ 播放／暂停”）让达芬奇播放，再按一次暂停；正在写字时空格就是空格。第一次用要在系统设置里给“辅助功能”权限，页面上会说怎么给。</li>
+<li>在达芬奇中播放或拖动时，审片栏全文里黑底白字的那一小句随之移动（自己翻页时先停 6 秒不跟）；在这里点字、点意见卡、点时间条，达芬奇跳过去。</li>
 <li>达芬奇播放时不报位置，这里先不跟；暂停后马上跟上。</li>
 <li>正在渲染、开着别的工程、不在“剪辑”页时不能跳转和截图，这里会写原因。</li></ul></div></details>
 <details id="help" class="pop ovl"><summary class="helpq" title="怎么用">?</summary><div class="pop-body">
-<h3>4 个状态（全站一样）</h3><div class="legend4"><span class="st st-wait">等你看</span><span>AI 发来新东西、新版或回复了，等你处理看</span><span class="st st-todo">还没交给 AI</span><span>你点了、写了，还没交给 AI</span><span class="st st-ai">AI 修改中</span><span>已经交给 AI 了（AI 未连时旁边会写“回对话里说一句‘看审片台’”）</span><span class="st st-ok">✓ 已定</span><span>你点了“可以”“选这个”，或点了“确定此栏／定稿”</span></div>
+<h3>4 个状态（全站一样）</h3><div class="legend4"><span class="st st-wait">待审阅</span><span>AI 交来新内容、新版本或回复，等你审阅</span><span class="st st-todo">待提交</span><span>你已确认或填写，尚未提交 AI</span><span class="st st-ai">AI 处理中</span><span>已提交 AI（AI 离线时旁边会提示“请在对话中说‘看审片台’”）</span><span class="st st-ok">✓ 已定稿</span><span>你点了“可以”“选这个”，或点了“定稿”</span></div>
 <h3>只有三种动作</h3><ul>
 <li><b>可以／选这个</b>：在每一项上点，就是确认，不用再在对话里说。</li>
 <li><b>提意见</b>：哪里不对写下来，边写边自动保存；AI 改完换新版，旧版在卡片下面的“历史”里。</li>
-<li><b>窗口右上角的主按钮</b>（跟着当前这一栏变）：点了、写了以后点“交给 AI（N）”，AI 马上开始改这一栏；都看过没问题点“确定此栏”（发布叫“定稿”，字是你自己写的，点了就定，改的字同时交给 AI；审核线的“确定此栏”连导航条上的字一起定）。定了以后内容一变要重新点；“取消”能撤回。</li></ul>
+<li><b>窗口右上角的主按钮</b>（随当前栏目变化）：确认或填写后点“提交 AI（N）”，AI 随即开始处理本栏；全部审阅无误后点“定稿”（发布栏的字由你撰写，定稿即生效，修改的字同时提交 AI；审片栏定稿时导航条文字一并定稿）。定稿后内容若有变化需重新定稿；点“取消”可撤回。</li></ul>
 <h3>各栏</h3><ul>
-<li><b>顶上一排是做片子的顺序</b>（每个按钮旁的小点和数字就是这一栏的状态）。灰的“还没到”是还没做到这一步。顶上“等你处理 N”点了跳到第一处要你看、要你发的。</li>
-<li><b>文案：</b>在这里写标题、封面文字、口播正文，自动保存。想让 AI 改：选中一段字点“＋ 提意见”（选中的字只是告诉它大概在哪），或点“对全文提意见”（只写了题目、想让它先写一版也行），写好点右上“交给 AI”。AI 交回的改写一处一处列在右边，“原文 → 改后”，你点“采纳”才写进文案，点“不要”就不动；采纳后还能接着手改。都点过了，这条意见收起成“已解决”，点开还能看当时的对话和改了什么。“版本”里能看每一版改了哪里、能退回。写好点“定稿”：AI 先按标题把项目开好；你把口播录像、B-roll 放进项目的 01_原始素材，或在栏头下面写素材在哪，备好了点“开工”，它才开始做视频初稿。定稿后再改，要重新点。</li>
-<li><b>口播剪辑：</b>用改文字的方法剪口播（拖选删、拖蓝线调顺序、改字幕、回车分段），点右上“保存到达芬奇”。标题、封面文字、原稿在“文案”栏改。</li>
-<li><b>审核线：看片在达芬奇里看。</b>直接在全文里选一段字，点冒出来的“＋ 提意见”，右边意见区出一张卡片，可以点类型（字幕、花字、动画……）、写哪里不对。看到画面有问题，在达芬奇里停在那一帧点“这一帧有问题”（截下那一帧、选中正在说的那一小句）。选中的卡片对应的字两头有拖动条，能调范围。卡片里能截达芬奇当前画面，也能 ⌘V 贴图、把图拖上去。上面的时间条标着章节、动画和实拍镜头、每条意见的位置，点哪里达芬奇跳哪里。</li>
-<li><b>选中的字只是定位：</b>告诉 AI 大概在哪。它会按你的意思判断要改多大范围（这一处、这一句、上下句、全片同类的、前后呼应的）；拿不准会在卡片上“AI 问你”，你在下面回答再点“交给 AI”。AI 实际改了哪几处列在卡片上（点了跳过去），全文和时间条上用淡紫波浪线标出。</li>
-<li><b>AI 回了话，就在卡片最下面直接回它：</b>AI 给了几种做法就直接点那个按钮；觉得都不对就在“回复 AI”框里写几句，还能截达芬奇画面、⌘V 贴图、把图拖进来，点“回复”。回复后这条变“还没交给 AI”，点右上“交给 AI”发出去。AI 改了还不满意，同样在这里接着回。</li>
+<li><b>顶部一排按制作顺序排列</b>（按钮旁的小点和数字表示该栏状态）。灰色“未开始”表示尚未进行到这一步。点击顶部“待审阅 N”跳到第一处待你审阅或提交的地方。</li>
+<li><b>文稿：</b>在此撰写标题、封面文字和口播正文，自动保存。需要 AI 修改时，选中一段文字点“＋ 提意见”（选中的文字仅用于定位），或点“对全文提意见”（只有题目、想让 AI 先写一版也可以），完成后点右上“提交 AI”。AI 的改写逐处列在右侧（原文 → 改后），点“采纳”才写入文稿，点“不要”则不变；采纳后仍可手动修改。逐处处理完毕后，该意见收起为“已解决”，展开可查看当时的对话与改动。“版本”中可查看每版改动并退回。完成后点“定稿”：AI 先按标题建立项目；把口播录像、B-roll 放入项目的 01_原始素材，或在栏头下方注明素材位置，准备好后点“开始制作”，AI 才开始制作初剪。定稿后再修改需重新定稿。</li>
+<li><b>口播精剪：</b>以编辑文字的方式精剪口播（拖选删除、拖动蓝线调整顺序、修改字幕、回车分段），完成后点右上“保存到达芬奇”。标题、封面文字和原稿在文稿栏修改。</li>
+<li><b>审片：在达芬奇中看片。</b>直接在全文里选一段字，点冒出来的“＋ 提意见”，右边意见区出一张卡片，可以点类型（字幕、花字、动画……）、写哪里不对。看到画面有问题，在达芬奇里停在那一帧点“这一帧有问题”（截下那一帧、选中正在说的那一小句）。选中的卡片对应的字两头有拖动条，能调范围。卡片里能截达芬奇当前画面，也能 ⌘V 贴图、把图拖上去。上面的时间条标着章节、动画和实拍镜头、每条意见的位置，点哪里达芬奇跳哪里。</li>
+<li><b>选中的字只是定位：</b>告诉 AI 大概在哪。它会按你的意思判断要改多大范围（这一处、这一句、上下句、全片同类的、前后呼应的）；拿不准时会在卡片上“AI 问你”，在下方回答后再点“提交 AI”。AI 实际改了哪几处列在卡片上（点了跳过去），全文和时间条上用淡紫波浪线标出。</li>
+<li><b>AI 回了话，就在卡片最下面直接回它：</b>AI 给了几种做法就直接点那个按钮；觉得都不对就在“回复 AI”框里写几句，还能截达芬奇画面、⌘V 贴图、把图拖进来，点“回复”。回复后该条变为“待提交”，点右上“提交 AI”发出。AI 修改后仍不满意，同样在此继续回复。</li>
 <li><b>轮次：</b>默认只看这一轮。AI 改完你没再说话就当通过；以前的还不行，在“以前轮次”里点“这条还不行”，会在这一轮再记一条。</li>
 <li><b>封面：</b>点“全部摆开”把所有方向、所有版本摆成一面墙，滑杆调大小；点图看大图，← → 换图，“选来对比”选两张并排看；每张图下能直接提意见。</li>
-<li><b>导航条上的字</b>就是审核线全文里每一章的标题：直接点标题改，自动保存；改过、AI 还没做进导航条的标题旁有“改过”记号；栏头“导航条预览”按你改的字画在达芬奇当前这一帧上。</li>
+<li><b>导航条文字</b>即审片栏全文里每一章的标题：直接点标题改，自动保存；改过、AI 还没做进导航条的标题旁有“改过”记号；栏头“导航条预览”按你改的字画在达芬奇当前这一帧上。</li>
 <li><b>发布：</b>简介、标签直接改，自动保存进 项目.json（标签 8–10 个、数字只用口播里说过的，不合要求会写原因、先存成草稿）。</li>
 <li>写的字都自动保存，不用点保存。</li></ul></div></details><div class="ch-main tb-main" id="tbmain"></div></header>
+<div id="netbar" class="netbar" role="status" hidden></div>
 <div class="shell"><div class="panes">
-<div class="pane" data-col="写稿"><div class="colhead"><div class="ch-name"><h2>文案</h2><span class="ch-sum" data-sum="写稿"></span></div>
+<div class="pane" data-col="写稿"><div class="colhead"><div class="ch-name"><h2>文稿</h2><span class="ch-sum" data-sum="写稿"></span></div>
 <div class="ch-tools"><span class="wfs" title="正文的字号"><button id="wfm" class="btn">A−</button><button id="wfp" class="btn">A+</button></span>
 <details id="wver" class="pop ovl wver"><summary class="btn" title="每次采纳、手改一段时间、退回都自动留一个版本：能看改了哪里、能退回">版本</summary><div class="pop-body" id="wverBody"></div></details>
 <button id="wtrk" class="btn" hidden title="AI 的改写直接画在正文里：删的划掉、加的标绿，每处点 ✓ 采纳、✕ 不要">修订痕迹</button>
 <button id="wall" class="btn go" title="不选字，对整篇提意见；只写了题目、想让 AI 先写一版也点这里">对全文提意见</button></div>
 <div class="ch-main" data-main="写稿"></div></div><p class="ch-err" data-err="写稿" hidden></p><div id="wkick" class="wkick" hidden></div>
 <div class="pane-scroll" id="wscroll"><div class="wrow"><div id="wdoc"></div><aside class="wside" id="wside"></aside></div></div></div>
-<div class="pane" data-col="文案"><div class="colhead wenan-head"><div class="ch-name"><h2>口播剪辑</h2><span class="ch-sum" data-sum="文案"></span></div><div class="ch-main" data-main="文案"></div></div><p class="ch-err" data-err="文案" hidden></p>
+<div class="pane" data-col="文案"><div class="colhead wenan-head"><div class="ch-name"><h2>口播精剪</h2><span class="ch-sum" data-sum="文案"></span></div><div class="ch-main" data-main="文案"></div></div><p class="ch-err" data-err="文案" hidden></p>
 <div class="pane-scroll wenan" id="wenan"><div class="wenan-top"><div class="items" data-items="文案"></div><div id="scripted"></div></div>
-<div id="koubo" class="koubo" hidden><div id="kouboFrame" class="koubo-frame"><p id="kouboWait" class="koubo-wait">正在打开口播文字剪辑…（第一次要等十几秒）</p></div></div></div></div>
-<div class="pane" data-col="口播试听"><div class="colhead"><div class="ch-name"><h2>口播试听</h2><span class="ch-sum" data-sum="口播试听"></span></div><div class="ch-main" data-main="口播试听"></div></div><p class="ch-err" data-err="口播试听" hidden></p>
+<div id="koubo" class="koubo" hidden><div id="kouboFrame" class="koubo-frame"><p id="kouboWait" class="koubo-wait">正在打开口播精剪…（首次需等待十余秒）</p></div></div></div></div>
+<div class="pane" data-col="口播试听"><div class="colhead"><div class="ch-name"><h2>配音试听</h2><span class="ch-sum" data-sum="口播试听"></span></div><div class="ch-main" data-main="口播试听"></div></div><p class="ch-err" data-err="口播试听" hidden></p>
 <div class="pane-scroll"><div class="items" data-items="口播试听"></div></div></div>
 <div class="pane" data-col="动画"><div class="colhead"><div class="ch-name"><h2>动画</h2><span class="ch-sum" data-sum="动画"></span></div><div class="ch-main" data-main="动画"></div></div><p class="ch-err" data-err="动画" hidden></p>
 <div class="pane-scroll"><div class="items" data-items="动画"></div></div></div>
-<div class="pane" data-col="审核线"><div class="colhead"><div class="ch-name"><h2>审核线</h2><span class="ch-sum" data-sum="审核线" id="summary">正在读取…</span></div>
+<div class="pane" data-col="审核线"><div class="colhead"><div class="ch-name"><h2>审片</h2><span class="ch-sum" data-sum="审核线" id="summary">正在读取…</span></div>
 <div class="ch-tools"><div id="filter" class="seg"><button data-f="cur" class="on" title="只看这一轮的意见">这一轮</button><button data-f="all" title="以前轮次的意见也标在全文上">全部轮次</button></div>
 <button id="play" class="btn" title="让达芬奇播放／暂停（页面上按空格也行，正在写字时不算）">▶ 播放／暂停（空格）</button>
 <button id="navbtn" class="btn" title="按你改的章节标题，把导航条画在达芬奇当前这一帧上看看">导航条预览</button><button id="flag" class="btn go" title="截下达芬奇当前这一帧，并选中正在说的那一小句">这一帧有问题</button></div><div class="ch-main" data-main="审核线"></div></div>
@@ -484,7 +490,7 @@ section h2 .sq{font-size:12px;font-weight:400;color:var(--s-todo);margin-left:8p
 <div class="ch-tools"><div id="cview" class="seg"><button data-v="card" class="on">卡片</button><button data-v="wall">全部摆开</button></div><label id="wsize" class="wsize" hidden>大小<input id="wslider" type="range" min="100" max="420" step="10" value="200"></label><button id="cmpbtn" class="btn" hidden>并排比（0/2）</button></div>
 <div class="ch-main" data-main="封面"></div></div><p class="ch-err" data-err="封面" hidden></p>
 <div class="pane-scroll" id="coverScroll"><div class="items" data-items="封面"></div></div></div>
-<div class="pane" data-col="上传文案"><div class="colhead"><div class="ch-name"><h2>上传文案</h2><span class="ch-sum" data-sum="上传文案"></span></div><div class="ch-main" data-main="上传文案"></div></div><p class="ch-err" data-err="上传文案" hidden></p>
+<div class="pane" data-col="上传文案"><div class="colhead"><div class="ch-name"><h2>发布</h2><span class="ch-sum" data-sum="上传文案"></span></div><div class="ch-main" data-main="上传文案"></div></div><p class="ch-err" data-err="上传文案" hidden></p>
 <div class="pane-body"><div class="pane-scroll"><div id="uploaded"></div></div><aside class="side"><div class="items" data-items="上传文案"></div><div id="upside"></div></aside></div></div>
 </div></div>
 <button id="selbtn">＋ 提意见<small>选中的字只是告诉 AI 大概在哪</small></button><button id="wselbtn">＋ 提意见<small>选中的字只是告诉 AI 大概在哪</small></button>
@@ -498,22 +504,46 @@ const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c
 const mmss=t=>`${Math.floor(t/60)}:${(t%60).toFixed(1).padStart(4,'0')}`;
 let D=null,G='',CT=[],ROWS=[],CH=[],view='cur',T=0,active=null,pending=null,drag=null,stale=false,timers={},lastClause='',manual=0;
 let TOKEN='__SHENPIAN_TOKEN__';window.shenpianToken=()=>TOKEN;   // 服务每次启动给的页面口令：你的确认、改字请求带着它，别的程序冒充不了
-async function api(p,body){const r=await fetch(p,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Shenpian-Token':TOKEN},body:JSON.stringify(body)});return r.json()}
-const post=(p,b)=>api(p,b).catch(()=>({ok:false,error:'连不上审片台服务（AI 那边可能停了）：回对话里说一句“看审片台”'}));
+// 请求：离开页面前存的字用 keepalive 发（页面关了请求也照样送到）；服务回的不是 JSON（出错页、断开）时变成一句人话，不显示原始报错
+let KEEP=false,INFLIGHT=0;
+async function api(p,body,again){const js=body===undefined?null:JSON.stringify(body);INFLIGHT++;let r;
+  try{r=await fetch(p,js==null?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Shenpian-Token':TOKEN},body:js,keepalive:KEEP&&js.length<60000})}finally{INFLIGHT--}
+  const t=await r.text();let j;try{j=JSON.parse(t)}catch{return {ok:false,error:r.ok?'服务返回的内容无法识别':`审片台服务出错（${r.status}）`,status:r.status}}
+  if(r.status===403&&j.code==='stale_page'&&!again){await fetch('/',{cache:'no-store'}).catch(()=>{});return api(p,body,true)}   // 服务重启过、页面的 cookie 旧了：取一次页面换新 cookie，再发一次
+  if(!r.ok&&j&&typeof j==='object')j.status=r.status;return j}
+const OFFLINE='连不上审片台服务：请回首页重新打开这个项目';
+const post=(p,b)=>api(p,b).then(r=>{if(r&&r.ok===false&&r.error)r.error=human(r.error);return r},()=>({ok:false,error:OFFLINE}));
+// 原始报错（Python 异常、英文、网络错误）不直接给人看
+function human(s){s=String(s??'').trim();if(!s)return '操作没有完成，请重试';
+  if(/Errno|Traceback|Exception|[A-Za-z]+Error\b|Expecting (property|value)|Failed to fetch|NetworkError|Load failed|Unexpected token|\bundefined\b/.test(s)||!/[一-龥]/.test(s))return '服务处理出错（技术细节已记入日志），请稍后重试；仍不行请告诉 AI';return s}
+// 防连点：同一件事进行中不重复发；按钮转圈、变灰
+const BUSY=new Set();
+let LASTBTN=null;document.addEventListener('click',e=>{LASTBTN=e.target.closest?.('button')||null},true);
+async function guard(key,btn,fn){if(BUSY.has(key))return {ok:false,busy:true};BUSY.add(key);if(btn){btn.disabled=true;btn.classList.add('busy')}
+  try{return await fn()}finally{BUSY.delete(key);if(btn&&btn.isConnected){btn.disabled=false;btn.classList.remove('busy')}}}
 // —— 规则 1：4 个状态、同一个组件 ——
 const UST={'待你看':'wait','待发送':'todo','AI 在改':'ai','已定':'ok'};
 const tag=s=>s?`<span class="st st-${UST[s]}">${SN[s]||s}</span>`:'';
-const hint=()=>BD&&!BD.send?.listening?'<span class="nolisten">AI 未连：回对话里说一句“看审片台”</span>':'';
+const hint=()=>BD&&!BD.send?.listening?'<span class="nolisten">AI 离线：请在对话中说“看审片台”</span>':'';
 // 服务端报错、原因里还有老说法：显示前换成新说法（只此一处）
 // 页面上的叫法（2026-11-24 用户定“第一次看就懂”）：待你看→等你看、待发送→还没交给 AI、AI 在改→AI 修改中、轮到你→等你处理、AI 在等／没在等→AI 已连／未连；数据和命令里的名字不变
-const FIX=[[/写了要求/g,'提了意见'],[/写要求/g,'提意见'],[/发给 AI/g,'交给 AI'],[/你定了/g,'已定'],[/你已定/g,'已定'],[/AI 已回复/g,'等你看'],[/AI 改中/g,'AI 修改中'],[/待你看/g,'等你看'],[/待发送/g,'还没交给 AI'],[/AI 在改/g,'AI 修改中'],[/轮到你/g,'等你处理'],[/AI 没在等/g,'AI 未连'],[/AI 在等/g,'AI 已连'],[/这一栏定了/g,'确定此栏']];
-const SN={'待你看':'等你看','待发送':'还没交给 AI','AI 在改':'AI 修改中','已定':'✓ 已定'};
+const FIX=[[/写了要求/g,'提了意见'],[/写要求/g,'提意见'],[/(发给|交给) ?AI/g,'提交 AI'],[/你定了|你已定/g,'已定稿'],[/AI 已回复/g,'待审阅'],[/AI 改中|AI 在改|AI 修改中/g,'AI 处理中'],[/待你看|等你看|轮到你|等你处理/g,'待审阅'],[/待发送|还没提交 AI/g,'待提交'],[/AI 没在等|AI 未连/g,'AI 离线'],[/AI 在等|AI 已连/g,'AI 在线'],[/这一栏定了|确定此栏/g,'定稿'],[/已定(?!稿)/g,'已定稿'],
+  [/“?上传文案”?栏/g,'发布栏'],[/“?审核线”?栏/g,'审片栏'],[/“?文案”?栏/g,'文稿栏'],[/“?口播剪辑”?栏/g,'口播精剪栏'],[/“?口播试听”?栏/g,'配音试听栏'],[/备料/g,'准备素材'],[/“开工”/g,'“开始制作”'],[/开工/g,'开始制作'],[/片子目录/g,'项目文件夹'],[/这条片子/g,'这个项目'],[/片子/g,'项目'],[/写文案/g,'撰稿'],[/出初稿/g,'初剪'],[/改初稿/g,'精修']];
+const SN={'待你看':'待审阅','待发送':'待提交','AI 在改':'AI 处理中','已定':'✓ 已定稿'};
 const fix=s=>FIX.reduce((a,[r,w])=>a.replace(r,w),String(s??''));
 let toastT=0;
 // —— 规矩 8：盖在页面上的东西（class="ovl"）点外面空白处关、Esc 关；关之前先存没存完的字 ——
-const PEND={};   // 还没存出去的字：key → 存的函数（自动保存的等待期里）
-function later(key,fn,ms){PEND[key]=fn;return setTimeout(()=>{delete PEND[key];fn()},ms)}
-function flushSaves(){for(const [k,fn] of Object.entries(PEND)){clearTimeout(saveT[k]);delete PEND[k];fn()}}
+const PEND={},LT={};   // 还没存出去的字：key → 存的函数（自动保存的等待期里）；LT：各自的计时器
+function later(key,fn,ms){clearTimeout(LT[key]);PEND[key]=fn;LT[key]=setTimeout(()=>{delete PEND[key];unsavedMark();fn()},ms);unsavedMark();return LT[key]}
+// 马上把等着存的字发出去（离开、切栏、关窗口、开浮层前）：用 keepalive，页面走了也送得到
+function flushSaves(){KEEP=true;try{for(const [k,fn] of Object.entries(PEND)){clearTimeout(LT[k]);delete PEND[k];fn()}}finally{KEEP=false;unsavedMark()}}
+// 给 Mac 外壳用：关窗口、退出前调它，存完（最多等 3 秒）再关
+window.cutdeskFlush=async()=>{flushSaves();const t0=Date.now();while((INFLIGHT||Object.keys(PEND).length)&&Date.now()-t0<3000)await new Promise(r=>setTimeout(r,50));return true};
+addEventListener('pagehide',flushSaves);
+addEventListener('beforeunload',e=>{const had=Object.keys(PEND).length;flushSaves();if(had&&!KEEP_OK){e.preventDefault();e.returnValue=''}});
+const KEEP_OK=typeof Request!=='undefined'&&'keepalive' in Request.prototype;   // 浏览器支持 keepalive 就不拦着离开
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSaves()});
+function unsavedMark(){const n=Object.keys(PEND).length;document.documentElement.classList.toggle('unsaved',!!n)}
 const ovlOpen=el=>el.tagName==='DETAILS'?el.open:el.id==='zoom'?el.classList.contains('on'):!el.hidden;
 // 点在浮层“里面”：大图铺满整屏，只有图、视频、按钮、图下的字、输入框算里面；别的浮层整个框算里面（开它的按钮也算，免得一点就关了又开）
 function ovlInside(el,t){if(el.id==='zoom')return !!t.closest('img,video,button,figcaption,input,label');
@@ -525,8 +555,8 @@ window.closeOvlAll=()=>document.querySelectorAll('.ovl').forEach(closeOvl);   //
 document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const open=[...document.querySelectorAll('.ovl')].filter(ovlOpen);if(!open.length)return;
   e.preventDefault();e.stopPropagation();closeOvl(open.find(x=>x.id==='zoom')||open.at(-1))},true);
 function say(s,err){const t=$('toast');t.textContent=fix(s);t.className='show'+(err?' err':'');clearTimeout(toastT);toastT=setTimeout(()=>t.className='',err?7000:2200);
-  const e=cur&&document.querySelector(`[data-err="${cur}"]`);if(!e)return;if(err){e.textContent=fix(s)+'　（改好再试一次；还不行回对话里告诉 AI）';e.hidden=false}else if(!/^正在/.test(s))e.hidden=true}
-const typing=()=>document.activeElement&&/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName)&&document.activeElement.type!=='range'&&document.activeElement.type!=='checkbox';
+  const e=cur&&document.querySelector(`[data-err="${cur}"]`);if(!e)return;if(err){e.textContent=fix(s)+'　（修正后请重试；仍不成功请告诉 AI）';e.hidden=false}else if(!/^正在/.test(s))e.hidden=true}
+const typing=()=>{const a=document.activeElement;return !!a&&(a.isContentEditable||/^(TEXTAREA|INPUT)$/.test(a.tagName)&&a.type!=='range'&&a.type!=='checkbox'&&a.type!=='radio')};
 const P=/[，。？！、；：]/,mk=id=>D.markers.find(m=>m.id===id),isCur=m=>m.round===D.round,shown=m=>view==='all'||isCur(m);
 const MK=['字幕','花字','动画','B-roll','节奏','声音','其它'];   // 提意见时可以点的类型（存进标记的 kind）
 // —— 审核线：全文一句一项、每字一个时间；章节按导航条分 ——
@@ -574,14 +604,14 @@ ${(opts||[]).length?`<div class="ropts">${opts.map(o=>`<button class="btn ropt" 
 function renderOps(){const box=$('ops'),cur=D.markers.filter(isCur).sort(byPos),old=D.markers.filter(m=>!isCur(m)).sort((a,b)=>b.round-a.round||byPos(a,b));
   if(box.contains(document.activeElement)&&document.activeElement.tagName==='TEXTAREA')return;   // 正在写：不重画
   const y=box.scrollTop,rank={'待你看':0,'待发送':1,'AI 在改':2,'已定':3},nits=(BD?.items||[]).filter(x=>x.column==='导航文字').sort((a,b)=>(rank[a.ustate]??1)-(rank[b.ustate]??1));
-  box.innerHTML=(nits.length?`<div class="navitems"><h4>导航标签（AI 发来请你看的导航条短标签）</h4>${nits.map(itemHtml).join('')}</div>`:'')+`<div class="ops-h"><b>意见</b><span class="muted">第 ${D.round} 轮 · ${cur.length} 条</span></div>`+(cur.length?cur.map(opHtml).join(''):'<p class="ops-empty">选一段字点“＋ 提意见”；画面有问题点“这一帧有问题”。</p>')
+  box.innerHTML=(nits.length?`<div class="navitems"><h4>导航标签（AI 发来请你看的导航条短标签）</h4>${nits.map(itemHtml).join('')}</div>`:'')+`<div class="ops-h"><b>意见</b><span class="muted">第 ${D.round} 轮 · ${cur.length} 条</span></div>`+(cur.length?cur.map(opHtml).join(''):'<p class="ops-empty">选中一段文字点“＋ 提意见”；画面有问题请点“这一帧有问题”。</p>')
     +(old.length?`<details class="olds"${view==='all'?' open':''}><summary>以前轮次（${old.length} 条，只读；还不行点“这条还不行”）</summary>${old.map(opHtml).join('')}</details>`:'');
   box.querySelectorAll('textarea').forEach(grow);box.scrollTop=y}
 function draw(light){const y=$('doc').scrollTop;index();for(const m of D.markers)[m._s,m._e]=spanOf(m);
   NO={};[...D.markers].sort(byPos).forEach((m,k)=>NO[m.id]=k+1);
   const cur=D.markers.filter(isCur);
   document.querySelector('[data-f=cur]').textContent=`这一轮 ${cur.length}`;document.querySelector('[data-f=all]').textContent=`全部 ${D.markers.length}`;
-  if(!G){$('content').innerHTML=`<p class="empty">片子目录里还没有 口播字时间.json 或字幕表，显示不了口播全文；意见照样能记（右边）。</p>`}
+  if(!G){$('content').innerHTML=`<p class="empty">项目文件夹里还没有 口播字时间.json 或字幕表，无法显示口播全文；意见仍可在右侧记录。</p>`}
   else $('content').innerHTML=CH.map((c,k)=>{const rows=ROWS.filter(r=>r.ch===k);if(!rows.length)return '';const a=rows[0].off;
     const ci=D.chapters.findIndex(x=>x.id===c.id),lab=D.nav_labels?.[c.id]??c.label,title=ci<0?`<span>${esc(c.label)}</span>`
       :`<input class="chin${D.nav_labels?.[c.id]!=null?' chg':''}" data-ch="${esc(c.id)}" maxlength="24" value="${esc(lab)}" style="--n:${Math.max(4,[...lab].length)}" title="导航条上的字：点上去直接改（原来：${esc(c.label)}）"><span class="chmark"${navPending(c.id)?'':' hidden'} title="你改过这一章的字，AI 还没做进导航条">改过</span>`;
@@ -639,8 +669,20 @@ $('strip').addEventListener('click',e=>{const tb=e.target.closest('.tchb');if(tb
   const pin=e.target.closest('.pin');if(pin){const m=mk(+pin.dataset.c);setActive(m.id);showCard(m.id);showMark(m.id);jump(m.t);return}
   const tl=e.target.closest('.tl');if(!tl)return;const r=tl.getBoundingClientRect();jump(Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*fullDur())});
 // —— 读数据（3 秒一次；正在写字、拖动时不刷新） ——
-async function load(force){const d=await api('/api/data');
-  if(d.board?.token&&d.board.token!==TOKEN){TOKEN=d.board.token;if(!typing()){location.reload();return}say('审片台服务重启过：写完这段后刷新一下页面（⌘R），用上新版')}   // 服务重启了：换成新口令，没在打字就整页刷新用上新版页面
+// 顶上一条状态条：第一次读取中／连不上服务／数据读不了（服务给的中文原因）；好了自动收起
+let FAILS=0;
+function netbar(kind,text){const b=$('netbar');if(!kind){b.hidden=true;return}b.hidden=false;b.className='netbar '+kind;
+  b.innerHTML=`<span>${esc(text)}</span>`+(kind==='err'?`<button class="btn" id="nbRetry">重新连接</button>${(EMB||HOMEQ||D?.home)?'<button class="btn" id="nbHome">回首页重新打开</button>':''}`:'')}
+document.addEventListener('click',async e=>{if(e.target.id!=='nbRepair')return;const f=e.target.dataset.f;if(!confirm(`处理损坏的数据文件“${f}”？损坏的原文件会另存保留，不会删除。`))return;
+  const r=await guard('repair',e.target,()=>post('/api/repair',{file:f}));if(r.busy)return;if(!r.ok)return say(r.status===404?'当前服务版本不支持自动恢复，请让 AI 修复':'未能恢复：'+r.error,1);say(r.note||'已恢复');load(true).catch(()=>{})});
+document.addEventListener('click',e=>{if(e.target.id==='nbRetry'){netbar('wait','正在重新连接审片台服务…');load(true).catch(()=>{})}else if(e.target.id==='nbHome')$('goHome').click()});
+async function load(force){let d;
+  try{d=await api('/api/data')}catch(e){if(++FAILS>=2||!D)netbar('err','连不上审片台服务：可能已停止，或这个项目的数据暂时读不到。');throw e}
+  if(d.code==='broken_file'){FAILS++;netbar('err',`项目数据文件“${d.file}”已损坏，审片台暂时无法显示。`+(d.can_restore?'可恢复到上一版（损坏的文件会另存保留）。':'可重置为空白（损坏的文件会另存保留），或让 AI 修复。'));
+    $('netbar').insertAdjacentHTML('beforeend',`<button class="btn" id="nbRepair" data-f="${esc(d.which||d.file)}">${d.can_restore?'恢复上一版':'重置此文件'}</button>`);return}
+  if(d.ok===false||!d.board&&!d.markers){FAILS++;netbar('err',(d.error?human(d.error):'项目数据读取出错')+'　可让 AI 检查这个项目的数据文件。');return}
+  FAILS=0;netbar((d.errors||[]).length?'warn':null,(d.errors||[]).map(human).join('；')+'　其余栏目照常可用；可让 AI 修复。');
+  if(d.board?.token&&d.board.token!==TOKEN){TOKEN=d.board.token;if(!typing()&&!Object.keys(PEND).length){location.reload();return}flushSaves();say('审片台服务已重启：本段写完后请刷新页面（⌘R）以使用新版')}   // 服务重启了：换成新口令，没在打字就整页刷新用上新版页面
   if(!force&&D&&d.version===D.version)return;if(!force&&(typing()||drag)){stale=true;return}D=d;BD=D.board;stale=false;draw();renderBoard()}
 // 在首页里切到别的片子时，首页通知这一页“看不见了”：停下轮询（不读数据、不问达芬奇），回来时马上刷新（2026-11-24 首页）
 let PAUSED=false;const EMB=window.parent!==window,HOMEQ=new URLSearchParams(location.search).get('home');
@@ -659,9 +701,9 @@ async function tick(){if(busy||D?.lite||PAUSED)return;busy=true;try{const s=awai
     if(s.rendering){note=`${s.timeline} 正在渲染，暂时不能跳转和截图：等渲染完`;err=true}
     else if(s.page==='deliver')note+='（在交付页，截图时会自动切回剪辑页）';
     else if(s.page!=='edit'&&s.page!=='color'){note=`${s.timeline}：请在达芬奇里切到“剪辑”页，才能截图`;err=true}
-    if(D&&D.review_timeline&&s.timeline!==D.review_timeline)note+=`　提醒：达芬奇开着的不是审核线「${D.review_timeline}」，在达芬奇里切过去`;
-    dvShow(err?'err':'ok',err?'达芬奇':'达芬奇已连上',note,err)}
-  catch(e){dvShow('err','连不上服务','连不上审片台服务（AI 那边可能停了）：回对话里说一句“看审片台”',true)}finally{busy=false}}
+    if(D&&D.review_timeline&&s.timeline!==D.review_timeline)note+=`　提醒：达芬奇当前打开的不是审核线「${D.review_timeline}」，请在达芬奇中切换过去`;
+    dvShow(err?'err':'ok',err?'达芬奇':'达芬奇已连接',note,err)}
+  catch(e){dvShow('err','连不上服务',OFFLINE,true)}finally{busy=false}}
 setInterval(tick,500);
 // —— 空格：让达芬奇播放／暂停 ——
 async function togglePlay(){const r=await post('/api/play',{});if(!r.ok)say('达芬奇没播：'+r.error,1)}
@@ -687,16 +729,16 @@ function playing(quiet){if(!D||!CT.length)return;const [s,e]=clause(charAt(T+0.0
   if(q.top<box.top+60||q.bottom>box.bottom-60)$('doc').scrollBy({top:q.top-box.top-box.height/2,behavior:'smooth'})}
 // —— 新建意见（标记） ——
 async function focusCard(id){await load(true);setActive(id);showCard(id);const ta=document.querySelector(`.op[data-c="${id}"] textarea`);if(ta)ta.focus({preventScroll:true})}
-$('flag').onclick=async()=>{say('正在截达芬奇这一帧…');const m=await post('/api/mark',{});if(!m.ok)return say('没记上：'+m.error,1);
+$('flag').onclick=()=>guard('flag',$('flag'),async()=>{say('正在截取达芬奇当前画面…');const m=await post('/api/mark',{});if(!m.ok)return say('未能记录：'+m.error,1);
   if(G){const [s,e]=clause(charAt(m.t+0.02));const b=rangeBody(s,e);delete b.t;await post('/api/range',{id:m.id,...b})}
-  view='cur';setView();say('记上了：在右边写一下哪里不对');focusCard(m.id)};
+  view='cur';setView();say('已记录：请在右侧写明问题');focusCard(m.id)});
 function readSelection(){const s=getSelection();if(!s.rangeCount||s.isCollapsed)return null;const g=s.getRangeAt(0),el=n=>(n.nodeType===3?n.parentElement:n).closest('.say-text');
   const a=el(g.startContainer),b=el(g.endContainer);if(!a||!b)return null;const start=offsetIn(a,g.startContainer,g.startOffset),end=offsetIn(b,g.endContainer,g.endOffset);
   if(end<=start||!G.slice(start,end).trim())return null;return {start,end,rect:g.getBoundingClientRect()}}
 document.addEventListener('mouseup',e=>{if(e.target.id==='selbtn'||drag)return;setTimeout(()=>{pending=readSelection();const b=$('selbtn');
   if(!pending){b.style.display='none';return}b.style.display='block';b.style.left=Math.min(innerWidth-110,pending.rect.right+6)+'px';b.style.top=Math.max(8,pending.rect.top-36)+'px'},0)});
-$('selbtn').onclick=async()=>{if(!pending)return;const b=rangeBody(pending.start,pending.end);getSelection().removeAllRanges();$('selbtn').style.display='none';pending=null;
-  const m=await post('/api/markrange',b);if(!m.ok)return say('没记上：'+m.error,1);view='cur';setView();say('记上了：在右边写一下这段要怎么改');focusCard(m.id)};
+$('selbtn').onclick=()=>guard('mark',null,async()=>{if(!pending)return;const b=rangeBody(pending.start,pending.end);getSelection().removeAllRanges();$('selbtn').style.display='none';pending=null;
+  const m=await post('/api/markrange',b);if(!m.ok)return say('未能记录：'+m.error,1);view='cur';setView();say('已记录：请在右侧写明修改意见');focusCard(m.id)});
 // —— 点全文里的字 ——
 $('content').addEventListener('click',e=>{const t=e.target;
   if(t.dataset.t){jump(+t.dataset.t);return}
@@ -724,20 +766,21 @@ $('ops').addEventListener('click',async e=>{const t=e.target;
   else if(/TEXTAREA|BUTTON/.test(t.tagName))setActive(m.id);
   else{const was=active===m.id;setActive(m.id);showMark(m.id);if(!was)jump(m.t)}});
 $('ops').addEventListener('input',e=>{if(e.target.tagName!=='TEXTAREA'||!e.target.closest('.op')||e.target.closest('.rbox'))return;const m=mk(+e.target.closest('.op').dataset.c),text=e.target.value;grow(e.target);m.text=text;
-  clearTimeout(timers[m.id]);timers[m.id]=setTimeout(async()=>{const r=await post('/api/text',{id:m.id,text});r.ok?say('已保存：写好点右上“交给 AI”'):say('没保存上：'+r.error,1)},600)});
+  later('m'+m.id,async()=>{const r=await post('/api/text',{id:m.id,text});r.ok?say('已保存；完成后点右上“提交 AI”'):say('未能保存：'+r.error,1)},600)});
 $('ops').addEventListener('focusin',e=>{const card=e.target.closest('.op');if(card&&+card.dataset.c!==active){setActive(+card.dataset.c);showMark(+card.dataset.c)}});
 // —— “回复 AI”框：点选项、回复、截图、贴图、拖图（先于别的处理，免得图贴到意见自己身上）——
 const rkey=b=>b.dataset.rk+':'+b.dataset.rid;
 function rboxRefresh(key){document.querySelectorAll('.rbox').forEach(b=>{if(rkey(b)===key)b.querySelector('.rimgs').innerHTML=rimgsHtml(key)})}
 async function rStage(box,body){const k=box.dataset.rk,id=box.dataset.rid,key=rkey(box);
   const r=k==='m'?await post('/api/replyimg',{id:+id,...body}):await post('/api/item/replyimg',{id,...body});
-  if(!r.ok)return say('图没放上：'+r.error,1);(RP[key]=RP[key]||[]).push(r.name);rboxRefresh(key);say('图放好了，点“回复”一起发')}
-async function rSend(box,picked){const k=box.dataset.rk,id=box.dataset.rid,key=rkey(box),text=picked?'':(box.querySelector('.rtext').value||'').trim(),imgs=picked?[]:(RP[key]||[]);
+  if(!r.ok)return say('图没放上：'+r.error,1);(RP[key]=RP[key]||[]).push(r.name);rboxRefresh(key);say('图片已添加，点“回复”一并发送')}
+async function rSend(box,picked){return guard('r:'+box.dataset.rk+box.dataset.rid,LASTBTN,()=>rSend0(box,picked))}
+async function rSend0(box,picked){const k=box.dataset.rk,id=box.dataset.rid,key=rkey(box),text=picked?'':(box.querySelector('.rtext').value||'').trim(),imgs=picked?[]:(RP[key]||[]);
   if(!picked&&!text&&!imgs.length)return say('先写几句或带张图',1);
   const r=k==='m'?await post('/api/answer',{id:+id,text,imgs,picked:picked||''})
     :await post('/api/item/act',{id,v:+box.closest('.item').dataset.v,action:'写要求',append:true,text,imgs,picked:picked||''});
-  if(!r.ok)return say('没记上：'+r.error,1);if(!picked){delete RT[key];delete RP[key];box.querySelector('.rtext').value=''}
-  document.activeElement?.blur?.();say((picked?`你选了：${picked}`:'回复已记下')+'（待发送）：还能接着补一句、带张图；写好点右上“交给 AI”');load(true)}
+  if(!r.ok)return say('未能记录：'+r.error,1);if(!picked){delete RT[key];delete RP[key];box.querySelector('.rtext').value=''}
+  document.activeElement?.blur?.();say((picked?`你选了：${picked}`:'回复已记录')+'（待提交）；可继续补充文字或图片，完成后点右上“提交 AI”');load(true)}
 document.addEventListener('click',e=>{const box=e.target.closest('.rbox');if(!box)return;const t=e.target;
   if(t.classList.contains('ropt')){e.stopPropagation();rSend(box,t.dataset.o)}
   else if(t.classList.contains('rsend')){e.stopPropagation();rSend(box)}
@@ -800,21 +843,21 @@ function drawNav(){const cv=$('navc');if(!navOpen||!D||!D.chapters.length)return
     g.save();g.translate(c.x+c.w/2,128);g.scale(c.s,1);g.fillStyle=i===k?'#fff':'#C4C4C4';g.fillText(c.text,-c.tw/2,0);g.restore()});
   const c=ch[k],px=c.x+(c.w-1)*Math.min(1,Math.max(0,(T-c.a)/(c.b-c.a)));g.fillStyle='#64A9E8';g.fillRect(c.x,92,px-c.x,12);g.fillStyle='#FF5C5C';g.fillRect(px-6,64,12,40)}
 $('content').addEventListener('input',e=>{const t=e.target;if(!t.classList.contains('chin'))return;D.nav_labels[t.dataset.ch]=t.value;t.classList.add('chg');t.style.setProperty('--n',Math.max(4,[...t.value].length));
-  navFit();drawNav();strip();clearTimeout(timers.nav);timers.nav=setTimeout(async()=>{const labels=Object.fromEntries(D.chapters.map(c=>[c.id,label(c)]));
-    const r=await post('/api/nav',{labels});r.ok?(say('导航条上的字已保存（待发送）：写好点右上“交给 AI”'),D.nav_labels=r.nav_labels||D.nav_labels):say('导航条上的字没保存上：'+r.error,1)},600)});
+  navFit();drawNav();strip();later('nav',async()=>{const labels=Object.fromEntries(D.chapters.map(c=>[c.id,label(c)]));
+    const r=await post('/api/nav',{labels});r.ok?(say('导航条文字已保存（待提交）；完成后点右上“提交 AI”'),D.nav_labels=r.nav_labels||D.nav_labels):say('导航条上的字没保存上：'+r.error,1)},600)});
 $('content').addEventListener('keydown',e=>{if(e.target.classList.contains('chin')&&e.key==='Enter'){e.preventDefault();e.target.blur()}});
 async function navShot(){const r=await fetch('/api/navshot',{method:'POST',body:'{}'});
   if((r.headers.get('Content-Type')||'').startsWith('image/')){$('navimg').src=URL.createObjectURL(await r.blob())}else say('没截到底图：'+(await r.json()).error,1);drawNav()}
 function navPop(on){navOpen=on;const p=$('navpop');p.hidden=!on;if(!on)return;const r=$('navbtn').getBoundingClientRect();p.style.top=(r.bottom+8)+'px';p.style.left=Math.max(16,Math.min(innerWidth-p.offsetWidth-16,r.left-120))+'px';
-  if(!D.chapters.length){$('navc').hidden=true;say('这条片子还没做导航条（片子目录里没有 导航/project.json）')}else $('navc').hidden=false;if(!$('navimg').getAttribute('src'))navShot();else drawNav()}
+  if(!D.chapters.length){$('navc').hidden=true;say('该项目尚未制作导航条（项目文件夹里没有 导航/project.json）')}else $('navc').hidden=false;if(!$('navimg').getAttribute('src'))navShot();else drawNav()}
 $('navbtn').onclick=()=>navPop(!navOpen);$('navclose').onclick=()=>navPop(false);
 $('navshot').onclick=async()=>{say('正在截达芬奇这一帧当底图…');await navShot()};
 // —— 其余栏目：左边栏目，右边卡片／改字（数据在 D.board，服务那边的 审片台.json）——
 const MERGE={'导航文字':'审核线'};   // 页面上并进别的栏的（命令、数据里的栏目名不变；#导航文字 打开审核线）
 let cur=null,BD=null,asking={},saveT={};
-const LABEL={'写稿':'文案','文案':'口播剪辑','导航文字':'导航条上的字','上传文案':'发布'};   // 2026-11-24 用户定：上传文案改叫“发布”   // 页面上的叫法（2026-11-22 用户定）；命令、数据里的栏目名不变
+const LABEL={'写稿':'文稿','文案':'口播精剪','口播试听':'配音试听','审核线':'审片','导航文字':'导航条文字','上传文案':'发布'};   // 2026-11-24 用户定：上传文案改叫“发布”   // 页面上的叫法（2026-11-22 用户定）；命令、数据里的栏目名不变
 const OWN=['导航文字','上传文案'];  // 字是用户自己写的：主按钮叫“定稿”
-function setCol(c,quiet){c=MERGE[c]||c;if(!c||!document.querySelector(`.pane[data-col="${c}"]`))return;if(cur==='文案'&&c!=='文案')leaveKoubo();cur=c;
+function setCol(c,quiet){c=MERGE[c]||c;if(!c||!document.querySelector(`.pane[data-col="${c}"]`))return;if(c!==cur)flushSaves();if(cur==='文案'&&c!=='文案')leaveKoubo();cur=c;
   document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.dataset.col===c));
   document.querySelectorAll('#cols button').forEach(b=>b.classList.toggle('on',b.dataset.col===c));tbMain();
   if(!quiet)history.replaceState(null,'','#'+encodeURIComponent(c));
@@ -837,7 +880,7 @@ const msend=c=>gcols(c).map(scol).reduce((a,n)=>({unsent:a.unsent+(n.unsent||0),
 function firstCol(){let h=decodeURIComponent(location.hash.slice(1));h=MERGE[h]||h;if(h&&BD.columns.includes(h))return h;if(D.lite)return D.koubo?.ready?'文案':'写稿';
   return shownCols().find(c=>['待你看','待发送'].includes(mcol(c).state))||(D.review_timeline?'审核线':shownCols().find(c=>!mcol(c).off)||'审核线')}
 // 顶栏“轮到你 N｜AI 在改 N”：点了跳到第一处
-function jumpTo(kind){const want=kind==='ai'?['AI 在改']:['待你看','待发送'],c=shownCols().find(c=>!mcol(c).off&&want.some(w=>mcol(c).counts[w]));if(!c)return say(kind==='ai'?'现在没有 AI 在改的':'现在没有轮到你的');
+function jumpTo(kind){const want=kind==='ai'?['AI 在改']:['待你看','待发送'],c=shownCols().find(c=>!mcol(c).off&&want.some(w=>mcol(c).counts[w]));if(!c)return say(kind==='ai'?'当前没有 AI 处理中的事项':'当前没有待审阅的事项');
   if(STAGE_COLS.includes(c)){const it=BD.items.find(x=>x.column===c&&want.includes(x.ustate));if(it)STAGE[c]=it.id}
   setCol(c);setTimeout(()=>{const el=document.querySelector(want.map(w=>`.pane.on .item.u-${UST[w]},.pane.on .op.u-${UST[w]},.pane.on .wn.u-${UST[w]}`).join(','));
     if(el){el.scrollIntoView({block:'center',behavior:'smooth'});if(el.classList.contains('op')){setActive(+el.dataset.c);showMark(+el.dataset.c)}}},60)}
@@ -848,17 +891,17 @@ $('goHome').onclick=()=>{flushSaves();if(EMB)window.parent.postMessage({cutdesk:
 // 在 Mac 程序外壳里（WKWebView，用户代理里没有 Safari 字样）、自己占一个窗口时：左上留出红黄绿三颗灯的位置
 if(!EMB&&/AppleWebKit/.test(navigator.userAgent)&&!/Safari\//.test(navigator.userAgent))document.documentElement.classList.add('app');
 function aiShow(){$('goHome').hidden=!(EMB||HOMEQ||D?.home);const on=!!BD?.send?.listening,c=D?.wait_cmd||{};
-  $('aidot').className='dvdot '+(on?'ok':'off');$('aiword').textContent=on?'AI 已连':'AI 未连';
+  $('aidot').className='dvdot '+(on?'ok':'off');$('aiword').textContent=on?'AI 在线':'AI 离线';
   if($('aipop').open)return;
-  $('aibody').innerHTML=`<h3>${on?'AI 正挂着等：你点“交给 AI”它马上开始改':'AI 现在没在等：你点“交给 AI”只会先记下，它不知道'}</h3>
-<p class="muted">怎么连：打开 Claude Code（或 Codex），在对话里说一句“看审片台”；或让它运行下面任一条命令（Claude Code 放后台跑，一直挂着）。</p>
-<p class="muted">只等这条片子：</p><code>${esc(c.one||'')}</code><p class="muted">同时有好几条片子在做，等所有片子（任何一条点了“交给 AI”它都接）：</p><code>${esc(c.all||'')}</code>`}
+  $('aibody').innerHTML=`<h3>${on?'AI 在线：点“提交 AI”后立即开始处理':'AI 离线：点“提交 AI”只会先记录，AI 不会收到'}</h3>
+<p class="muted">连接方法：打开 Claude Code（或 Codex），在对话中说“看审片台”；或让它运行下面任一条命令（Claude Code 在后台持续运行）。</p>
+<p class="muted">只等待本项目：</p><code>${esc(c.one||'')}</code><p class="muted">同时制作多个项目时，等待所有项目（任一项目点“提交 AI”都会接手）：</p><code>${esc(c.all||'')}</code>`}
 function renderBoard(){BD=D.board;if(!BD)return;
   $('filmname').textContent=BD.name||D.title;$('filmname').title=BD.name||D.title;
-  const tt=BD.totals||{};$('tTurn').innerHTML=`等你处理 <b>${tt['轮到你']||0}</b>`;$('tAi').innerHTML=`AI 修改中 <b>${tt['AI 在改']||0}</b>`;
+  const tt=BD.totals||{};$('tTurn').innerHTML=`待审阅 <b>${tt['轮到你']||0}</b>`;$('tAi').innerHTML=`AI 处理中 <b>${tt['AI 在改']||0}</b>`;
   $('tTurn').classList.toggle('on-turn',!!tt['轮到你']);$('tAi').classList.toggle('on-ai',!!tt['AI 在改']);
   $('dvpop').hidden=!!D.lite;liteNotes();aiShow();
-  $('cols').innerHTML=shownCols().map(c=>{const u=mcol(c),s=u.state,n=s&&s!=='已定'?(u.counts[s]||''):'',w=u.off?'还没到':s?(s==='已定'?'✓ 已定':`${SN[s]} ${n}`):'';
+  $('cols').innerHTML=shownCols().map(c=>{const u=mcol(c),s=u.state,n=s&&s!=='已定'?(u.counts[s]||''):'',w=u.off?'未开始':s?(s==='已定'?'✓ 已定稿':`${SN[s]} ${n}`):'';
     return `<button data-col="${esc(c)}" class="${c===cur?'on':''}${u.off?' off':''} u-${UST[s]||'none'}" title="${esc((LABEL[c]||c)+(w?'：'+w:''))}"><span class="cn">${esc(LABEL[c]||c)}</span><span class="cs">${s?'<i class="sdot"></i>':''}<b class="cnum">${s==='已定'?'✓':n}</b><span class="cw">${esc(w)}</span></span></button>`}).join('');
   document.querySelectorAll('.pane').forEach(p=>{const c=p.dataset.col;p.classList.toggle('off',!!(BD.ucols&&mcol(c).off))});
   for(const box of document.querySelectorAll('[data-items]')){const c=box.dataset.items;
@@ -867,7 +910,7 @@ function renderBoard(){BD=D.board;if(!BD)return;
     const sorted=its.map((x,k)=>[rank[x.ustate]??1,k,x]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).map(x=>x[2]);
     if(STAGE_COLS.includes(c)&&sorted.length){const cur=sorted.find(x=>x.id===STAGE[c])||sorted[0];STAGE[c]=cur.id;const ov=box.querySelector('.vo-v');box.innerHTML=itemHtml(cur)+stripHtml(c,sorted,cur.id);
       const nv=box.querySelector('.vo-v');if(ov&&nv&&ov.dataset.k===nv.dataset.k&&!ov.paused)nv.replaceWith(ov);continue}
-    box.innerHTML=sorted.length?sorted.map(itemHtml).join(''):(ed?'':`<div class="emptycol">还没到：AI 做到这一步，会把要你看的发到这里。</div>`)}
+    box.innerHTML=sorted.length?sorted.map(itemHtml).join(''):(ed?'':`<div class="emptycol">未开始：AI 进行到这一步时，会把待审阅的内容发到这里。</div>`)}
   scriptEditor();writingEditor();uploadEditor();koubo();shownCols().forEach(c=>{renderMain(c);sumText(c)});tbMain();cmpBar();renderOps();   // 意见区里的“导航标签”卡片跟着项的数据重画
   document.querySelectorAll('.pane.on textarea.ed:not(.big)').forEach(fit);
   if(!cur)setCol(firstCol(),true)}
@@ -875,48 +918,54 @@ function renderBoard(){BD=D.board;if(!BD)return;
 
 // —— 发布设置（2026-11-24 用户：“加一个发布功能，就上传到蚁小二的草稿……定时发送可以在这里写”）：什么时候发用按钮＋日期时间（不让 AI 猜时间），其余要求写一句给发布 AI 的话 ——
 function pubHtml(){const P=BD.publish;if(!P)return '';const s=P.settings,r=P.req,sch=s.mode==='schedule';
-  const st=r?(r.handled?`<p class="pub-st ok">✓ 已存草稿 · ${esc(r.handled.at.slice(5,16))} · AI：${esc(r.handled.note)}</p>`:`<p class="pub-st ai">已交给 AI 存草稿（${esc(r.at.slice(5,16))}${r.mode==='schedule'?'，定时 '+esc(r.time):''}）：它导出、存档、上传，存好回你一句</p>`):'';
-  return `<div class="editor pubset"><h3>发布设置<span class="st2">真正发出去还是你在蚁小二客户端里点；AI 只存草稿</span></h3>
-<div class="pub-when" role="radiogroup" aria-label="什么时候发"><label><input type="radio" name="pubmode" value="draft"${sch?'':' checked'}> 只存草稿（我自己在蚁小二里点发布）</label>
+  const st=r?(r.cancelled?`<p class="pub-st warn">已撤回（${esc(String(r.cancelled.at||'').slice(5,16))}）：可修改设置后重新提交</p>`:r.handled?`<p class="pub-st ok">✓ 已存草稿 · ${esc(r.handled.at.slice(5,16))} · AI：${esc(r.handled.note)}</p>`:`<p class="pub-st ai">已提交 AI 存草稿（${esc(r.at.slice(5,16))}${r.mode==='schedule'?'，定时 '+esc(r.time):''}）：AI 将导出、存档、上传，完成后回复</p>`):'';
+  return `<div class="editor pubset"><h3>发布设置<span class="st2">正式发布需在蚁小二客户端操作；AI 只存草稿</span></h3>
+<div class="pub-when" role="radiogroup" aria-label="什么时候发"><label><input type="radio" name="pubmode" value="draft"${sch?'':' checked'}> 只存草稿（在蚁小二中手动发布）</label>
 <label><input type="radio" name="pubmode" value="schedule"${sch?' checked':''}> 定时发布</label><input type="datetime-local" id="pubtime" value="${esc((s.time||'').replace(' ','T'))}"${sch?'':' disabled'} aria-label="定时发布的日期和时间"></div>
-<h3>给发布 AI 的话<span class="st2">不写就按这个 IP 配好的平台全发</span></h3><textarea id="pubnote" class="ed" rows="2" placeholder="比如：这次只发抖音和小红书；小红书标题短一点；B 站分区放家居">${esc(s.note)}</textarea>${st}
+<h3>发布说明<span class="st2">不填写则发布到该 IP 配置的全部平台</span></h3><textarea id="pubnote" class="ed" rows="2" placeholder="例如：本次只发抖音和小红书；小红书标题精简；B 站分区选家居">${esc(s.note)}</textarea>${st}
 ${P.gate.ok?'':`<p class="pub-st warn">还不能存：${esc(P.gate.why)}</p>`}</div>`}
+async function pubCancel(){if(!confirm('撤回这次存草稿请求？\n若 AI 已开始上传，蚁小二里可能已有部分草稿，请到客户端核对。'))return;
+  const r=await post('/api/publish/cancel',{});if(!r.ok)return say(r.status===404?'当前服务版本不支持撤回，请在对话里告诉 AI 取消':'未能撤回：'+r.error,1);say('已撤回，可修改设置后重新提交');load(true)}
+async function cancelSend(col){if(!confirm(`撤回“${nm(col)}”已提交 AI 的内容？撤回后可修改，再重新提交。`))return;const bad=[];
+  for(const x of gcols(col).filter(x=>scol(x).sent||scol(x).doing)){const r=await post('/api/unsend',{column:x});if(!r.ok)bad.push(r.status===404?'当前服务版本不支持撤回':`${nm(x)}：${r.error}`)}
+  bad.length?say('未能撤回：'+bad.join('；'),1):say('已撤回，内容回到待提交');load(true)}
 function pubVals(){const m=document.querySelector('input[name=pubmode]:checked')?.value||'draft',t=($('pubtime')?.value||'').replace('T',' '),n=$('pubnote')?.value||'';return {mode:m,time:t,note:n}}
-let pubT=0;function pubSave(){clearTimeout(pubT);pubT=setTimeout(async()=>{const r=await post('/api/publish/set',pubVals());if(!r.ok)say('发布设置没存上：'+r.error,1)},500)}
+function pubSave(){later('pub',async()=>{const r=await post('/api/publish/set',pubVals());if(!r.ok)say('发布设置没存上：'+r.error,1)},500)}
 document.addEventListener('change',e=>{if(e.target.name==='pubmode'){$('pubtime').disabled=e.target.value!=='schedule';if(e.target.value==='schedule'&&!$('pubtime').value){const d=new Date(Date.now()+86400000);d.setHours(20,0,0,0);$('pubtime').value=new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}pubSave()}else if(e.target.id==='pubtime')pubSave()});
 document.addEventListener('input',e=>{if(e.target.id==='pubnote')pubSave()});
-async function publishNow(){clearTimeout(pubT);say('正在交给 AI…');const r=await post('/api/publish/request',pubVals());if(!r.ok)return say('没交上：'+r.error,1);say('已交给 AI 存到蚁小二草稿：它导出、存档、上传，存好回你一句');load(true)}
+async function publishNow(){await window.cutdeskFlush();say('正在提交 AI…');const r=await post('/api/publish/request',pubVals());if(!r.ok)return say('未能提交：'+r.error,1);say('已提交 AI 存入蚁小二草稿：AI 将导出、存档、上传，完成后回复');load(true)}
 function pubMain(){const P=BD.publish,st=(BD.settle||{})['上传文案'];if(!P)return null;const r=P.req,L='存到蚁小二草稿';
-  if(r&&!r.handled)return {label:L,dis:true,why:'已交给 AI 存草稿：等它回话'};
+  if(r&&!r.handled&&!r.cancelled){const m=r.minutes??(Math.floor((Date.now()-Date.parse(String(r.at).replace(' ','T')))/60000)||0);   // AI 接了却不回话时不能永远灰着：随时可撤回；后台判定“没动静了”（state=stale）时明说
+    return {label:'撤回请求',act:'pubcancel',why:r.state==='stale'?`已提交 AI ${m} 分钟仍未回复：可撤回后重新提交`:r.state==='doing'?'AI 已接手，正在导出、上传；需要修改设置可先撤回':'已提交 AI 存草稿，等待接手；需要修改设置可先撤回'}}
   if(r&&r.handled&&st&&st.state==='ok')return {label:'✓ 已存草稿',done:true,why:'AI：'+r.handled.note};
   if(!P.gate.ok)return {label:L,dis:true,why:P.gate.why};
-  return {label:L,act:'publish',why:P.settings.mode==='schedule'?(P.settings.time?'定时 '+P.settings.time+'（AI 存成定时草稿）':'选了定时发布：先填日期和时间'):'只存草稿：存好后你在蚁小二里点发布'}}
+  return {label:L,act:'publish',why:P.settings.mode==='schedule'?(P.settings.time?'定时 '+P.settings.time+'（AI 存成定时草稿）':'已选定时发布：请先填写日期和时间'):'只存草稿：存好后在蚁小二中手动发布'}}
 function mainInfo(c){if(c==='上传文案'){const pm=pubMain();if(pm)return pm}
-  const cs=gcols(c);if(cs.length>1)return mainInfo2(c,cs);const n=(BD.send?.cols||{})[c]||{unsent:0,sent:0,doing:0},st=(BD.settle||{})[c],u=ucol(c),own=OWN.includes(c),word=own?'定稿':c==='写稿'?'定稿':'确定此栏';
-  const done=st&&st.state==='ok'?{label:`✓ 已定 · ${(st.at||'').slice(5,16)}`,done:true,why:st.note&&!(c==='写稿'&&BD.writing?.kick)?'AI：'+st.note:''}:null;
-  if(u.off)return {label:st?word:'交给 AI',dis:true,why:'还没到：AI 做到这一步会发到这里'};
-  if(own){if(done&&!n.unsent)return done;if(st&&st.state==='can')return {label:'定稿',act:'settle',why:n.unsent?`改的 ${n.unsent} 处一起交给 AI`:'字是你自己写的：写好点这里就定了'};
-    if(n.unsent)return {label:`交给 AI（${n.unsent}）`,act:'send',why:'你提了意见：交给 AI 改'};return {label:'定稿',dis:true,why:whyText(c,st)}}
-  if(n.unsent){const send={label:`交给 AI（${n.unsent}）`,act:'send'};   // 交给 AI 和确定此栏分开（2026-11-24 用户定）：能定就两个按钮都给
-    if(st&&st.state==='can'&&c!=='写稿')return {label:word,act:'settle',why:'定了会把你选的、写的一起交给 AI',alt:send};return {...send,why:''}}
+  const cs=gcols(c);if(cs.length>1)return mainInfo2(c,cs);const n=(BD.send?.cols||{})[c]||{unsent:0,sent:0,doing:0},st=(BD.settle||{})[c],u=ucol(c),own=OWN.includes(c),word='定稿';
+  const done=st&&st.state==='ok'?{label:`✓ 已定稿 · ${(st.at||'').slice(5,16)}`,done:true,why:st.note&&!(c==='写稿'&&BD.writing?.kick)?'AI：'+st.note:''}:null;
+  if(u.off)return {label:st?word:'提交 AI',dis:true,why:'未开始：AI 进行到这一步时会把内容发到这里'};
+  if(own){if(done&&!n.unsent)return done;if(st&&st.state==='can')return {label:'定稿',act:'settle',why:n.unsent?`修改的 ${n.unsent} 处将一并提交 AI`:'内容由你撰写：完成后点此即定稿'};
+    if(n.unsent)return {label:`提交 AI（${n.unsent}）`,act:'send',why:'已有意见：提交 AI 修改'};return {label:'定稿',dis:true,why:whyText(c,st)}}
+  if(n.unsent){const send={label:`提交 AI（${n.unsent}）`,act:'send'};   // 提交 AI 和定稿分开（2026-11-24 用户定）：能定就两个按钮都给
+    if(st&&st.state==='can'&&c!=='写稿')return {label:word,act:'settle',why:'定稿时会把你的选择和意见一并提交 AI',alt:send};return {...send,why:''}}
   if(done)return done;
-  if(c==='写稿'&&st&&st.state==='can')return {label:word,act:'settle',why:BD.writing?.early?'写好了点这里：AI 先按标题开项，你备好素材再点“开工”':'改好了点这里：AI 照着把用到这些字的地方跟着改'};
-  if(st&&st.state==='can')return {label:word,act:'settle',why:c==='审核线'&&u.counts['待你看']?`AI 回了 ${u.counts['待你看']} 条：在达芬奇里看过没问题就点这里；还不行在这一轮再提意见`:'都看过、没问题了就点这里'};
+  if(c==='写稿'&&st&&st.state==='can')return {label:word,act:'settle',why:BD.writing?.early?'撰写完成后点此定稿：AI 先按标题建立项目，素材准备好后再点“开始制作”':'修改完成后点此定稿：AI 将同步修改引用这些文字的地方'};
+  if(st&&st.state==='can')return {label:word,act:'settle',why:c==='审核线'&&u.counts['待你看']?`AI 已交回 ${u.counts['待你看']} 条：在达芬奇中审阅无误后点此定稿；仍需修改请在本轮继续提意见`:'全部审阅无误后点此定稿'};
   if(st)return {label:word,dis:true,why:whyText(c,st)};
-  if(n.sent||n.doing)return {label:'交给 AI',dis:true,why:'AI 在改：等它改完再看'};
-  return {label:'交给 AI',dis:true,why:c==='文案'?'改了字自动保存；改完在这里交给 AI':'点“可以”或提意见以后，在这里交给 AI'}}
+  if(n.sent||n.doing)return {label:'提交 AI',dis:true,why:'AI 处理中：完成后再审阅'};
+  return {label:'提交 AI',dis:true,why:c==='文案'?'修改自动保存；完成后在此提交 AI':'点“可以”或提意见后，在此提交 AI'}}
 // 审核线＋导航文字合起来的主按钮：交给 AI 一次发两栏；确定此栏／取消两栏一起记；哪一栏不能定写哪一栏的原因
 function mainInfo2(c,cs){const n=msend(c),u=mcol(c),sts=cs.map(x=>(BD.settle||{})[x]);
-  if(u.off)return {label:'确定此栏',dis:true,why:'还没到：AI 做到这一步会发到这里'};
-  if(n.unsent){const k=cs.filter(x=>scol(x).unsent),send={label:`交给 AI（${n.unsent}）`,act:'send',why:k.length>1?'审核线的意见和导航条上的字一起交':k[0]==='导航文字'?'导航条上的字交给 AI 改导航条':''};
-    if(sts.every(s=>s&&(s.state==='ok'||s.state==='can')))return {label:'确定此栏',act:'settle',why:'定了会把还没交的意见一起交给 AI',alt:send};return send}
-  if(sts.every(s=>s&&s.state==='ok'))return {label:`✓ 已定 · ${sts.map(s=>s.at||'').sort().at(-1).slice(5,16)}`,done:true};
-  if(sts.every(s=>s&&(s.state==='ok'||s.state==='can')))return {label:'确定此栏',act:'settle',why:u.counts['待你看']?`AI 回了 ${u.counts['待你看']} 条：在达芬奇里看过没问题就点这里；还不行在这一轮再提意见`:'都看过、没问题了就点这里（导航条上的字一起定）'};
-  const k=sts.findIndex(s=>!s||s.state==='no');return {label:'确定此栏',dis:true,why:(cs[k]==='导航文字'?'导航标签：':'')+whyText(cs[k],sts[k])}}
+  if(u.off)return {label:'定稿',dis:true,why:'未开始：AI 进行到这一步时会把内容发到这里'};
+  if(n.unsent){const k=cs.filter(x=>scol(x).unsent),send={label:`提交 AI（${n.unsent}）`,act:'send',why:k.length>1?'审片意见与导航条文字一并提交':k[0]==='导航文字'?'导航条文字提交 AI 修改导航条':''};
+    if(sts.every(s=>s&&(s.state==='ok'||s.state==='can')))return {label:'定稿',act:'settle',why:'定稿时会把未提交的意见一并提交 AI',alt:send};return send}
+  if(sts.every(s=>s&&s.state==='ok'))return {label:`✓ 已定稿 · ${sts.map(s=>s.at||'').sort().at(-1).slice(5,16)}`,done:true};
+  if(sts.every(s=>s&&(s.state==='ok'||s.state==='can')))return {label:'定稿',act:'settle',why:u.counts['待你看']?`AI 已交回 ${u.counts['待你看']} 条：在达芬奇中审阅无误后点此定稿；仍需修改请在本轮继续提意见`:'全部审阅无误后点此定稿（导航条文字一并定稿）'};
+  const k=sts.findIndex(s=>!s||s.state==='no');return {label:'定稿',dis:true,why:(cs[k]==='导航文字'?'导航标签：':'')+whyText(cs[k],sts[k])}}
 function whyText(c,st){const u=ucol(c).counts,n=(BD.send?.cols||{})[c]||{};
   if(c==='写稿')return fix(st&&st.why||'');
-  if(u['待你看'])return `还有 ${u['待你看']} 项待你看：先点“可以／选这个”或提意见`;
-  if(n.sent||n.doing)return 'AI 在改：等它改完你看过再定';
+  if(u['待你看'])return `还有 ${u['待你看']} 项待审阅：请先点“可以／选这个”或提意见`;
+  if(n.sent||n.doing)return 'AI 处理中：完成并审阅后再定稿';
   return fix(st&&st.why||'')}
 // 方向 C（2026-11-24 用户定“按照 c 来开发”）：主按钮在窗口工具栏右上，跟着当前栏变；口播剪辑栏有剪辑器时用剪辑器自己的“保存到达芬奇”，这里不放
 function tbMain(){const b=$('tbmain');if(!b||!BD)return;const kb=cur==='文案'&&!!D?.koubo?.ready;b.hidden=!cur;if(b.hidden)return;
@@ -927,42 +976,43 @@ function kbSave(){const b=$('tbmain'),d=KB.frame?.contentDocument,sb=d?.getEleme
   const dis=!sb||sb.disabled,txt=sb?.textContent||'保存到达芬奇',h=`<button class="btn mainbtn${dis?'':' primary'}" id="kbsave"${dis?' disabled':''}>${esc(txt)}</button>`;if(b.innerHTML!==h)b.innerHTML=h}
 setInterval(()=>{if(cur==='文案'&&D?.koubo?.ready)kbSave()},400);
 document.addEventListener('click',e=>{if(e.target.closest('#kbsave'))KB.frame?.contentDocument?.getElementById('saveResolve')?.click()});
-function renderMain(c){const boxes=document.querySelectorAll(`[data-main="${c}"]`);if(!boxes.length||!BD)return;const x=mainInfo(c),n=msend(c),away=(n.sent||n.doing)&&!BD.send?.listening;
-  const h=`<span class="why">${esc(fix(x.why||''))}${away?(x.why?'<br>':'')+hint()+(n.sent?' <button class="link recall">再叫一次</button>':''):''}</span>${x.done?'<button class="link undo" title="撤回“已定”">取消</button>':''}${x.alt?`<button class="btn mainbtn" data-act="${x.alt.act}">${esc(x.alt.label)}</button>`:''}<button class="btn mainbtn${x.done?' done':x.dis?'':' primary'}" data-act="${x.act||''}"${x.dis?' disabled':''}${x.done?' tabindex="-1"':''}>${esc(x.label)}</button>`;
+function renderMain(c){const boxes=document.querySelectorAll(`[data-main="${c}"]`);if(!boxes.length||!BD)return;const x={...mainInfo(c)};if(BUSY.has('main:'+c)){x.dis=true;x.busy=true;x.alt=null}const stl=gcols(c).reduce((a,k)=>a+(scol(k).stale||0),0);if(stl&&c!=='上传文案')x.why=`有 ${stl} 项提交 AI 后长时间未回复：可“再次提醒”或“撤回”`;const _=0,n=msend(c),away=(n.sent||n.doing)&&!BD.send?.listening;
+  const h=`<span class="why">${esc(fix(x.why||''))}${away?(x.why?'<br>':'')+hint()+(n.sent?' <button class="link recall">再次提醒</button>':''):''}${stl&&!away&&c!=='上传文案'?' <button class="link recall">再次提醒</button>':''}${(n.sent||n.doing)&&c!=='上传文案'?' <button class="link cancelsend" title="撤回已提交 AI 的内容">撤回</button>':''}</span>${x.done?'<button class="link undo" title="撤回定稿">取消</button>':''}${x.alt?`<button class="btn mainbtn" data-act="${x.alt.act}">${esc(x.alt.label)}</button>`:''}<button class="btn mainbtn${x.done?' done':x.busy?' primary busy':x.dis?'':' primary'}" data-act="${x.act||''}"${x.dis?' disabled':''}${x.done?' tabindex="-1"':''}>${esc(x.busy?'处理中…':x.label)}</button>`;
   boxes.forEach(b=>b.innerHTML=h)}
 // 栏头的一句状态摘要
 function sumText(c){const el=document.querySelector(`[data-sum="${c}"]`);if(!el||!BD)return;const u=mcol(c),its=BD.items.filter(x=>x.column===c),parts=[];
   const cnt=['待你看','待发送','AI 在改'].filter(k=>u.counts[k]).map(k=>`${SN[k]} ${u.counts[k]}`);
-  if(u.off){el.textContent='还没到';return}
+  if(u.off){el.textContent='未开始';return}
   if(c==='审核线'){parts.push(`第 ${D.round} 轮`);const nch=Object.keys(D.nav_labels||{}).length;if(nch)parts.push(`导航改了 ${nch} 章`)}
-  else if(c==='导航文字'){parts.push(D.chapters.length?`${D.chapters.length} 章 · 改了 ${Object.keys(D.nav_labels||{}).length} 章的字`:'还没做导航条')}
+  else if(c==='导航文字'){parts.push(D.chapters.length?`${D.chapters.length} 章 · 已改 ${Object.keys(D.nav_labels||{}).length} 章`:'尚未制作导航条')}
   else if(c==='上传文案'){const up=BD.upload||{};if(up.exists){const dr=up.draft,tags=(dr?dr.tags:up.tags)||[],desc=(dr?dr.description:up.description)||'';
       parts.push(`标签 ${tags.length} 个 ${tags.length>=8&&tags.length<=10?'✓':'✗ 要 8–10 个'}`,`简介 ${desc.length} 字`,dr?'没写回 项目.json（看下面红字）':'已写回 项目.json ✓')}}
-  else if(c==='文案')parts.push('用改文字的方法剪口播')
+  else if(c==='文案')parts.push('以编辑文字的方式精剪口播')
   else if(c==='写稿'){const w=BD.writing||{};if(w.ok){const [n,sec]=wCount();parts.push(`${n} 字`,`约 ${sec>=60?Math.floor(sec/60)+' 分 '+sec%60+' 秒':sec+' 秒'}`)}else parts.push(w.why||'')}
-  else parts.push(`${its.length} 项`+(its.filter(x=>x.ustate==='已定').length?` · 已定 ${its.filter(x=>x.ustate==='已定').length}`:''));
+  else parts.push(`${its.length} 项`+(its.filter(x=>x.ustate==='已定').length?` · 已定稿 ${its.filter(x=>x.ustate==='已定').length}`:''));
   el.textContent=parts.concat(cnt).join(' · ');el.title=el.textContent}
 // 主按钮的三个动作：一栏的照旧；审核线连带导航文字时依次对两栏各调一次接口（服务端接口不变），哪一栏没成写清哪一栏
 const nm=x=>LABEL[x]||x;
-async function settleNow(col){say('正在记…');await new Promise(r=>setTimeout(r,1300));   // 等刚写的字自动保存完
+async function settleNow(col){say('正在定稿…');await window.cutdeskFlush();   // 先把刚写的字存完
   const cs=gcols(col).filter(x=>(BD.settle||{})[x]?.state!=='ok'),ok=[],bad=[];let sent=0;
-  for(const x of cs){const r=await post('/api/settle',{column:x,on:true});if(r.ok){ok.push(x);sent+=r.sent||0}else bad.push(`${nm(x)}没定上：${r.error||'没记上'}`)}
-  if(bad.length)say((ok.length?ok.map(nm).join('、')+'已定；':'')+bad.join('；'),true);else say(col==='写稿'?(BD.writing?.early?'文案已定稿：AI 先按标题开项；你把素材备好，点上面的“开工”它才开始做':'文案已定稿，已交给 AI：它跟着改用到的地方'):`“${nm(col)}”这一栏已定`+(sent?`，${sent} 处已交给 AI`:''));load(true)}
-async function sendNow(col,recall){say('正在交给 AI…');await new Promise(r=>setTimeout(r,1300));
+  for(const x of cs){const r=await post('/api/settle',{column:x,on:true});if(r.ok){ok.push(x);sent+=r.sent||0}else bad.push(`${nm(x)}未能定稿：${r.error||'未能记录'}`)}
+  if(bad.length)say((ok.length?ok.map(nm).join('、')+'已定稿；':'')+bad.join('；'),true);else say(col==='写稿'?(BD.writing?.early?'文稿已定稿：AI 先按标题建立项目；素材准备好后点上方“开始制作”':'文稿已定稿并提交 AI：AI 将同步修改引用处'):`“${nm(col)}”已定稿`+(sent?`，${sent} 处已提交 AI`:''));load(true)}
+async function sendNow(col,recall){say('正在提交 AI…');await window.cutdeskFlush();
   const cs=gcols(col).filter(x=>recall?scol(x).sent:scol(x).unsent),bad=[];let n=0,settled=false,listening=true;
-  for(const x of cs){const r=await post('/api/send',{column:x});if(r.ok){n+=r.n;settled=settled||!!r.settled;listening=r.listening}else bad.push(`${nm(x)}：${r.error||'没交出去'}`)}
-  if(bad.length)return say(bad.join('；')+'（刷新页面再点一次）',true),load(true);
-  say(listening?`“${nm(col)}”的 ${n} 处已交给 AI，它现在开始改`+(settled?'；导航条上的字已定':''):`已记下 ${n} 处，但 AI 现在没在等：回对话里说一句“看审片台”`,!listening);load(true)}
+  for(const x of cs){const r=await post('/api/send',{column:x});if(r.ok){n+=r.n;settled=settled||!!r.settled;listening=r.listening}else bad.push(`${nm(x)}：${r.error||'未能提交'}`)}
+  if(bad.length)return say(bad.join('；')+'（请刷新页面后重试）',true),load(true);
+  say(listening?`“${nm(col)}”的 ${n} 处已提交 AI，AI 已开始处理`+(settled?'；导航条文字已定稿':''):`已记录 ${n} 处，但 AI 当前离线：请在对话中说“看审片台”`,!listening);load(true)}
 async function unsettle(col){const cs=gcols(col).filter(x=>(BD.settle||{})[x]?.state==='ok'),bad=[];
   for(const x of cs){const r=await post('/api/settle',{column:x,on:false});if(!r.ok)bad.push(`${nm(x)}：${r.error||'没记上'}`)}
-  bad.length?say('没取消上：'+bad.join('；'),true):say('已取消“已定”');load(true)}
+  bad.length?say('未能取消：'+bad.join('；'),true):say('已取消定稿');load(true)}
 document.addEventListener('click',async e=>{const t=e.target,box=t.closest('[data-main]');if(!box)return;const c=box.dataset.main;
-  if(t.classList.contains('mainbtn')){if(t.dataset.act==='publish')return publishNow();if(t.dataset.act==='send')sendNow(c);else if(t.dataset.act==='settle'){
+  if(t.classList.contains('mainbtn')&&t.dataset.act)guard('main:'+c,t,async()=>{renderMain(c);if(t.dataset.act==='publish')return publishNow();if(t.dataset.act==='pubcancel')return pubCancel();if(t.dataset.act==='send')return sendNow(c);if(t.dataset.act==='settle'){
       // 上传文案只留“定稿”一个确认（第二轮，用户定）：你点了定稿，就替你把这一栏里还在“待你看”的 AI 初稿项一起记成“可以”——是你这一下点击，不是 AI 替你点
-      if(c==='上传文案'){for(const it of BD.items.filter(x=>x.column==='上传文案'&&x.ustate==='待你看'&&x.versions.at(-1)?.kind!=='多选一')){const r=await post('/api/item/act',{id:it.id,v:it.versions.at(-1).v,action:'可以'});if(!r.ok)return say('没记上：'+r.error,1)}}
-      settleNow(c)}}
-  else if(t.classList.contains('recall'))sendNow(c,true);
-  else if(t.classList.contains('undo'))unsettle(c)});
+      if(c==='上传文案'){for(const it of BD.items.filter(x=>x.column==='上传文案'&&x.ustate==='待你看'&&x.versions.at(-1)?.kind!=='多选一')){const r=await post('/api/item/act',{id:it.id,v:it.versions.at(-1).v,action:'可以'});if(!r.ok)return say('未能记录：'+r.error,1)}}
+      return settleNow(c)}}).then(()=>renderMain(c));
+  else if(t.classList.contains('recall'))guard('main:'+c,t,()=>sendNow(c,true));
+  else if(t.classList.contains('undo'))guard('main:'+c,t,()=>unsettle(c));
+  else if(t.classList.contains('cancelsend'))guard('main:'+c,t,()=>cancelSend(c))});
 // —— 卡片 ——
 const fileUrl=f=>'/审片台/'+f.path.split('/').slice(1).map(encodeURIComponent).join('/');
 // 视频（2026-11-22 反馈单）：动画直接发 mp4/mov/webm；每个视频自带播放条（能开关声音、循环），两个以上时上面一排“一起播放／从头／上一帧／下一帧”，几版并排对着看；“原尺寸”放大看
@@ -1037,20 +1087,20 @@ function itemHtml(it){const {ver,after,dec,last,editing,convo,open,decided}=item
   // 方向 C 第二轮（2026-11-24 用户定“各栏统一骨架”）：左边 i-main 是东西本身，右边 i-talk 是这一项的对话（意见、AI 回话、以前的版本）；画面类栏目里两块左右排，其余栏目上下排
   return `<div class="item u-${UST[it.ustate]||'none'}" data-id="${esc(it.id)}" data-v="${ver.v}"><div class="i-main">
 <div class="ihead"><b>${esc(ver.title)}</b>${tag(it.ustate)}${chips(ver)}${it.ustate==='AI 在改'?hint():''}<span class="meta" title="${esc(it.id)} · ${ver.at.slice(5,16)}${ver.anim?' · '+esc(ver.anim.kind)+'（点了就是确认）':''}">第 ${ver.v} 版</span>
-<span class="ibar">${decided?`<span class="done-note">✓ 已定${dec?'（'+dec.at.slice(5,16)+(dec.pick?' 选了 '+esc(dec.pick):' 点了可以')+'）':''}</span>`:(ver.kind!=='多选一'?'<button class="btn primary ok">可以</button>':'')}</span></div>
+<span class="ibar">${decided?`<span class="done-note">✓ 已定稿${dec?'（'+dec.at.slice(5,16)+(dec.pick?' 选了 '+esc(dec.pick):' 点了可以')+'）':''}</span>`:(ver.kind!=='多选一'?'<button class="btn primary ok">可以</button>':'')}</span></div>
 ${lookHtml(ver.look)}
 ${it.column==='动画'&&ver.anim?voHtml(it):''}${optsHtml(ver,pickable,chosen)}</div>
 <aside class="i-talk"><div class="it-head"><b>意见</b>${open||convo?'':`<button class="btn ghost ask">＋ 提意见</button>`}</div>
 ${assumeHtml(ver)}${ver.note&&ver.v>1?`<p class="ainote">AI 这一版改了：${esc(ver.note)}</p>`:''}
-${open?`<textarea class="asktext" rows="3" placeholder="哪里不对、想怎么改…（自动保存；写好点右上“交给 AI”，它改完会换新版）">${esc(editing?last.text:'')}</textarea>`:''}
+${open?`<textarea class="asktext" rows="3" placeholder="问题和修改意见…（自动保存；完成后点右上“提交 AI”，修改后会出新版本）">${esc(editing?last.text:'')}</textarea>`:''}
 ${evs?`<ul class="evs">${evs}</ul>`:''}
 ${hist?`<details class="hist"><summary>以前的版本（${it.versions.length-1}）</summary>${hist}</details>`:''}${convo?replyBox('i',it.id,it.opts,false):''}</aside></div>`}
 // —— 封面“全部摆开”：这一栏所有项、所有版本的图按 项×版本 摆成一面墙 ——
 let coverView='card',WALL=[];try{coverView=localStorage.getItem('shenpian.cover')||'card'}catch{}
-function wallHtml(){const its=BD.items.filter(x=>x.column==='封面');WALL=[];if(!its.length)return '<div class="emptycol">还没到：AI 做到这一步，会把要你看的发到这里。</div>';
+function wallHtml(){const its=BD.items.filter(x=>x.column==='封面');WALL=[];if(!its.length)return '<div class="emptycol">未开始：AI 进行到这一步时，会把待审阅的内容发到这里。</div>';
   const rank={'待你看':0,'待发送':1,'AI 在改':2,'已定':3};
   return its.slice().sort((a,b)=>(rank[a.ustate]??1)-(rank[b.ustate]??1)).map(it=>{const {ver,dec,last,editing,convo,open,decided}=itemState(it),chosen=decided&&dec?dec.pick:null,pickable=ver.kind==='多选一'&&!decided;
-    return `<div class="item wall-row u-${UST[it.ustate]||'none'}" data-id="${esc(it.id)}" data-v="${ver.v}"><div class="wr-h"><b>${esc(ver.title)}</b>${tag(it.ustate)}${chips(ver)}${it.ustate==='AI 在改'?hint():''}<span class="meta">${esc(it.id)} · ${it.versions.length} 版</span>${decided?`<span class="done-note">✓ 已定${chosen?' · 选了 '+esc(chosen):''}</span>`:''}</div>
+    return `<div class="item wall-row u-${UST[it.ustate]||'none'}" data-id="${esc(it.id)}" data-v="${ver.v}"><div class="wr-h"><b>${esc(ver.title)}</b>${tag(it.ustate)}${chips(ver)}${it.ustate==='AI 在改'?hint():''}<span class="meta">${esc(it.id)} · ${it.versions.length} 版</span>${decided?`<span class="done-note">✓ 已定稿${chosen?' · 选了 '+esc(chosen):''}</span>`:''}</div>
 <div class="wall">${it.versions.slice().reverse().map(v=>`<div class="wv"><p class="wv-h">第 ${v.v} 版${v.v===ver.v?'（最新）':''} · ${v.at.slice(5,16)}</p><div class="wv-imgs">${v.files.filter(f=>f.type==='image').map(f=>{
       const i=WALL.push({src:fileUrl(f),cap:`${it.id} ${ver.title} · 第 ${v.v} 版 · ${f.label}`,id:it.id,prefix:`针对 ${f.label}（第 ${v.v} 版）：`})-1,on=v.v===ver.v&&chosen===f.label;
       return `<figure class="wimg${on?' chosen':''}"><img src="${fileUrl(f)}" alt="" loading="lazy" data-w="${i}"><figcaption title="${esc(f.label)}">${on?'✓ ':''}${esc(f.label)}</figcaption><div class="wbtns"><label><input type="checkbox" class="cmpk" data-w="${i}"> 对比</label><button class="btn ghost wask" data-w="${i}">提意见</button>${v.v===ver.v&&pickable?`<button class="btn go pick" data-pick="${esc(f.label)}">选这个</button>`:''}</div></figure>`}).join('')}</div></div>`).join('')}</div>
@@ -1079,13 +1129,13 @@ function changes(col){const out=[];
     out.push([e.at,`<li><span class="who">你</span><span class="meta">${e.at.slice(5,16)}</span> ${esc(FIELD[e.field]||e.field)}：${o} → ${n}${e.ok?'':` <span class="warn">（没写回：${esc(fix(e.error||''))}）</span>`} ${sendTag(e.id)}</li>`]);
     if(e.handled)out.push([e.handled.at,`<li class="ai"><span class="who">AI</span><span class="meta">${e.handled.at.slice(5,16)}</span> ${esc(e.handled.note)}</li>`])}
   for(const it of BD.items.filter(x=>x.column===col))for(const e of it.events)if(e.type==='reply'||(e.type==='publish'&&e.note))out.push([e.at,`<li class="ai"><span class="who">AI</span><span class="meta">${e.at.slice(5,16)} · ${esc(it.id)}</span> ${esc(e.text||('换了第 '+e.v+' 版：'+e.note))}</li>`]);
-  out.sort((a,b)=>a[0]<b[0]?1:-1);return out.length?`<ul class="chg-list">${out.slice(0,30).map(x=>x[1]).join('')}</ul>`:'<p class="muted">还没有人改过。你直接在左边改，自动保存。</p>'}
+  out.sort((a,b)=>a[0]<b[0]?1:-1);return out.length?`<ul class="chg-list">${out.slice(0,30).map(x=>x[1]).join('')}</ul>`:'<p class="muted">暂无修改记录。可直接在左侧修改，自动保存。</p>'}
 // 标题、封面文字、原稿（录之前的定稿）只在“文案”栏改（2026-11-24 用户定：不留两处改同一份东西）：口播剪辑栏左下角的小入口点了跳过去。
 // 老片子里在这一栏改过、还没交给 AI 的字：主按钮照旧放在入口上面，免得没处点。
 function scriptEditor(){const box=$('scripted'),kb=D.koubo||{},n=msend('文案'),old=n.unsent||n.sent||n.doing;
   document.querySelector('.pane[data-col="文案"]').classList.toggle('has-koubo',!!kb.ready);$('wenan').classList.toggle('has-koubo',!!kb.ready);
   if(kb.ready){box.innerHTML=old?`<div class="tcjump"><div class="ch-main" data-main="文案"></div></div>`:'';return}   // 第二轮：标题、封面文字、原稿那一行去掉（顶上点“文案”就是，2026-11-24 用户：“独立占这么一行……很浪费空间”）
-  box.innerHTML=`<div class="emptycol"><b>口播剪辑：还没到</b><br>录完口播、AI 剪完以后，这里用改文字的方法剪口播。${kb.why?'（'+esc(kb.why)+'）':''}<br>标题、封面文字、口播正文在 <button class="link tcgo">“文案”栏</button> 写。</div>`}
+  box.innerHTML=`<div class="emptycol"><b>口播精剪：未开始</b><br>口播录制完成、AI 初剪后，在此以编辑文字的方式精剪口播。${kb.why?'（'+esc(kb.why)+'）':''}<br>标题、封面文字、口播正文请在 <button class="link tcgo">文稿栏</button> 撰写。</div>`}
 document.addEventListener('click',e=>{if(e.target.closest('.tcgo'))setCol('写稿')});
 // —— 文案栏（数据里叫 写稿，2026-11-24 用户定）：左边写标题、封面文字、口播正文；右边意见区（每条意见一段对话，AI 的改写逐处“原文 → 改后”，点采纳才写进文件）；栏头“版本” ——
 const WR={built:false,trk:false,active:null,chg:null,draft:{},open:{},vd:{},busy:null,force:false,sel:null,font:18};try{WR.font=+localStorage.getItem('shenpian.wfont')||18}catch{}
@@ -1101,8 +1151,8 @@ const wPara=off=>{const ls=wRaw().split('\n');let o=0,k=0;for(const l of ls){if(
 function wCount(){const t=WR.built?wText():(BD.writing?.fields?.['口播正文']||''),n=t.split('\n').filter(l=>!/^\s*(#|>|---|\*\*\*|```)/.test(l)).join('').replace(/\s/g,'').length;return [n,Math.round(n*60/(BD.writing?.rate||340))]}
 function wFont(d){WR.font=Math.max(14,Math.min(30,WR.font+d));try{localStorage.setItem('shenpian.wfont',WR.font)}catch{}if($('wbody')){$('wbody').style.fontSize=$('wtrack').style.fontSize=WR.font+'px';wLay()}}
 function writingEditor(){const w=BD.writing,box=$('wdoc');if(!w||!box)return;
-  if(!w.ok){box.innerHTML=`<div class="emptycol">还没到：${esc(w.why||'')}</div>`;WR.built=false;$('wside').innerHTML='';return}
-  if(!WR.built){box.innerHTML=`<div class="wdoc"><p class="wwhy" id="wwhy" hidden></p><input id="wtitle" class="wtitle" placeholder="先写个题目（标题）" autocomplete="off">
+  if(!w.ok){box.innerHTML=`<div class="emptycol">未开始：${esc(fix(w.why||''))}</div>`;WR.built=false;$('wside').innerHTML='';return}
+  if(!WR.built){box.innerHTML=`<div class="wdoc"><p class="wwhy" id="wwhy" hidden></p><input id="wtitle" class="wtitle" placeholder="标题" autocomplete="off">
 <div class="wl">封面文字<span class="muted">一行一行写，每行是封面上的一行字；没想好可以先空着</span></div><textarea id="wcover" class="wcover" rows="2"></textarea>
 <div class="wl"><span id="wbname">口播正文</span><span class="muted" id="wbtip"></span></div>
 <div id="wtrack" class="wtrack" hidden></div><div id="wbody" contenteditable="plaintext-only" spellcheck="false" data-ph="在这里写口播正文，一个自然段空一行。只有题目也行：点右上“对全文提意见”，让 AI 先写一版。"></div>
@@ -1122,13 +1172,13 @@ function writingEditor(){const w=BD.writing,box=$('wdoc');if(!w||!box)return;
   wKick();wSide();wVersions();wPaint();wLay()}
 // 定稿以后栏头下面的一条：AI 先开项 → 你把素材备好（放进 01_原始素材，或写路径）→ 点“开工”AI 才开始做
 function wKick(){const k=BD.writing.kick,box=$('wkick');if(!k){box.hidden=true;box.innerHTML='';return}box.hidden=false;if(box.contains(document.activeElement)&&document.activeElement.tagName==='TEXTAREA')return;
-  if(k.at){box.innerHTML=`<div class="kt"><p><b>✓ 已点开工 · ${esc(k.at.slice(5,16))}</b>　${k.note?'AI：'+esc(k.note):(BD.send?.listening?'已交给 AI，它接着整理素材、做初稿':hint())}</p>${k.materials?`<p class="muted">你写的素材：${esc(k.materials)}</p>`:''}${matBox()}</div>`;matList();return}
-  box.innerHTML=`<div class="kt"><p><b>文案已定稿，下一步：备料、开工</b>　${k.opened?'AI：'+esc(k.opened):'AI 正在按标题开项（改项目名、登记标题和封面文字）…'}</p>
-<p class="muted">把口播录像、B-roll 拖到下面（或写路径让程序复制），都放进项目的 01_原始素材（现在有 ${k.videos} 个视频）；没有也行，AI 先用占位。备好了点“开工”，它才开始做，开工后它按规矩归类。</p>
-${matBox()}<textarea id="wkm" rows="2" placeholder="还想跟 AI 说的：想用哪些画面、要补充的…可以不写">${esc(WR.km||'')}</textarea></div><button id="wkgo" class="btn go">开工</button>`;matList()}
+  if(k.at){box.innerHTML=`<div class="kt"><p><b>✓ 已开始制作 · ${esc(k.at.slice(5,16))}</b>　${k.note?'AI：'+esc(k.note):(BD.send?.listening?'已提交 AI，正在整理素材、制作初剪':hint())}</p>${k.materials?`<p class="muted">素材说明：${esc(k.materials)}</p>`:''}${matBox()}</div>`;matList();return}
+  box.innerHTML=`<div class="kt"><p><b>文稿已定稿，下一步：准备素材、开始制作</b>　${k.opened?'AI：'+esc(k.opened):'AI 正在按标题建立项目（修改项目名、登记标题和封面文字）…'}</p>
+<p class="muted">把口播录像、B-roll 拖到下方（或填写路径由程序复制），统一放入项目的 01_原始素材（现有 ${k.videos} 个视频）；暂无素材时 AI 先用占位。准备好后点“开始制作”，AI 才开始制作，并按规范归类素材。</p>
+${matBox()}<textarea id="wkm" rows="2" placeholder="给 AI 的补充说明：希望使用的画面、其他要求…（可不填）">${esc(WR.km||'')}</textarea></div><button id="wkgo" class="btn go">开始制作</button>`;matList()}
 // —— 备料（2026-11-24 首页）：拖文件进来（浏览器一个个传，有进度），或写这台 Mac 上的路径（程序复制，大文件优先用这个）；都放进 01_原始素材，同名不覆盖 ——
 const UP={q:[],busy:false,items:[]};
-function matBox(){const m=BD.materials||{};return `<div class="mat"><div class="mdrop" id="mdrop"><b>把口播录像、B-roll 拖到这里</b>　可以一次拖好几个，<span title="${esc(m.folder||'')}">放进这条片子的 01_原始素材（保留原名，同名不覆盖）</span></div>
+function matBox(){const m=BD.materials||{};return `<div class="mat"><div class="mdrop" id="mdrop"><b>把口播录像、B-roll 拖到这里</b>　可以一次拖好几个，<span title="${esc(m.folder||'')}">放入本项目的 01_原始素材（保留原名，同名不覆盖）</span></div>
 <div class="mpath"><textarea id="mpaths" rows="1" placeholder="或者写这台 Mac 上的路径（文件或文件夹，一行一个）：程序复制进来，原文件不动。文件夹、特别大的文件用这个">${esc(WR.mp||'')}</textarea><button id="mpathgo" class="btn">复制进来</button></div><ul class="mlist" id="mlist"></ul></div>`}
 const kb=n=>n>=1073741824?(n/1073741824).toFixed(2)+' GB':n>=1048576?(n/1048576).toFixed(1)+' MB':Math.round(n/1024)+' KB';
 function matList(){const el=$('mlist');if(!el)return;const m=BD.materials||{files:[],active:[],failed:[]},rows=[];
@@ -1150,14 +1200,17 @@ document.addEventListener('drop',e=>{const d=e.target.closest?.('#mdrop');if(!d)
   [...e.dataTransfer.files].forEach((f,i)=>{if(its[i]?.webkitGetAsEntry?.()?.isDirectory){dirs++;return}UP.items.push({name:f.name,size:f.size,done:0,file:f,state:'wait'})});
   if(dirs)say(`拖进来的 ${dirs} 个文件夹没收：文件夹请在下面写路径，点“复制进来”`,1);matList();upNext()});
 document.addEventListener('input',e=>{if(e.target.id==='mpaths')WR.mp=e.target.value});
-document.addEventListener('click',async e=>{if(e.target.id!=='mpathgo')return;const t=$('mpaths').value;const r=await post('/api/material/paths',{text:t});
+document.addEventListener('click',async e=>{if(e.target.id!=='mpathgo')return;const t=$('mpaths').value;if(!t.trim())return say('请先填写素材路径',1);const r=await guard('mpath',e.target,()=>post('/api/material/paths',{text:t}));if(r.busy)return;
   if(r.started?.length){WR.mp='';$('mpaths').value='';say(`开始复制 ${r.started.length} 个`+(r.errors?.length?'；有几行没成：'+r.errors.join('；'):''),!!r.errors?.length);matPoll()}else say(r.error||'没复制成',1)});
 // 保存（自动）：标题、封面文字、口播正文各存各的那一节
-function wSave(key,get){$('wsave').textContent='正在保存…';clearTimeout(saveT['w'+key]);
-  saveT['w'+key]=later('w'+key,()=>{const run=async()=>{const r=await post('/api/script',{field:key,value:get(),column:'写稿'});$('wsave').textContent=r.ok?'已保存 '+new Date().toTimeString().slice(0,5):'没保存上';if(!r.ok)say('没保存上：'+r.error,1);return r};
-    WR.busy=(WR.busy||Promise.resolve()).then(run,run)},900)}
+function wSave(key,get){$('wsave').textContent='● 未保存';$('wsave').className='muted wunsaved';
+  later('w'+key,()=>{const v=get(),run=async()=>{$('wsave').textContent='正在保存…';const r=await post('/api/script',{field:key,value:v,column:'写稿'});
+      if(!Object.keys(PEND).some(k=>k[0]==='w')){$('wsave').textContent=r.ok?'已保存 '+new Date().toTimeString().slice(0,5):'● 未保存（保存失败）';$('wsave').className='muted'+(r.ok?'':' wunsaved')}
+      if(!r.ok)say('未能保存：'+r.error,1);return r};
+    WR.busy=KEEP?run():(WR.busy||Promise.resolve()).then(run,run)},900)}
 // 采纳、不要、退回、贴进来、新意见：先把没存完的字存掉，做完后左边一定换成文件里现在的字（不然手里的旧字会把刚采纳的盖回去）
-async function wAct(path,body,okText){flushSaves();await WR.busy;const r=await post(path,body);if(!r.ok&&!r.done?.length)return say(r.error||'没做成',1),load(true),r;
+async function wAct(path,body,okText){return guard('w:'+path+':'+(body?.id||''),LASTBTN,()=>wAct0(path,body,okText))}
+async function wAct0(path,body,okText){flushSaves();await WR.busy;const r=await post(path,body);if(!r.ok&&!r.done?.length)return say(r.error||'没做成',1),load(true),r;
   WR.force=true;document.activeElement?.blur?.();await load(true);r.ok?okText&&say(okText):say('有几处没写进去：'+r.error,1);return r}
 // 一段字改前改后逐字比（最长公共子序列）：原文里删掉的标红划线，改后新加的标绿；夹在两处改动中间只有一两个字的相同部分并进改动里，免得红绿碎成一个字一个字
 function wRuns(a,b){a=String(a||'');b=String(b||'');const n=a.length,m=b.length;if(!n||!m||n*m>600000)return null;
@@ -1183,7 +1236,7 @@ function wTrack(){const box=$('wtrack'),btn=$('wtrk');if(!box||!btn)return;const
   let h='';ls.forEach((l,k)=>{(before[k]||[]).forEach(x=>h+=x);h+=`<p class="${/^\s*(#|>)/.test(l)?'tsub':''}">${repl[k]??(esc(l)||'&nbsp;')}</p>`});(before[ls.length]||[]).forEach(x=>h+=x);
   box.innerHTML=`<p class="muted tnote">只看不改：删的划掉、加的标绿；每处点 ✓ 采纳、✕ 不要。${miss.length?`另有 ${miss.length} 处在正文里找不到原句（原文已改过），在右边逐处看。`:''}</p>`+h}
 document.addEventListener('click',async e=>{const t=e.target;if(t.id==='wtrk'){flushSaves();WR.trk=!WR.trk;wTrack();wLay();return}
-  if(t.classList.contains('tok')||t.classList.contains('tno')){const ok=t.classList.contains('tok');await wAct('/api/draft/decide',{id:t.dataset.n,which:[+t.dataset.i],accept:ok},ok?'已采纳，写进文案了（留了一个版本）':'这一处没要，文案没动')}});
+  if(t.classList.contains('tok')||t.classList.contains('tno')){const ok=t.classList.contains('tok');await wAct('/api/draft/decide',{id:t.dataset.n,which:[+t.dataset.i],accept:ok},ok?'已采纳并写入文稿（已保留版本）':'已放弃此处，文稿未改动')}});
 const wLab=(c,next)=>c.field!=='口播正文'?c.field:c.op==='加'?(next?'再加一段（接着上一段）':c.k?`第 ${c.k} 段后面加一段`:'最前面加一段'):c.op==='删'?`删掉第 ${c.k} 段`:`第 ${c.k} 段`;
 function wChange(c,btn,on,next){const [o,n]=c.op==='改'?wDiff(c.old,c.new):[`<del>${esc(c.old)}</del>`,`<ins>${esc(c.new)}</ins>`];
   return `<div class="wc s-${c.state==='采纳'?'ok':c.state==='不要'?'no':'wait'}${on?' on':''}" data-i="${c.i??''}" title="点一下在左边找到这一段"><div class="wc-h"><b>${esc(wLab(c,next))}</b>${c.state==='采纳'?'<span class="st st-ok">✓ 已采纳</span>':c.state==='不要'?'<span>没要</span>':''}</div>
@@ -1200,11 +1253,11 @@ function wNote(n){const th=n.thread||[],ai=th.some(x=>x.who==='AI'),p=n.proposal
 <textarea class="wrt" rows="2" placeholder="回复 AI…（不满意就说哪里不对，它会重新给）">${esc(WR.draft[n.nid]||'')}</textarea><div class="row"><span class="grow"></span><button class="btn wrs">回复</button></div></div>`:'';
   return `<div class="wn u-${UST[n.ustate]||'none'}${on}" data-n="${esc(n.nid)}"><div class="op-h"><b class="no">${n.id}</b>${done?'<span class="st st-ok">✓ 已解决</span>':tag(n.ustate)}${n.ustate==='AI 在改'?hint():''}<span class="rd">${esc(where)}</span>${done?'<button class="link wclose">收起</button>':''}<button class="del" title="删掉这条意见">×</button></div>
 ${n.scope==='全文'?'':`<button class="wq" title="点一下在左边找到这段字">“${esc(n.quote)}”</button>`}
-${ai?`<p class="txt">${esc(n.text)}</p>`:`<textarea class="wtext" rows="2" placeholder="${n.scope==='全文'?'对整篇的意见…（只写了题目、想让 AI 先写一版，就写：先写一版，要点是……）':'这里哪里不对、想怎么改…选中的字只是告诉 AI 大概在哪，它会连上下文、别处同类的地方一起看'}（自动保存；写好点右上“交给 AI”）">${esc(n.text)}</textarea>`}
+${ai?`<p class="txt">${esc(n.text)}</p>`:`<textarea class="wtext" rows="2" placeholder="${n.scope==='全文'?'对整篇的意见…（只写了题目、想让 AI 先写一版，就写：先写一版，要点是……）':'这里哪里不对、想怎么改…选中的字只是告诉 AI 大概在哪，它会连上下文、别处同类的地方一起看'}（自动保存；完成后点右上“提交 AI”）">${esc(n.text)}</textarea>`}
 ${talk?`<div class="thread">${talk}</div>`:''}${prop}${rb}</div>`}
 function wSide(){wTrack();const w=BD.writing,box=$('wside'),ns=w.notes,eds=(BD.edits||[]).some(e=>e.column==='写稿');
   box.innerHTML=`<div class="ops-h"><b>意见和 AI 的改写</b><span class="muted">${ns.length?ns.length+' 条':''}</span></div>`+(ns.length?ns.map(wNote).join(''):`<p class="ops-empty">选中正文里一段字就能提意见；对整篇有话说点“对全文提意见”。</p>`)
-    +(eds?`<div class="wn wedits" data-last="1"><div class="ops-h" style="padding:0 0 6px"><b>你改过的字</b><span class="muted">交给 AI，它把用到的地方跟着改</span></div>${changes('写稿')}</div>`:'');
+    +(eds?`<div class="wn wedits" data-last="1"><div class="ops-h" style="padding:0 0 6px"><b>你改过的字</b><span class="muted">提交 AI 后，引用处将同步修改</span></div>${changes('写稿')}</div>`:'');
   box.querySelectorAll('textarea').forEach(grow);wLay()}
 // 每条意见挂在它评的那段字旁边：按正文里的位置从上往下排，挤在一起时往下让；针对全文的排最上面
 function wTop(n){if(n.scope==='全文')return 0;if(n.field==='标题')return $('wtitle').getBoundingClientRect().top;if(n.field==='封面文字')return $('wcover').getBoundingClientRect().top;
@@ -1253,10 +1306,10 @@ wpane.addEventListener('input',e=>{const t=e.target,card=t.closest('.wn');
   else if(t.id==='wkm')WR.km=t.value;
   else if(t.id==='wbody'){wSave('口播正文',wText);sumText('写稿');wPaint();wLay()}
   else if(card&&t.classList.contains('wtext')){grow(t);const id=card.dataset.n,text=t.value;clearTimeout(saveT[id]);
-    wLay();saveT[id]=later(id,async()=>{const r=await post('/api/draft/text',{id,text});r.ok?say('意见已保存（待发送）：写好点右上“交给 AI”'):say('没保存上：'+r.error,1)},700)}
+    wLay();saveT[id]=later(id,async()=>{const r=await post('/api/draft/text',{id,text});r.ok?say('意见已保存（待提交）；完成后点右上“提交 AI”'):say('未能保存：'+r.error,1)},700)}
   else if(card&&t.classList.contains('wrt')){grow(t);wLay();WR.draft[card.dataset.n]=t.value}});
 wpane.addEventListener('click',async e=>{const t=e.target,card=t.closest('.wn'),id=card?.dataset.n,n=id&&BD.writing.notes.find(x=>x.nid===id),wc=t.closest('.wc'),ver=t.closest('.wv');
-  if(t.id==='wkgo'){say('正在交给 AI…');const r=await wAct('/api/draft/kickoff',{materials:$('wkm')?.value||''},'已开工：交给 AI 了，它接着整理素材、做初稿');if(r.ok)WR.km='';return}
+  if(t.id==='wkgo'){say('正在提交 AI…');const r=await wAct('/api/draft/kickoff',{materials:$('wkm')?.value||''},'已开始制作：AI 正在整理素材、制作初剪');if(r.ok)WR.km='';return}
   if(t.id==='wpgo'){const r=await wAct('/api/draft/import',{text:$('wptext').value},'分好了：标题和正文都在上面，接着改就行');if(r.ok)$('wptext').value='';return}
   if(ver){const v=+ver.dataset.v;
     if(t.classList.contains('wvd')){if(WR.vd[v])delete WR.vd[v];else{const d=await api('/api/draft/diff?v='+v);if(!d.ok)return say(d.error,1);
@@ -1266,10 +1319,10 @@ wpane.addEventListener('click',async e=>{const t=e.target,card=t.closest('.wn'),
   if(!n)return;
   if(t.closest('.wopen')||t.classList.contains('wclose')){WR.open[id]=!!t.closest('.wopen');wSide();wShow(id);return}
   if(t.classList.contains('del')){if((n.text.trim()||n.thread.length)&&!confirm('删掉这条意见？'))return;delete WR.draft[id];await wAct('/api/draft/delete',{id})}
-  else if(t.classList.contains('wok')||t.classList.contains('wno')){const ok=t.classList.contains('wok');await wAct('/api/draft/decide',{id,which:[+wc.dataset.i],accept:ok},ok?'已采纳，写进文案了（留了一个版本）；还想改就直接在左边改':'这一处没要，文案没动')}
-  else if(t.classList.contains('wallok')||t.classList.contains('wallno')){const ok=t.classList.contains('wallok');await wAct('/api/draft/decide',{id,which:'all',accept:ok},ok?'都采纳了，写进文案了（留了一个版本）':'这几处都没要，文案没动')}
+  else if(t.classList.contains('wok')||t.classList.contains('wno')){const ok=t.classList.contains('wok');await wAct('/api/draft/decide',{id,which:[+wc.dataset.i],accept:ok},ok?'已采纳并写入文稿（已保留版本）；可直接在左侧继续修改':'已放弃此处，文稿未改动')}
+  else if(t.classList.contains('wallok')||t.classList.contains('wallno')){const ok=t.classList.contains('wallok');await wAct('/api/draft/decide',{id,which:'all',accept:ok},ok?'已全部采纳并写入文稿（已保留版本）':'已全部放弃，文稿未改动')}
   else if(t.classList.contains('wropt')||t.classList.contains('wrs')){const picked=t.classList.contains('wropt')?t.dataset.o:'',text=picked?'':(card.querySelector('.wrt').value||'').trim();
-    if(!picked&&!text)return say('先写几句',1);const r=await wAct('/api/draft/answer',{id,text,picked},(picked?`你选了：${picked}`:'回复已记下')+'（待发送）：写好点右上“交给 AI”');if(r.ok)delete WR.draft[id]}
+    if(!picked&&!text)return say('先写几句',1);const r=await wAct('/api/draft/answer',{id,text,picked},(picked?`你选了：${picked}`:'回复已记录')+'（待提交）；完成后点右上“提交 AI”');if(r.ok)delete WR.draft[id]}
   else if(wc){const c=n.proposal.changes.find(x=>x.i===+wc.dataset.i);wShow(id,c.i)}
   else if(!/TEXTAREA|BUTTON/.test(t.tagName)||t.classList.contains('wq'))wShow(id)});
 // —— 口播剪辑栏：剪口播的文字剪辑器（内嵌页面，第一次打开口播剪辑栏时才建，之后一直留着：切走再切回来状态不丢） ——
@@ -1280,15 +1333,15 @@ function koubo(){const kb=D?.koubo||{};$('koubo').hidden=!kb.ready;if(!kb.ready|
 function leaveKoubo(){const w=KB.frame?.contentWindow;if(!w)return;try{w.pause?.()}catch{}if(document.activeElement===KB.frame){KB.frame.blur();window.focus()}}
 // —— 口播阶段（还没建片子目录）：只有口播剪辑栏能用，其余栏目写“还没到” ——
 function liteNotes(){document.querySelectorAll('.pane').forEach(p=>{const c=p.dataset.col,on=!!D.lite&&c!=='文案'&&c!=='写稿';p.classList.toggle('lite',on);
-  if(on&&!p.querySelector('.lite-note'))p.insertAdjacentHTML('afterbegin',`<div class="pane-scroll lite-note"><div class="emptycol"><b>${esc(LABEL[c]||c)}：还没到</b><br>文案定稿、AI 建好片子目录（init）做出初稿以后才有这一栏。现在先在“文案”栏写文案。</div></div>`)})}
+  if(on&&!p.querySelector('.lite-note'))p.insertAdjacentHTML('afterbegin',`<div class="pane-scroll lite-note"><div class="emptycol"><b>${esc(LABEL[c]||c)}：未开始</b><br>文稿定稿、AI 建立项目文件夹并完成初剪后才有此栏。请先在文稿栏撰稿。</div></div>`)})}
 function uploadEditor(){const u=BD.upload,box=$('uploaded');if(!u)return;
-  if(document.activeElement&&box.contains(document.activeElement)&&/TEXTAREA|INPUT/.test(document.activeElement.tagName)){$('upside').innerHTML=`<h3>AI 和你各改过什么</h3>${changes('上传文案')}`;return}
-  if(!u.exists){box.innerHTML=`<div class="emptycol">还没到：${esc(u.why||'')}</div>`;$('upside').innerHTML='';return}
+  if(document.activeElement&&box.contains(document.activeElement)&&/TEXTAREA|INPUT/.test(document.activeElement.tagName)){$('upside').innerHTML=`<h3>修改记录</h3>${changes('上传文案')}`;return}
+  if(!u.exists){box.innerHTML=`<div class="emptycol">未开始：${esc(fix(u.why||''))}</div>`;$('upside').innerHTML='';return}
   const dr=u.draft,desc=dr?dr.description:u.description,tags=(dr?dr.tags:u.tags)||[];
-  box.innerHTML=`<div class="editor"><h3>标题<span class="st2">只读：在“文案”栏改</span></h3><input value="${esc(u.title)}" readonly>
+  box.innerHTML=`<div class="editor"><h3>标题<span class="st2">只读：请在文稿栏修改</span></h3><input value="${esc(u.title)}" readonly>
 <h3>简介<span class="st2${dr?' err':''}" data-st="upload">${dr?'还没写回 项目.json：'+esc(fix(dr.error))+'（改好后自动再存）':'改完自动写回 项目.json'}</span></h3><textarea class="ed desc" data-up="description" rows="${Math.min(9,Math.max(3,Math.ceil((desc||'').length/60)+1))}">${esc(desc)}</textarea>
 <h3>标签<span class="st2">${tags.length} 个，要 8–10 个；用顿号分开</span></h3><textarea class="ed" data-up="tags" rows="2">${esc(tags.join('、'))}</textarea></div>${pubHtml()}`;
-  $('upside').innerHTML=`<h3>AI 和你各改过什么</h3>${changes('上传文案')}`}
+  $('upside').innerHTML=`<h3>修改记录</h3>${changes('上传文案')}`}
 function fit(el){el.style.height='auto';el.style.height=(el.scrollHeight+4)+'px'}
 $('cols').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setCol(b.dataset.col)});
 const panes=document.querySelector('.panes');
@@ -1305,17 +1358,18 @@ panes.addEventListener('click',async e=>{const t=e.target,card=t.closest('.item'
     return}
   if(!card)return;const id=card.dataset.id,v=+card.dataset.v;
   if(t.classList.contains('pick')||t.classList.contains('ok')){const body={id,v,action:t.classList.contains('ok')?'可以':'选这个',pick:t.dataset.pick};
-    t.disabled=true;say('正在记下…');const r=await post('/api/item/act',body);
-    if(!r.ok){t.disabled=false;return say('没记上：'+r.error,1)}say(r.event&&r.event.anim&&!r.event.anim.ok?'记下了，但：'+r.event.anim.msg:'记下了（待发送）：点右上“交给 AI”，它就按这个往下做',r.event&&r.event.anim&&!r.event.anim.ok);load(true)}
+    const r=await guard('act:'+id,t,async()=>{say('正在记录…');return post('/api/item/act',body)});if(r.busy)return;
+    if(!r.ok)return say('未能记录：'+r.error,1);say(r.event&&r.event.anim&&!r.event.anim.ok?'已记录，但：'+r.event.anim.msg:'已记录（待提交）；点右上“提交 AI”，AI 将据此继续',r.event&&r.event.anim&&!r.event.anim.ok);load(true)}
   else if(t.classList.contains('ask'))askFor(id,'')});
 panes.addEventListener('input',e=>{const t=e.target,card=t.closest('.item');if(t.matches('textarea.ed:not(.big)'))fit(t);
-  if(card&&t.classList.contains('asktext')){const id=card.dataset.id,v=+card.dataset.v,text=t.value;clearTimeout(saveT[id]);
-    saveT[id]=setTimeout(async()=>{const r=await post('/api/item/act',{id,v,action:'写要求',text});r.ok?say('意见已保存（待发送）：写好点右上“交给 AI”'):say('没保存上：'+r.error,1)},700);return}
-  if(t.dataset.up){const st=document.querySelector('[data-st="upload"]');st.textContent='正在保存…';st.className='st2';clearTimeout(saveT.up);
-    saveT.up=setTimeout(async()=>{const r=await post('/api/upload-copy',{description:document.querySelector('[data-up=description]').value,tags:document.querySelector('[data-up=tags]').value});
-      st.textContent=r.ok?'已写回 项目.json':'还没写回 项目.json：'+fix(r.error)+'（草稿已存，改好后自动再存）';st.className='st2'+(r.ok?'':' err');r.ok?say('上传文案已保存'):say('上传文案先存成草稿：'+r.error,1)},1200)}});
+  if(card&&t.classList.contains('asktext')){const id=card.dataset.id,v=+card.dataset.v,text=t.value;
+    later('i'+id,async()=>{const r=await post('/api/item/act',{id,v,action:'写要求',text});r.ok?say('意见已保存（待提交）；完成后点右上“提交 AI”'):say('未能保存：'+r.error,1)},700);return}
+  if(t.dataset.up){const st=document.querySelector('[data-st="upload"]');st.textContent='正在保存…';st.className='st2';
+    later('up',async()=>{const r=await post('/api/upload-copy',{description:document.querySelector('[data-up=description]').value,tags:document.querySelector('[data-up=tags]').value});
+      st.textContent=r.ok?'已写回 项目.json':'还没写回 项目.json：'+fix(r.error)+'（草稿已存，改好后自动再存）';st.className='st2'+(r.ok?'':' err');r.ok?say('发布文案已保存'):say('发布文案已暂存为草稿：'+r.error,1)},1200)}});
 document.addEventListener('play',e=>{document.querySelectorAll('audio').forEach(a=>{if(a!==e.target)a.pause()})},true);   // 一次只放一段，好对比
 addEventListener('hashchange',()=>{const h=decodeURIComponent(location.hash.slice(1));if(h&&h!==cur)setCol(h,true)});
 setCoverView(coverView);
-load(true).then(()=>{if(cur)setCol(cur,true);tick()}).catch(e=>{$('summary').textContent='读不到数据：'+e.message;say('读不到数据：'+e.message,1)});
+netbar('wait','正在读取项目…');
+load(true).then(()=>{if(cur)setCol(cur,true);tick()}).catch(()=>{$('summary').textContent='读取失败';netbar('err','连不上审片台服务：可能已停止，或这个项目的数据暂时读不到。')});
 </script></html>

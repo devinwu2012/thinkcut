@@ -117,7 +117,7 @@ def rules_banner():
     from .guard import rules_digest
     lines = rules_digest()
     if not lines: return
-    say('【这条片子要遵守的已定规矩】（来自 <程序目录>/内部/架构审查交接.md 第 3 节；细则在各说明，冲突以日期新的为准；check 会拦其中能用程序判断的）')
+    say('【这个项目要遵守的已定规矩】（来自 <程序目录>/内部/架构审查交接.md 第 3 节；细则在各说明，冲突以日期新的为准；check 会拦其中能用程序判断的）')
     for x in lines: say('  - ' + x)
     say('')
 
@@ -157,7 +157,7 @@ def run(job: Job):
         ('4K 成片', None, [], 'export（用户审完之后）', bool(outs)),
     ]
     nxt = None
-    say(f"片子「{job.get('title', d.name)}」 画幅 {job['format']}（{job.W}×{job.H}） 达芬奇工程「{job['project']}」")
+    say(f"项目「{job.get('title', d.name)}」 画幅 {job['format']}（{job.W}×{job.H}） 达芬奇工程「{job['project']}」")
     for name, out, deps, cmd, extra in steps:
         if out is None: done = bool(extra)
         else: done = out.exists() and (extra is None or extra)
@@ -178,7 +178,7 @@ def run(job: Job):
     from .check import unseen_samples       # 用户没看过样张的镜头（授权免看、或确认原话写着没看）：交片时发给用户补看；导出前没补看会被拦（2026-11-21 新21）
     for proj, shot, files, why in unseen_samples(job):
         say(f"提醒：{proj} {shot} 的样张用户还没看过（{why}）：交片时把样张发给用户补看（{'、'.join(files)}）；把样张发到审片台“动画”栏，用户点了“可以”就算补看（对话里说的不算，2026-11-22 新1）。"
-            "不单独拦导出（2026-11-22 用户定“先做出来再改”）：用户在审片台点了审核线“这一栏定了”就算整片看过")
+            "不单独拦导出（2026-11-22 用户定“先做出来再改”）：用户在审片台点了审核线“定稿”就算整片看过")
     bf = f('合成', '审核线建线中.json')          # review 被硬杀留下的（2026-11-22 新2：半成品被当成建好，还删了上一版）
     if bf.exists():
         try: nm = rj(bf).get('名称')

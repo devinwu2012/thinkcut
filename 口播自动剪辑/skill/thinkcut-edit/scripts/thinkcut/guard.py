@@ -109,10 +109,10 @@ def polish_missing(job: Job):
     if job.get('voice_polish'): return None, None
     if (job.get('placeholder') or {}).get('kind') == '机器配音': return None, '口播是机器配音占位，不用修音（换成真口播后要修）'
     why = str(job.get('免修音') or '').strip()
-    if why: return None, f'这条片子没修音，按 job.json 的 免修音 放行：{why}'
+    if why: return None, f'这个项目没修音，按 job.json 的 免修音 放行：{why}'
     ok = job.get('export_ok') or {}
-    if str(ok.get('at') or '9') < POLISH_RULE_AT: return None, f"老片子（{ok.get('at')} 导出过，在“每条都修音”定下之前）没修音，不拦"
-    return ('口播还没修音（job.json 没有 voice_polish）：每条片子都修音（2026-11-22 用户：“用达芬奇修音呗”）。审核线建好后先跑 voice-polish，再 check／export。'
+    if str(ok.get('at') or '9') < POLISH_RULE_AT: return None, f"老项目（{ok.get('at')} 导出过，在“每条都修音”定下之前）没修音，不拦"
+    return ('口播还没修音（job.json 没有 voice_polish）：每个项目都修音（2026-11-22 用户：“用达芬奇修音呗”）。审核线建好后先跑 voice-polish，再 check／export。'
             '用户明确说这条不修音时，在 job.json 写 "免修音": "用户原话" 放行'), None
 
 

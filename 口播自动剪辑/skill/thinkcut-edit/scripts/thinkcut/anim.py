@@ -23,7 +23,7 @@ MAP_WORDS = ('地图', '国界', '省界', '省份', '边界线', '行政区')
 MAP_NOT = r'不(?:画|用|要|带|放|做|出|显示|是|含|再)|没有|别(?:画|用)|去掉|无(?=任何|地图|国界|省界|省份|边界|行政区)'
 MAP_HINT = ('标准地图要有审图号，改淡、裁切、放大、换色都算编辑，要重新送审。先跟用户说清这条规则，建议改用不画边界的图表：HyperFrames 模板的距离圈组件'
             '（共用/距离圈.js：圆心城市＋按真实方位和距离摆城市，写法见 references/动画做法.md 第 7b 节），并把分镜规格里的 画面 改成距离圈的写法。'
-            '用户听完仍确认要地图，再记 thinkcut_edit.py anim-confirm <片子目录> --kind 地图 --project <工程文件夹> --shots <镜头> --words "用户原话"')
+            '用户听完仍确认要地图，再记 thinkcut_edit.py anim-confirm <项目文件夹> --kind 地图 --project <工程文件夹> --shots <镜头> --words "用户原话"')
 
 
 def map_words(d):
@@ -450,7 +450,7 @@ def covered(cov, sid, i):
 def _src(job, name):
     from .sfx import local_sound          # 和项目里自己下的音效同一种找法：绝对路径，或相对片子目录、02_制作
     p = local_sound(job, name)
-    if not p: die(f'实拍/图片文件找不到：{name}（写绝对路径，或相对片子目录、02_制作 的路径）')
+    if not p: die(f'实拍/图片文件找不到：{name}（写绝对路径，或相对项目文件夹、02_制作 的路径）')
     return Path(p)
 
 
@@ -620,8 +620,8 @@ def shot_compare(job: Job, out=None, tol=4.0):
 # ───────────────────────── 代码动画（Three.js 网页）─────────────────────────
 def new(job: Job):
     # 老代码动画 2026-11-20 起新片子停用，模板 2026-11-21 下线：不再新建。已有老工程（动画/build.py）的片子照旧能 anim-build / anim-stills / anim-render / anim-labelcheck。
-    die('老代码动画已下线，不再新建工程（2026-11-20 用户定停用，2026-11-21 模板下线）。新片子：真实空间用 blender-new，其余网页动画用 hf-new。'
-        '已有老工程（动画/build.py）的老片子要重出，直接用 anim-render、anim-stills、anim-labelcheck。')
+    die('老代码动画已下线，不再新建工程（2026-11-20 用户定停用，2026-11-21 模板下线）。新项目：真实空间用 blender-new，其余网页动画用 hf-new。'
+        '已有老工程（动画/build.py）的老项目要重出，直接用 anim-render、anim-stills、anim-labelcheck。')
 
 
 def blender_new(job: Job, name):
@@ -642,7 +642,7 @@ def hf_new(job: Job, name):
 def build(job: Job, relayout=None):
     """拼网页；分镜比标签排版新（或还没排过）时，先重排卡点模式的标签位置（要开无头 Chrome）"""
     d = adir(job)
-    if not (d / 'build.py').exists(): die('这条片子没有老的代码动画工程（动画/build.py）。新片子的网页动画用 hf-new，出片在 HF_名字/ 里跑 python3 出片.py，不走这条命令')
+    if not (d / 'build.py').exists(): die('这个项目没有老的代码动画工程（动画/build.py）。新项目的网页动画用 hf-new，出片在 HF_名字/ 里跑 python3 出片.py，不走这条命令')
     lay = d / f"layout_{job.fmt['anim_fmt']}b.json"; beats = job.dir / '分镜.json'
     if relayout or (relayout is None and beats.exists() and (not lay.exists() or lay.stat().st_mtime < beats.stat().st_mtime)):
         say('分镜有更新，先重排动画标签…')

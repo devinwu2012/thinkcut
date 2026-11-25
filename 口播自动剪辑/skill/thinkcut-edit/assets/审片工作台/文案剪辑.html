@@ -113,7 +113,7 @@ video{display:block;width:100%;height:100%;object-fit:contain;background:var(--t
 <li><b>分段</b>：点一个字后按 <kbd>回车</kbd>，从这一小句起另起一段；在段首按 <kbd>删除键</kbd> 和上一段合并。只改排版，不影响剪辑。</li>
 <li><b>撤销</b>：<kbd>⌘Z</kbd>，重做 <kbd>⇧⌘Z</kbd>。</li>
 <li>改动自动保存在本机，点“保存到达芬奇”才更新时间线和字幕。</li>
-<li>键盘（空格、⌘Z、回车、删除键）只在“口播剪辑”栏开着时归这里；切到“审核线”栏，空格还是让达芬奇播放。</li></ul>
+<li>键盘（空格、⌘Z、回车、删除键）仅在口播精剪栏打开时作用于此处；切换到审片栏后，空格仍控制达芬奇播放。</li></ul>
 <h3>画面</h3><label class="player-size" for="playerSize">画面大小<input id="playerSize" type="range" min="280" max="960" step="20" value="600" aria-label="画面大小"></label>
 <details><summary>原有选择与备注</summary><div id="prior"></div></details><details><summary>定位说明</summary><p>中文按汉字对齐，英文按发音单词定位；标点随相邻字处理。波浪线表示边界尚待核实，此处暂不剪切。</p><p>画面字幕沿用原转写，尚未人工校对。倍速只影响预览。逐字时间来自本机语音对齐模型，是模型估计的发音边界。页面按当前删除区间即时跳播，原始素材不变；剪辑结果同时在后台生成。</p></details>
 </div></details>
@@ -153,6 +153,10 @@ document.addEventListener('pointerdown',e=>{closePops(e.target.closest?.('detail
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.querySelector('details.pop[open]'))closePops()},true);
 </script>
 <script>
+// 报错给人看：原始异常（英文、网络错误）换成一句中文；切到别的栏（内嵌框被隐藏）、窗口在后台时不轮询
+const humanErr=e=>{const m=String(e?.message||e||'');return /[\u4e00-\u9fa5]/.test(m)&&!/Errno|Traceback|[A-Za-z]+Error\b/.test(m)?m:'暂时无法读取口播精剪数据，请稍后重试；仍不行请告诉 AI'};
+const shown=()=>document.visibilityState==='visible'&&(!window.frameElement||window.frameElement.offsetParent!==null);
+
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const video=typeof PreviewSource==='undefined'?$('video'):PreviewSource.attach($('video')),pane=$('textPane'),sizeKey='c0451-player-width',time=s=>`${String(Math.floor(Math.max(0,s+.001)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,s+.001)%60)).padStart(2,'0')}`;
 let data,tokens=[],timeTokens=[],lookup=new Map(),elements=new Map(),lastSelection=[],activeId=null,busy=false,syncing=false,dragging=false,suppressClick=false,audition=null,auditionTarget=null,locatedId=null,followUntil=0,seekPending=false,initialized=false,lastAlignment=null,captionTrack=null,originalCaptionTrack=null,captionKey=null,boundaryTimer=null,boundaryKey=null,removedIds=null,loadVersion=0,playbackEnded=false,playSeg=null,dragRun=null,dropTarget=null,clauseRuns=[];
@@ -352,5 +356,5 @@ document.addEventListener('keydown',e=>{
  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();if(!busy&&!syncing&&data&&(e.shiftKey?data.cursor<data.history_length:data.cursor>0))save(e.shiftKey?'redo':'undo')}
 },true);
 if(typeof ResolveSync!=='undefined')ResolveSync.attach({getData:()=>data,pause,onLock:value=>{syncing=value;if(data?.alignment)update()},onConflict:()=>load()});
-load(true).catch(e=>$('error').textContent=e.message);setInterval(()=>{if(!busy&&!dragging&&video.paused)load().catch(e=>$('error').textContent=e.message)},3000);
+load(true).catch(e=>$('error').textContent=humanErr(e));setInterval(()=>{if(shown()&&!busy&&!dragging&&video.paused)load().then(()=>{if(/暂时无法读取/.test($('error').textContent))$('error').textContent=''}).catch(e=>$('error').textContent=humanErr(e))},3000);
 </script></html>

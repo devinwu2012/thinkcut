@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
+os.environ['THINKCUT_APP_FLAVOR'] = 'release'           # 开发版会把片子文件夹换成试验田（见 Flavor）；这里测正式版的读法
 os.environ['THINKCUT_RESOLVE_PREFS'] = tempfile.mkdtemp(prefix='假达芬奇设置_')      # 建项目会登记达芬奇库列表：测试只碰假的
 os.environ['THINKCUT_RESOLVE_LOCK'] = os.path.join(tempfile.mkdtemp(prefix='假达芬奇锁_'), 'lock')
 sys.path.insert(0, str(ROOT / 'bin'))
@@ -111,6 +112,113 @@ class Reading(Base):
         for bad in ('测试IP', 'a/b', '.x'):
             with self.assertRaises(SystemExit): C.new_ip(bad)
         self.assertEqual(run(ROOT / 'bin' / 'cutdesk_config.py', 'rules', '--ip', '测试IP', env={'THINKCUT_PROFILES': str(self.prof)}).returncode, 0)
+
+    def test_new_blank_ip(self):
+        """首页“新建 IP…”：只写名字，其余全跟公共层（2026-11-24 用户定）。"""
+        r = run(ROOT / 'bin' / 'cutdesk_config.py', 'new', '空白的', '--blank', env={'THINKCUT_PROFILES': str(self.prof)})
+        self.assertEqual(r.returncode, 0, r.stderr); self.assertIn('空白', r.stdout)
+        raw = json.loads((self.prof / '空白的' / 'ip.json').read_text(encoding='utf-8'))
+        self.assertEqual({k for k in raw if not k.startswith('_')}, {'名字'}, 'ip.json 只写名字')
+        c, pub = C.load(ip='空白的'), C._read(self.prof / '公共.json')
+        for k in ('剪辑', '发布', '回收站'): self.assertEqual(c.get(k), pub[k], k)
+        self.assertEqual(c.get('封面.文件名前缀'), '封面_'); self.assertEqual(c.path('片子文件夹'), C.PROGRAM.parent / '空白的视频', '片子文件夹按公共层的 {IP}视频，各放各的')
+        self.assertEqual(C.new_ip('  两头空格 ', None).name, '两头空格', '名字两头的空格去掉')
+        for bad in ('空白的', '测试ip', '', '   ', 'a:b', '_x', 'x' * 41):
+            with self.assertRaises(SystemExit, msg=bad): C.new_ip(bad, None)
+
+    def test_remove_and_restore_ip(self):
+        """删 IP：配置挪到回收站（能还原），片子文件夹不动；默认 IP、没有的、只剩一个的都不能删；首页记着它就一起去掉。"""
+        box = self.t / '回收站'; box.mkdir()
+        C.new_ip('要删的', None); C.set_home_ip('要删的')
+        films = C.load(ip='要删的').path('片子文件夹')
+        to = C.remove_ip('要删的', box)
+        self.assertEqual(to.parent, box / 'ThinkCut配置档'); self.assertTrue((to / 'ip.json').is_file()); self.assertNotIn('要删的', C.ips())
+        self.assertIsNone(C.home_ip()); self.assertNotIn('首页IP', json.loads((self.prof / '本机.json').read_text(encoding='utf-8')))
+        self.assertEqual(C.restore_ip(to), '要删的'); self.assertIn('要删的', C.ips(), '撤销：挪回来')
+        with self.assertRaises(SystemExit): C.restore_ip(to)
+        for bad in ('测试IP', '没有这个'):
+            with self.assertRaises(SystemExit, msg=bad): C.remove_ip(bad, box)
+        with self.assertRaises(SystemExit): C.remove_ip('要删的', self.t / '不在的回收站')
+        self.assertIn('要删的', C.ips(), '回收站不在：没删')
+        C.remove_ip('要删的', box); C.remove_ip('示例IP', box)
+        with self.assertRaises(SystemExit): C.remove_ip('测试IP', box)
+        r = run(ROOT / 'bin' / 'cutdesk_config.py', 'new', '没样板也能建', env={'THINKCUT_PROFILES': str(self.prof)})
+        self.assertEqual(r.returncode, 0, r.stderr); self.assertIn('空白', r.stdout, '示例IP 删了：new 建空白的')
+        self.assertFalse(films.exists() and any(films.iterdir()), '没碰片子文件夹')
+
+    def test_home_ip_remembered(self):
+        """首页选的 IP 记在 本机.json 的 "首页IP"：别的键原样留着、不改默认 IP、不混进配置值；记的 IP 没了就当没记。"""
+        self.assertIsNone(C.home_ip(), '没选过')
+        (self.prof / '本机.json').write_text(json.dumps({'片子文件夹': '/x/{IP}', '_说明': '这台机器'}, ensure_ascii=False), encoding='utf-8')
+        C.set_home_ip('示例IP'); self.assertEqual(C.home_ip(), '示例IP')
+        raw = json.loads((self.prof / '本机.json').read_text(encoding='utf-8'))
+        self.assertEqual(raw, {'片子文件夹': '/x/{IP}', '_说明': '这台机器', '首页IP': '示例IP'})
+        self.assertEqual(C.default_ip(), '测试IP', '首页选的不改默认 IP（AI 命令行不带 --ip 时照旧）')
+        self.assertNotIn('首页IP', C.load(ip='测试IP')); self.assertEqual(C.load().ip, '测试IP')
+        with self.assertRaises(SystemExit): C.set_home_ip('没有这个')
+        shutil.rmtree(self.prof / '示例IP'); self.assertIsNone(C.home_ip(), '记的 IP 被删了：当没记')
+        (self.prof / '本机.json').write_text('{坏的', encoding='utf-8')
+        with self.assertRaises(SystemExit): C.set_home_ip('测试IP')
+        self.assertEqual((self.prof / '本机.json').read_text(encoding='utf-8'), '{坏的', '本机.json 坏了不覆盖')
+
+
+class UserProfiles(Base):
+    """2026-11-25 QA 1.6：用户的 IP 放程序文件夹外面的用户配置档，首页新建／删除 IP 不再改程序文件，发版不被拦。"""
+    def setUp(self):
+        super().setUp(); self.user = self.t / '用户配置档'
+        (self.user / '测试IP').mkdir(parents=True); shutil.move(str(self.prof / '测试IP' / 'ip.json'), self.user / '测试IP' / 'ip.json')
+        shutil.rmtree(self.prof / '测试IP')                                   # 程序带的只剩 公共.json＋示例IP，测试IP 在用户配置档
+        self.u = mock.patch.dict(os.environ, {'THINKCUT_USER_PROFILES': str(self.user)}); self.u.start()
+
+    def tearDown(self):
+        self.u.stop(); super().tearDown()
+
+    def program_files(self):
+        return sorted(str(p.relative_to(self.prof)) for p in self.prof.rglob('*') if p.name != '本机.json')
+
+    def test_new_remove_restore_never_touch_program(self):
+        before = self.program_files(); box = self.t / '回收站'; box.mkdir()
+        self.assertEqual(C.ips(), ['测试IP', '示例IP']); self.assertEqual(C.load().folder, self.user / '测试IP')
+        C.new_ip('新的', None); self.assertTrue((self.user / '新的' / 'ip.json').is_file()); self.assertIn('新的', C.ips())
+        C.new_ip('复制的', '示例IP'); self.assertTrue((self.user / '复制的' / '规矩.md').is_file())
+        to = C.remove_ip('新的', to=box); self.assertFalse((self.user / '新的').exists()); self.assertNotIn('新的', C.ips())
+        self.assertEqual(C.restore_ip(to), '新的'); self.assertIn('新的', C.ips())
+        self.assertEqual(self.program_files(), before)                             # 程序文件夹一个文件都没多、没少
+
+    def test_remove_shipped_ip_hides_it(self):
+        """删随程序发的 示例IP：程序文件不动，本机.json 记“隐藏”，回收站放一份拷贝；还原放进用户配置档。"""
+        before = self.program_files(); box = self.t / '回收站'; box.mkdir()
+        to = C.remove_ip('示例IP', to=box)
+        self.assertNotIn('示例IP', C.ips()); self.assertEqual(self.program_files(), before); self.assertTrue((to / 'ip.json').is_file())
+        self.assertEqual(json.loads((self.prof / '本机.json').read_text(encoding='utf-8'))['隐藏的IP'], ['示例IP'])
+        self.assertEqual(C.load(ip='示例IP').ip, '示例IP')                          # 只是不列出来、不能切过去；它的老片子照样读得到配置
+        self.assertEqual(C.restore_ip(to), '示例IP'); self.assertIn('示例IP', C.ips())
+        self.assertEqual(C.load(ip='示例IP').folder, self.user / '示例IP')
+        self.assertEqual(json.loads((self.prof / '本机.json').read_text(encoding='utf-8'))['隐藏的IP'], [])
+
+    def test_old_ip_in_program_moves_out(self):
+        """升级前首页在程序文件夹里建的 IP：第一次读配置就挪进用户配置档；用户配置档已有同名的不动它。"""
+        (self.prof / '老的').mkdir(); (self.prof / '老的' / 'ip.json').write_text('{"名字": "老的"}', encoding='utf-8')
+        C._migrated.clear(); self.assertIn('老的', C.ips())
+        self.assertFalse((self.prof / '老的').exists()); self.assertTrue((self.user / '老的' / 'ip.json').is_file())
+
+    def test_home_ip_tmp_name_not_fixed(self):
+        C.set_home_ip('示例IP'); self.assertEqual(C.home_ip(), '示例IP')
+        self.assertEqual([p.name for p in self.prof.glob('.*tmp')], [])
+
+
+class Flavor(Base):
+    """QA 1.1：开发版（程序文件夹名以 -开发 结尾、或是 git worktree）默认看试验田，不碰真片子；THINKCUT_APP_FLAVOR 能强制。"""
+    def test_dev_uses_trial_folder(self):
+        with mock.patch.dict(os.environ, {'THINKCUT_APP_FLAVOR': 'dev'}):
+            self.assertEqual(C.load().path('片子文件夹'), C.PROGRAM.parent / '测试IP试验田')
+        with mock.patch.dict(os.environ, {'THINKCUT_APP_FLAVOR': 'release'}):
+            self.assertEqual(C.load().path('片子文件夹'), C.PROGRAM.parent / '测试IP视频')
+
+    def test_detect(self):
+        with mock.patch.dict(os.environ, {'THINKCUT_APP_FLAVOR': ''}):
+            self.assertEqual(C.flavor(self.t / '大囍ai-开发'), 'dev'); self.assertEqual(C.flavor(self.t / '大囍ai'), 'release')
+            wt = self.t / 'wt'; wt.mkdir(); (wt / '.git').write_text('gitdir: x', encoding='utf-8'); self.assertEqual(C.flavor(wt), 'dev')
 
 
 class SecondIP(Base):

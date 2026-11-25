@@ -5,7 +5,7 @@
 import contextlib, os, shutil, threading, time
 from pathlib import Path
 from . import board
-from .common import rj, wj
+from .common import keep_backup, read_data, rj, wj
 
 CHUNK = 4 << 20                  # 4MB 一块：大文件边收边写，不整个放进内存
 PART = '.接收中'
@@ -14,7 +14,7 @@ _active = {}                     # 正在接收／复制的：编号 → {name, 
 _seq = [0]
 
 
-class Oops(Exception):
+class Oops(board.Oops):          # 和审片台其余的错误一样被接住、回一句话（QA 2.5：以前没接住，连接直接断开）
     pass
 
 
@@ -52,7 +52,7 @@ def free_path(dirp, name):
 
 def _target(job):
     f = folder(job)
-    if not f: raise Oops('这条片子还没有项目文件夹（项目.json），没地方放素材')
+    if not f: raise Oops('这个项目还没有项目文件夹（项目.json），没地方放素材')
     f.mkdir(parents=True, exist_ok=True); return f
 
 
@@ -69,10 +69,10 @@ def _record(job, a, ok):
         a = _active.pop(a['id'], a)
         if not ok: a['failed_at'] = time.time(); _failed.append(a); del _failed[:-20]; return a
         f = record_file(job); f.parent.mkdir(parents=True, exist_ok=True)
-        d = rj(f) if f.exists() else {'说明': '备料：用户在审片台“文案”栏拖进来、或写路径由程序复制进 01_原始素材 的素材（AI 开工后按 thinkcut-project 的规矩归类、登记素材清单）', 'files': []}
+        d = read_data(f) or {'说明': '准备素材：用户在审片台文稿栏拖进来、或写路径由程序复制进 01_原始素材 的素材（AI 开始制作后按 thinkcut-project 的规矩归类、登记素材清单）', 'files': []}
         pd = board.project_dir(job); dest = Path(a['dest'])
         rec = {'name': a['name'], 'path': str(dest.relative_to(pd)) if pd and pd in dest.parents else str(dest), 'size': a['size'], 'how': a['how'], 'at': now(), **({'src': a['src']} if a['src'] else {})}
-        d['files'].append(rec); wj(f, d); return rec
+        d.setdefault('files', []).append(rec); keep_backup(f); wj(f, d); return rec
 
 
 _failed = []
@@ -140,7 +140,7 @@ def add_paths(job, text, wait=False):
         if not p.is_absolute(): errors.append(f'“{line}”：要写完整路径（从 / 开头；在访达里选中文件按 ⌥⌘C 拷贝路径）'); continue
         if not p.exists(): errors.append(f'“{line}”：找不到这个文件或文件夹'); continue
         p = p.resolve()
-        if p == tgt or tgt in p.parents or p in tgt.parents: errors.append(f'“{line}”：已经在这条片子的 01_原始素材 里了（或包含它），不用再放'); continue
+        if p == tgt or tgt in p.parents or p in tgt.parents: errors.append(f'“{line}”：已经在这个项目的 01_原始素材 里了（或包含它），不用再放'); continue
         try: size = _du(p)
         except OSError as e: errors.append(f'“{line}”：读不了（{e}）'); continue
         try: k, dest = _begin(job, p.name, '登记路径', size, str(p))
@@ -156,7 +156,7 @@ def add_paths(job, text, wait=False):
 def info(job):
     """给页面：放在哪、已经收到的（还在不在）、正在传的进度、最近没成的。"""
     f = folder(job); pd = board.project_dir(job); rec = record_file(job)
-    files = (rj(rec).get('files') or []) if rec.exists() else []
+    files = read_data(rec).get('files') or []
     for x in files: x['exists'] = bool(pd) and (pd / x['path']).exists()
     with _lock:
         act = [dict(a) for a in _active.values() if a['film'] == str(job.dir)]

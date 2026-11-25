@@ -5,7 +5,7 @@ const path=require('node:path');
 const vm=require('node:vm');
 // 2026-11-22 页面搬进审片台“口播剪辑”栏：thinkcut-edit 的 assets/审片工作台/文案剪辑.html（THINKCUT_SKILL 指到 thinkcut-edit 时用它，否则兄弟目录 口播自动剪辑/skill/thinkcut-edit）。
 const skill=process.env.THINKCUT_SKILL||path.join(__dirname,'../../../口播自动剪辑/skill/thinkcut-edit');
-const script=fs.readFileSync(path.join(skill,'assets/审片工作台/文案剪辑.html'),'utf8').split('<script>')[1].split('</script>')[0].replace(/load\(true\)\.catch\(e=>\$\('error'\)\.textContent=e\.message\);setInterval\([\s\S]*$/, '');
+const script=fs.readFileSync(path.join(skill,'assets/审片工作台/文案剪辑.html'),'utf8').split('<script>')[1].split('</script>')[0].replace(/load\(true\)\.catch\(e=>\$\('error'\)\.textContent=(?:e\.message|humanErr\(e\))\);setInterval\([\s\S]*$/, '');
 const fixture={alignment:{alignment_id:'fixture',tokens:[
  {id:'a',text:'甲',display:'甲',unit_id:0,char_start:0,start_ms:1000,end_ms:1200,ready:true},
  {id:'b',text:'乙',display:'乙',unit_id:0,char_start:1,start_ms:1500,end_ms:1700,ready:true}]},

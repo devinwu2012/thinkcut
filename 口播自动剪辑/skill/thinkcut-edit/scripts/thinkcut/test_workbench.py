@@ -320,7 +320,7 @@ class LifecycleTests(unittest.TestCase):
         info = rj(W.home(self.job) / '服务.json'); self.assertEqual(W.ping(info['port'])['dir'], str(self.job.dir))
         r = subprocess.run([sys.executable, '-B', str(S), 'workbench', str(self.tmp)], capture_output=True, text=True, timeout=30)
         self.assertIn('已经在跑（复用）：' + info['url'], r.stdout)
-        with self.assertRaisesRegex(SystemExit, '另一条片子的审片工作台'):
+        with self.assertRaisesRegex(SystemExit, '另一个项目的审片工作台'):
             other = film(Path(tempfile.mkdtemp())); W.pick_port(other, info['port'])
         shutil.rmtree(other.dir, ignore_errors=True)
         r = subprocess.run([sys.executable, '-B', str(S), 'workbench', str(self.tmp), '--stop'], capture_output=True, text=True, timeout=30)

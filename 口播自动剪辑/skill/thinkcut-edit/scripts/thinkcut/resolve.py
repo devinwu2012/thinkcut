@@ -54,7 +54,7 @@ def lock(job=None, what=None):
         pid = who.get('进程号', '?')
         hint = '' if pid == '?' or _alive(pid) else f'（记下的进程 {pid} 已经不在了，锁还被占着：多半是它启动的子进程还在跑）'
         die(f"达芬奇正被另一个命令占用，这次没动达芬奇（两个同时写会让达芬奇卡死在“渲染中”）：{who.get('命令', '不知道哪个命令')}，"
-            f"片子 {who.get('片子目录', '不知道')}，进程 {pid}，{who.get('开始时间', '开始时间不知道')} 开始{hint}。\n"
+            f"项目 {who.get('片子目录', '不知道')}，进程 {pid}，{who.get('开始时间', '开始时间不知道')} 开始{hint}。\n"
             f"等它做完再跑；确认那个会话已经停了还被拦，就结束那个进程（kill {pid}）后重试。锁文件：{path}")
     info = {'片子目录': str(job.dir) if job is not None else '', '命令': what or ' '.join(sys.argv[1:3]) or 'thinkcut-edit',
             '进程号': os.getpid(), '开始时间': time.strftime('%F %T')}
@@ -112,7 +112,7 @@ def project(job: Job, write=True):
     if write and cur and cur.IsRenderingInProgress(): die('达芬奇正在渲染，这次没动它：等渲完，或去达芬奇里停掉渲染再试')
     if cur and cur.GetName() == name and (not mine or now == mine[0]): return r, pm, cur
     # 只读查询（snap）也一样：达芬奇正在渲染别的工程时不保存、不切工程（切走会打断那边的渲染），停下说明。当前开着的就是这条片子的工程时上一行已经返回，照常只读
-    if not write and cur and cur.IsRenderingInProgress(): die(f'达芬奇正在渲染（当前开着的工程是「{cur.GetName()}」，不是这条片子的「{name}」），这次没保存、没切工程：等渲完再看')
+    if not write and cur and cur.IsRenderingInProgress(): die(f'达芬奇正在渲染（当前开着的工程是「{cur.GetName()}」，不是这个项目的「{name}」），这次没保存、没切工程：等渲完再看')
     if cur and cur.GetName() != 'Untitled Project':
         pm.SaveProject(); remember_switch(root, pm, cur, name)
     dbs = mine or [now] + [d for d in all_dbs if d != now]
@@ -416,7 +416,7 @@ def _review(job: Job, made, name=None, broll=None, force_len=False, allow_gaps=F
     N = int(job['frames']); fps = float(job.fps)
     mlen = main.GetEndFrame() - main.GetStartFrame()
     if mlen != N and not force_len:
-        die(f'主线现在 {mlen} 帧，片子记录的是 {N} 帧：主线在 a-roll 之后被改过。先用 snap/diff 弄清改了哪里，重新 words/subs，或加 --force-len')
+        die(f'主线现在 {mlen} 帧，项目记录的是 {N} 帧：主线在 a-roll 之后被改过。先用 snap/diff 弄清改了哪里，重新 words/subs，或加 --force-len')
     B = rj(job.p('分镜.json')); shots = [s for s in B['shots'] if s['kind'] == 'B']
     broll = Path(broll) if broll else next((x for x in (job.p('合成', 'B肉_小圆圈.mp4'), job.p('合成', 'B肉.mp4')) if x.exists()), None)
     subt, subr = job.p('合成', '字幕', '字幕整轨.mov'), job.p('合成', '字幕', '字幕表.json')
@@ -959,7 +959,7 @@ def limit_peak(f, measure=loudness, ceiling=-1.0):
     量不出来（ffmpeg 没输出、读不出数）就停下说清楚：成片在哪、峰值没验证、怎么只重跑这一步。export 和 export-peak 命令都用。"""
     f = Path(f)
     if not f.exists(): die(f'没有这个成片文件：{f}')
-    again = f'修好后只重跑这一步：python3 thinkcut_edit.py export-peak <片子目录> --file "{f}"'
+    again = f'修好后只重跑这一步：python3 thinkcut_edit.py export-peak <项目文件夹> --file "{f}"'
     m = measure(f)
     if not m: die(f'成片已导出，但量不出响度和真峰值（ffmpeg 没给出读数），峰值没验证、也没限幅：{f}\n这个文件先别交付。看 ffmpeg 能不能用、文件有没有声音；{again}')
     say(f'成片响度 {m[0]} LUFS，真峰值 {m[1]} dBFS')
