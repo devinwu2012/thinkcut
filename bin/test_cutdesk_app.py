@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'bin'))
 os.environ.setdefault('THINKCUT_APP_FLAVOR', 'release')        # 不管在开发版还是正式版跑，结果一样
-if not os.environ.get('THINKCUT_PROFILES'):                    # 起的首页读测试配置档，不靠这台机器的用户配置档（2026-11-25 起大囍搬出了程序文件夹）
+if not os.environ.get('THINKCUT_PROFILES'):                    # 起的首页读测试配置档，不靠这台机器的用户配置档（2026-11-25 起用户的 IP 搬出了程序文件夹）
     import 测试配置档  # noqa: E402
     os.environ['THINKCUT_PROFILES'] = str(测试配置档.make(Path(tempfile.mkdtemp(prefix='测试配置档_')) / '配置档'))
 import cutdesk_app as A  # noqa: E402

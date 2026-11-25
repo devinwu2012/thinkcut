@@ -66,7 +66,7 @@ class ServeOpensShenpiantaiTests(unittest.TestCase):
         for target, value in (('edit_project.serve_backend', lambda run, env, args: {'url': 'http://127.0.0.1:18443/', 'version': 'v'}),):
             p = patch(target, side_effect=value); p.start(); self.addCleanup(p.stop)
         p = patch.dict(os.environ, {'THINKCUT_SKILL': str(self.skill)}); p.start(); self.addCleanup(p.stop)
-        for k in ('THINKCUT_NO_OPEN', 'DAXI_NO_OPEN'): os.environ.pop(k, None)   # 外面设了“不开浏览器”（跑全套测试时常这么设）时，这里要测的就是默认会开
+        for k in [k for k in os.environ if k.endswith('_NO_OPEN')]: os.environ.pop(k, None)   # 外面设了“不开浏览器”（跑全套测试时常这么设）时，这里要测的就是默认会开
 
     def args(self, **kw):
         import argparse

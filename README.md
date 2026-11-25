@@ -385,3 +385,9 @@ python3 bin/cutdesk_config.py rules --ip 新名字
 ```bash
 bash 口播自动剪辑/bin/run_tests.sh
 ```
+
+## 许可证
+
+本项目以 [PolyForm Noncommercial 1.0.0](LICENSE.md) 授权：个人、学习、研究、非营利用途可以自由使用和修改；**商业用途需另行取得作者授权**。第三方组件（如 ffmpeg、three.js）遵循各自的许可证。
+
+Licensed under PolyForm Noncommercial 1.0.0 — free for noncommercial use; commercial use requires a separate license from the author.

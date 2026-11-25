@@ -217,7 +217,7 @@ class Flavor(Base):
 
     def test_detect(self):
         with mock.patch.dict(os.environ, {'THINKCUT_APP_FLAVOR': ''}):
-            self.assertEqual(C.flavor(self.t / '大囍ai-开发'), 'dev'); self.assertEqual(C.flavor(self.t / '大囍ai'), 'release')
+            self.assertEqual(C.flavor(self.t / 'thinkcut-开发'), 'dev'); self.assertEqual(C.flavor(self.t / 'thinkcut'), 'release')
             wt = self.t / 'wt'; wt.mkdir(); (wt / '.git').write_text('gitdir: x', encoding='utf-8'); self.assertEqual(C.flavor(wt), 'dev')
 
 
