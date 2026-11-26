@@ -122,7 +122,8 @@ class Claude(Adapter):
     id, name, binary = 'claude', 'Claude Code', 'claude'
     login_args = ('auth', 'login')
     ALLOW = ['Read', 'Glob', 'Grep', 'Edit(./**)', 'Skill', 'TodoWrite',
-             'Bash(python3 *)', 'Bash(ls *)', 'Bash(ffprobe *)', 'Bash(ffmpeg *)', 'Bash(mkdir *)', 'Bash(yxer-safe *)']
+             'Bash(python3 *)', 'Bash(ls *)', 'Bash(ffprobe *)', 'Bash(ffmpeg *)', 'Bash(mkdir *)', 'Bash(yxer-safe *)',
+             'Bash(wc *)', 'Bash(grep *)', 'Bash(rg *)', 'Bash(head *)', 'Bash(tail *)', 'Bash(sed -n *)', 'Bash(cat *)', 'Bash(find *)']      # 只读的；命令都在沙盒里跑
     DENY = ['Bash(*yxer publish*)', 'Bash(*yxer-safe publish*)', 'Bash(* publish *)', 'Bash(security *)', 'Bash(*security find*)', 'Bash(*keychain*)',
             'Bash(curl *)', 'Bash(wget *)', 'Bash(rm *)', 'WebFetch', 'Read(~/.ssh/**)', 'Read(~/.yxer/**)', 'Read(**/secrets/**)']
 
@@ -133,12 +134,22 @@ class Claude(Adapter):
         if d.get('loggedIn'): return True, ''
         return False, 'Claude Code 的命令行还没登录（Claude 桌面端的登录它用不了）：点“登录”，在弹出的终端里登录你的 Claude 账号。'
 
+    # Claude Code 自带沙盒（2026-11-26 实测 2.1.316）：命令放进 macOS 沙盒、不联网（外网、本机回环都不通）、只能写工作目录和下面列的；
+    # 钥匙串靠 denyRead 钥匙串文件夹挡住（实测 AI 自己用 ctypes 读返回 -25300“找不到”）。不开沙盒就起不来时直接失败（failIfUnavailable），不退回没沙盒的跑法。
+    DENY_READ = ['~/Library/Keychains', '/Library/Keychains', '~/.ssh', '~/.yxer', '~/.codex/auth.json']
+
+    def sandbox(self, writable):
+        return {'sandbox': {'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,
+                            'filesystem': {'denyRead': self.DENY_READ, 'allowWrite': [str(x) for x in writable],
+                                           'denyWrite': [str(PROGRAM), str(PROGRAM.resolve())]}}}      # 程序文件夹不能写：代办在沙盒外跑的就是它
+
     def command(self, exe, prompt, cwd, session, writable, model=''):
         new = None
         if not session: new = session = str(uuid.uuid4())
         argv = [str(exe), '-p', prompt, '--output-format', 'stream-json', '--verbose',
                 '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--setting-sources', 'project',
-                '--add-dir', str(PROGRAM), '--allowedTools', *self.ALLOW, '--disallowedTools', *self.DENY,
+                '--settings', json.dumps(self.sandbox(writable), ensure_ascii=False),
+                '--allowedTools', *self.ALLOW, '--disallowedTools', *self.DENY,
                 *(['--session-id', session] if new else ['--resume', session]), *(['--model', model] if model else [])]
         return argv, new
 
@@ -363,12 +374,9 @@ def workdir(job):
 
 
 def writable_dirs(job):
-    import sys
-    sys.path.insert(0, str(PROGRAM / 'bin'))
+    """后台 AI 能写的：项目文件夹、系统临时目录。不给程序文件夹和 ~/Library/Application Support/ThinkCut（环境运行副本在那里，
+    代办在沙盒外跑的就是它们；要写那里的程序都经代办跑）。"""
     out = [workdir(job), job.dir, Path(tempfile.gettempdir())]
-    with contextlib.suppress(Exception):
-        import thinkcut_config
-        out.append(thinkcut_config.app_dir())
     seen = []
     for x in out:
         if x not in seen: seen.append(x)
@@ -384,7 +392,7 @@ RULES = """你是 ThinkCut · 思刻 审片台的后台 AI（{name}）。用户�
 4. 不直接改文案文件 03_成片/*.md：文稿的改写一律用 --rewrite 交建议，用户点“采纳”才写进去。
 5. 先读剪辑技能说明 {skill}/SKILL.md，和 {skill}/references/审片工作台.md 里“每一栏怎么用”“文稿栏”两节；涉及哪一步再读那一步的说明。
 6. 审片台命令：python3 "{script}" workbench "{jobdir}" <参数>（工作目录就是项目文件夹 {cwd}）。临时文件（比如 --rewrite 用的改写 JSON）放 {tmp}，别放在项目文件夹别处。
-7. 全部做完后，用一两句中文大白话说你做了什么、还有什么要用户看（这句话会显示给用户）。
+7. 全部做完后，用一两句中文大白话说你做了什么、还有什么要用户看（这句话会显示给用户）。运行命令时附的简短说明（description）也用中文，它会显示在“AI 正在做什么”里。
 """
 
 

@@ -201,6 +201,11 @@ class FlowTests(Base):
         self.assertTrue(any('yxer publish' in x for x in deny) and any('security' in x for x in deny) and 'WebFetch' in deny, deny)
         allow = argv[argv.index('--allowedTools') + 1: argv.index('--disallowedTools')]
         self.assertIn('Edit(./**)', allow); self.assertNotIn('Bash', allow)                             # 不放开所有命令
+        sb = json.loads(argv[argv.index('--settings') + 1])['sandbox']                                        # Claude 自带沙盒：开着、不许退回无沙盒、挡钥匙串、程序文件夹不能写
+        self.assertTrue(sb['enabled'] and sb['failIfUnavailable']); self.assertFalse(sb['allowUnsandboxedCommands'])
+        self.assertIn('~/Library/Keychains', sb['filesystem']['denyRead']); self.assertIn(str(E.PROGRAM), sb['filesystem']['denyWrite'])
+        self.assertNotIn('network', sb); self.assertNotIn('--add-dir', argv)                                    # 不放行任何网络域名；程序文件夹不加进可写
+        self.assertNotIn('Application Support', ' '.join(sb['filesystem']['allowWrite']))
         rec = E.load(self.job); self.assertEqual(rec['engine_last'], 'claude'); self.assertNotIn('codex', rec['sessions'])
         self.assertEqual(rec['sessions']['claude']['id'], argv[argv.index('--session-id') + 1]); self.assertEqual(self.run_rec()['state'], '完成')
         # 再提交：Claude 接着用它自己的会话
