@@ -12,6 +12,8 @@ from PIL import Image, ImageDraw
 root = Path(sys.argv[1]); S = root / "skill/thinkcut-cover/scripts/thinkcut_cover.py"; sample = root / "samples/烟道这样包"
 fails = []
 def check(ok, msg): print(("通过 " if ok else "失败 ") + msg); ok or fails.append(msg)
+_FULL = __import__('os').environ.get('THINKCUT_TEST_FULL')      # bin/test_all.py 设：没过时把子测试的完整输出打出来（2026-11-26 CI 只看得到尾巴）
+def _t(n): return 10**9 if _FULL else n
 def run(d, cmd, *a): return subprocess.run([sys.executable, "-B", str(S), cmd, str(d), *a], capture_output=True, text=True)
 SAME = "横版和竖版不是同一张画"          # 2026-11-21 另生横版底图时的提醒（样例的横版底图就是另生的）
 def quiet(out): return all(SAME in w for l in out.splitlines() if "警告：" in l for w in l.split("警告：", 1)[1].split("；"))
@@ -20,7 +22,7 @@ with tempfile.TemporaryDirectory() as t:
     d = Path(t) / "job"; (d / "_制作文件").mkdir(parents=True)
     for f in ("spec.json", "bg_portrait.png", "bg_landscape.png"):
         shutil.copy(sample / f, d / "_制作文件" / f)
-    r = run(d, "render", "--ratios", "all"); check(r.returncode == 0, "render 三种比例运行成功" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+    r = run(d, "render", "--ratios", "all"); check(r.returncode == 0, "render 三种比例运行成功" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
     check(quiet(r.stdout) and r.stdout.count(SAME) == 2 and SAME not in r.stdout.splitlines()[0], "样例除了横版提醒“横版和竖版不是同一张画”没有别的警告")
     qc = {q["ratio"]: q for q in json.loads((d / "_制作文件/qc_3x4_4x3_16x9.json").read_text())}
     sizes = {"3:4": (1080, 1440), "4:3": (1440, 1080), "16:9": (1920, 1080)}
@@ -112,7 +114,7 @@ with tempfile.TemporaryDirectory() as t:
     for f in ("spec.json", "bg_grid.png"):
         shutil.copy(root / "samples/水电四宫格" / f, g / "_制作文件" / f)
     r = run(g, "gen", "grid", "--task-only"); check(r.returncode == 0 and "Top-left" in (g / "_制作文件/task_grid.md").read_text(), "四宫格生图任务单写出")
-    r = run(g, "render", "--ratios", "all"); check(r.returncode == 0, "四宫格 render 三种比例运行成功" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+    r = run(g, "render", "--ratios", "all"); check(r.returncode == 0, "四宫格 render 三种比例运行成功" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
     check("警告" not in r.stdout, "四宫格样例没有任何警告")
     gq = {q["ratio"]: q for q in json.loads((g / "_制作文件/qc_3x4_4x3_16x9.json").read_text())}
     for ratio, size in sizes.items():
@@ -142,14 +144,14 @@ with tempfile.TemporaryDirectory() as t:
     cn = {"compare": "左右对比", "steps": "三步流程", "zoom": "局部放大", "number": "数字大字"}; nq = {}
     def near(im, x0, y0, x1, y1, rgb, tol=50): return int((np.abs(im[max(0, int(y0)): int(y1), max(0, int(x0)): int(x1)] - rgb).max(axis=2) < tol).sum())
     for lay, (args, idx) in jobs.items():
-        j = Path(t) / lay; r = run(j, "init", "--layout", lay, *args); check(r.returncode == 0, f"{cn[lay]} 登记成功" + ("" if r.returncode == 0 else "：" + r.stderr[-200:]))
+        j = Path(t) / lay; r = run(j, "init", "--layout", lay, *args); check(r.returncode == 0, f"{cn[lay]} 登记成功" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(200):]))
         if idx:
             sheet(idx, j / "_制作文件" / f"bg_{lay}.png")
             r = run(j, "gen", lay, "--task-only"); check(r.returncode == 0 and "terracotta" in (j / f"_制作文件/task_{lay}.md").read_text() and "a drain" in (j / f"_制作文件/task_{lay}.md").read_text(), f"{cn[lay]} 生图任务单写出")
             check(run(j, "gen", "grid", "--task-only").returncode != 0, f"{cn[lay]} 用错底图种类时拦住")
         else:                    # 数字大字只给竖版底图：横版复用竖版画（2026-11-21）
             shutil.copy(sample / "bg_portrait.png", j / "_制作文件/bg_portrait.png")
-        r = run(j, "render", "--ratios", "all"); check(r.returncode == 0, f"{cn[lay]} render 三种比例运行成功" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+        r = run(j, "render", "--ratios", "all"); check(r.returncode == 0, f"{cn[lay]} render 三种比例运行成功" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
         check(r.returncode == 0 and "警告" not in r.stdout, f"{cn[lay]} 样例没有任何警告")
         if r.returncode: continue
         nq[lay] = {q["ratio"]: q for q in json.loads((j / "_制作文件/qc_3x4_4x3_16x9.json").read_text())}
@@ -233,7 +235,7 @@ with tempfile.TemporaryDirectory() as t:
              "compare": ([*T, "--cell", "看得见的", "--cell-scene", "x", "--cell-subject", "none", *pc("看不见的")], {"sheet": ([one.convert("L").convert("RGB"), one], 2, 1)}, 1),
              "polaroid": ([*T, *pc("a", "b", "c", "d")], {"sheet": ([one] * 4, 2, 2)}, 1)}
     for lay, (args, bgs, ncol) in pjobs.items():
-        j = Path(t) / f"photo_{lay}"; r = run(j, "init", "--layout", lay, *args); check(r.returncode == 0, f"实拍留色 {lay} 登记成功" + ("" if r.returncode == 0 else "：" + r.stderr[-200:]))
+        j = Path(t) / f"photo_{lay}"; r = run(j, "init", "--layout", lay, *args); check(r.returncode == 0, f"实拍留色 {lay} 登记成功" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(200):]))
         kind = {"grid": "grid", "six": "six", "triptych": "triptych", "compare": "compare", "polaroid": "polaroid", "full": "portrait"}.get(lay, "photo")
         r = run(j, "gen", kind, "--task-only"); tk = next((j / "_制作文件").glob("task_photo*.md")).read_text() if r.returncode == 0 else ""
         check("SELECTIVE COLOUR" in tk and "no people" in tk and "terracotta" not in tk, f"实拍留色 {lay} 生图任务单用实拍留色模板")
@@ -242,7 +244,7 @@ with tempfile.TemporaryDirectory() as t:
                 fsheet(im[0], im[1], im[2], j / "_制作文件" / f"bg_photo_{lay}.png")
             else:
                 im.save(j / "_制作文件" / f)
-        r = run(j, "render", "--ratios", "all"); check(r.returncode == 0 and r.stdout.count("封面已出") == 3, f"实拍留色 {lay} 三种比例都出图" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+        r = run(j, "render", "--ratios", "all"); check(r.returncode == 0 and r.stdout.count("封面已出") == 3, f"实拍留色 {lay} 三种比例都出图" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
         if r.returncode:
             continue
         check("没找到留色区域" not in r.stdout and "红圈或箭头压到" not in r.stdout, f"实拍留色 {lay} 没有误报")
@@ -294,7 +296,7 @@ with tempfile.TemporaryDirectory() as t:
     check([k for k in sp if k.startswith("line")] == ["line1", "line2", "line3"] and sp.get("line3") == "我不接了", "三行主标题登记成功（line1、line2、line3）")
     for f in ("bg_portrait.png", "bg_landscape.png"):
         shutil.copy(sample / f, s3 / "_制作文件" / f)
-    r = run(s3, "render", "--ratios", "all"); check(r.returncode == 0 and quiet(r.stdout), "三行主标题 单主角三种比例都出图、没有警告" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+    r = run(s3, "render", "--ratios", "all"); check(r.returncode == 0 and quiet(r.stdout), "三行主标题 单主角三种比例都出图、没有警告" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
     if r.returncode == 0:
         for q in json.loads((s3 / "_制作文件/qc_3x4_4x3_16x9.json").read_text()):
             im = np.asarray(Image.open(q["file"]).convert("RGB")).astype(int); M = q["margin"]; S_ = q["title_px"]; H_, W_ = im.shape[:2]
@@ -307,7 +309,7 @@ with tempfile.TemporaryDirectory() as t:
         g3 = Path(t) / name
         r = run(g3, "init", "--layout", "grid", *args, "--circle", cl, *cells("一|甲", "二|乙", "三|丙", "四|丁"))
         shutil.copy(root / "samples/水电四宫格/bg_grid.png", g3 / "_制作文件/bg_grid.png")
-        r = run(g3, "render", "--ratios", "all"); check(r.returncode == 0 and "警告" not in r.stdout, f"三行主标题 四宫格（圈在第 {name[-1]} 行）三种比例都出图、没有警告" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+        r = run(g3, "render", "--ratios", "all"); check(r.returncode == 0 and "警告" not in r.stdout, f"三行主标题 四宫格（圈在第 {name[-1]} 行）三种比例都出图、没有警告" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
         if r.returncode:
             continue
         for q in json.loads((g3 / "_制作文件/qc_3x4_4x3_16x9.json").read_text()):
@@ -317,7 +319,7 @@ with tempfile.TemporaryDirectory() as t:
             check(q["red_on_other_text"] == 0 and len(bs) == 4 and row == int(name[-1]) - 1, f"三行主标题 四宫格 {q['ratio']} 色块＋三行、圈在第 {name[-1]} 行、红圈和箭头不压别的字")
     p3 = Path(t) / "l3six"; run(p3, "init", "--layout", "six", "--style", "photo", *T3, "--circle", "不接了", *pc("电视墙", "变压器", "基材", "淋浴房", "入户门", "网线"))
     fsheet([one] * 6, 3, 2, p3 / "_制作文件/bg_photo_six.png")
-    r = run(p3, "render", "--ratios", "all"); check(r.returncode == 0 and r.stdout.count("封面已出") == 3 and "警告" not in r.stdout, "三行主标题 实拍六宫格三种比例都出图、没有警告" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+    r = run(p3, "render", "--ratios", "all"); check(r.returncode == 0 and r.stdout.count("封面已出") == 3 and "警告" not in r.stdout, "三行主标题 实拍六宫格三种比例都出图、没有警告" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
     lg3 = Path(t) / "l3long"; run(lg3, "init", *T3[:4], "--line3", "我不接了外地灯光设计的活儿真的不接了谁来都不接", "--sub", "s", "--scene", "x", "--subject", "y")
     shutil.copy(sample / "bg_portrait.png", lg3 / "_制作文件/bg_portrait.png")
     r = run(lg3, "render", "--ratios", "3:4"); check("主标题太长" in r.stdout, "三行主标题 第三行太长时报警")
@@ -332,7 +334,7 @@ with tempfile.TemporaryDirectory() as t:
     sp = json.loads((ns / "_制作文件/spec.json").read_text()) if r.returncode == 0 else {}
     check(sp.get("sub") == "" and sp.get("circle") == "住进去就反味" and "默认圈" in r.stdout, "无副标题 登记成功、副标题为空、默认圈写进登记")
     shutil.copy(sample / "bg_portrait.png", ns / "_制作文件/bg_portrait.png")         # 只有竖版底图：横版复用竖版画（新6）
-    r = run(ns, "render", "--ratios", "all"); check(r.returncode == 0 and "警告" not in r.stdout, "无副标题 单主角三种比例都出图、没有警告" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+    r = run(ns, "render", "--ratios", "all"); check(r.returncode == 0 and "警告" not in r.stdout, "无副标题 单主角三种比例都出图、没有警告" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
     if r.returncode == 0:
         for q in json.loads((ns / "_制作文件/qc_3x4_4x3_16x9.json").read_text()):
             im = np.asarray(Image.open(q["file"]).convert("RGB")).astype(int); H_, W_ = im.shape[:2]; tx, ty = q["target"]
@@ -362,14 +364,14 @@ with tempfile.TemporaryDirectory() as t:
         qs = json.loads((j / "_制作文件/qc_3x4_4x3_16x9.json").read_text()) if ok else []
         reds = [near(np.asarray(Image.open(q["file"]).convert("RGB")).astype(int), 0, 0, 2000, 2000, (226, 84, 44)) for q in qs]
         check(ok and all(q.get("red_on_other_text", 0) == 0 for q in qs) and all(v > 1500 for v in reds),
-              f"无副标题 {dc.LAYOUT_CN[lay]} 三种比例都出图、有红线（圈或下划线）、红线不压别的字" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+              f"无副标题 {dc.LAYOUT_CN[lay]} 三种比例都出图、有红线（圈或下划线）、红线不压别的字" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
     for lay, (args, bgs, ncol) in pjobs.items():
         j = Path(t) / f"photo_{lay}"; a2 = [v for i, v in enumerate(args) if v != "--sub" and (i == 0 or args[i - 1] != "--sub")]
         r = run(j, "init", "--layout", lay, *a2)
         r = run(j, "render", "--ratios", "all"); ok = r.returncode == 0 and r.stdout.count("封面已出") == 3
         qs = json.loads((j / "_制作文件/qc_3x4_4x3_16x9.json").read_text()) if ok else []
         check(ok and "压到" not in r.stdout and all(q["red_on_other_text"] == 0 and not (q.get("label") or [0, 0, 0])[2] for q in qs),
-              f"无副标题 实拍留色 {lay} 三种比例都出图、没有色块、红线不压字和标签" + ("" if r.returncode == 0 else "：" + r.stderr[-300:]))
+              f"无副标题 实拍留色 {lay} 三种比例都出图、没有色块、红线不压字和标签" + ("" if r.returncode == 0 else "：" + r.stderr[-_t(300):]))
 
     # 2026-11-21 用户：全角问号在标题里占位比量出来的宽，圈收在问号中间。下一个字的墨迹起点改按“新起的一段墨迹”找
     S_ = 116; f_ = dc.title_font(S_, 1)
@@ -454,7 +456,7 @@ with tempfile.TemporaryDirectory() as t:
     ml = Path(t) / "lights"; run(ml, "init", "--line1", "为什么外地", "--line2", "灯光设计", "--line3", "我不接了", "--circle", "我不接了", "--scene", "x", "--subject", "y")
     im4.save(ml / "_制作文件/bg_portrait.png")
     r = run(ml, "render", "--ratios", "all"); ok = r.returncode == 0 and r.stdout.count("封面已出") == 3
-    check(ok and "警告" not in r.stdout, "多个小主角 三种比例都出图、没有警告（不报“没找到陶土色主角”）" + ("" if ok else "：" + r.stderr[-300:]))
+    check(ok and "警告" not in r.stdout, "多个小主角 三种比例都出图、没有警告（不报“没找到陶土色主角”）" + ("" if ok else "：" + r.stderr[-_t(300):]))
     for q in (json.loads((ml / "_制作文件/qc_3x4_4x3_16x9.json").read_text()) if ok else []):
         im = np.asarray(Image.open(q["file"]).convert("RGB")).astype(int); b = q["subject_box"]; tx, ty = q["target"]
         lm = np.abs(im - fill).max(axis=2) < 18
@@ -490,7 +492,7 @@ with tempfile.TemporaryDirectory() as t:
                                           env=dict(os.environ, PATH=f"{fake}{os.pathsep}{os.environ.get('PATH', '')}", FAKE_BG=str(bg)))
     shutil.copy(fbg, Path(t) / "framed.png"); shutil.copy(okbg, Path(t) / "clean.png")
     r1, r2 = gen(fr, Path(t) / "framed.png"), gen(ml, Path(t) / "clean.png")
-    check(r1.returncode == 0 and "底图已生成" in r1.stdout and "警告：底图被画了一圈外框" in r1.stdout, "外框 gen 出图后马上自查，带外框就报警（用假的 codex，不真生图）" + ("" if r1.returncode == 0 else "：" + r1.stderr[-300:]))
+    check(r1.returncode == 0 and "底图已生成" in r1.stdout and "警告：底图被画了一圈外框" in r1.stdout, "外框 gen 出图后马上自查，带外框就报警（用假的 codex，不真生图）" + ("" if r1.returncode == 0 else "：" + r1.stderr[-_t(300):]))
     check(r2.returncode == 0 and "底图已生成" in r2.stdout and "警告" not in r2.stdout, "外框 gen 出的底图不带外框时不报警")
 # 2026-11-21 体检：字体按名字核对序号，文件没了说清楚；弃用的仿宋字体不再跟着仓库走
 import importlib.util

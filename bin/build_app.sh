@@ -79,7 +79,8 @@ printf '"CFBundleName" = "%s";\n"CFBundleDisplayName" = "%s";\n' "$NAME" "$NAME"
 # 钥匙串里有“Cutdesk 本机签名”（本机自建证书，只在这台 Mac 用）就用它签，重建多少次都算同一个程序；
 # 没有就退回临时签名。以后对外发布换成苹果开发者签名：设 CUTDESK_SIGN="Developer ID Application: …"。
 SIGN="${CUTDESK_SIGN:-Cutdesk 本机签名}"
-SHA="$(security find-certificate -c "$SIGN" -Z 2>/dev/null | awk '/SHA-1/ {print $3; exit}')"   # 用指纹签：名字带中文时 codesign 会报 unknown exception
+SHA="$(security find-certificate -c "$SIGN" -Z 2>/dev/null | awk '/SHA-1/ {print $3; exit}' || true)"   # 用指纹签：名字带中文时 codesign 会报 unknown exception
+# ↑ 找不到证书时 security 退出码 44；脚本开着 pipefail，不加 || true 会在这里一声不响地退出（2026-11-26 GitHub 测试机上没有这张证书查到），走不到下面的临时签名
 if [ -n "$SHA" ]; then
   codesign --force --deep --sign "$SHA" --identifier "$BID" "$APP"
   echo "已签名：${SIGN}"

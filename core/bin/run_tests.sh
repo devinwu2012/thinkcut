@@ -16,7 +16,7 @@ if [ -z "${THINKCUT_PROFILES:-}" ]; then test_prof="$(mktemp -d)" && THINKCUT_PR
 lock_before="$(lock_state)"
 check_python() {  # $1 = group name, $2 = directory
   out=$(cd "$2" && python3 -m unittest discover -p 'test_*.py' 2>&1)
-  if ! echo "$out" | grep -q '^OK'; then echo "FAIL $1"; echo "$out" | grep -E '^(FAIL|ERROR):' | head -10; status=1
+  if ! echo "$out" | grep -q '^OK'; then echo "FAIL $1"; if [[ -n "${THINKCUT_TEST_FULL:-}" ]]; then echo "$out"; else echo "$out" | grep -E '^(FAIL|ERROR):' | head -10; fi; status=1      # THINKCUT_TEST_FULL：bin/test_all.py 设，没过时打完整报错
   elif echo "$out" | grep -q 'skipped='; then echo "FAIL $1：有测试被跳过（缺 ffmpeg 或 node？）"; status=1
   elif ! echo "$out" | grep -qE '^Ran [1-9]'; then echo "FAIL $1：一个测试都没找到"; status=1; fi
 }

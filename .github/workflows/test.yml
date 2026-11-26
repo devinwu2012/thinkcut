@@ -52,6 +52,18 @@ jobs:
       - name: 下载字体
         run: bash bin/fetch_fonts.sh
 
+      # 苹方（花字、品牌标签用）在 macOS 上是“按需下载”的系统字体：用户的 Mac 用过就有，测试机上没有，系统用内部的 PingFangUI 顶替、
+      # 也不会去下载（2026-11-26 查到）。照系统的做法从苹果的字体资源目录下载，核对指纹后放进 /Library/Fonts/（程序会在那里找）
+      - name: 下载苹方
+        run: |
+          python3 .github/fetch_pingfang.py "$RUNNER_TEMP/pingfang"
+          sudo cp "$RUNNER_TEMP/pingfang/PingFang.ttc" /Library/Fonts/PingFang.ttc
+
+      - name: 看一眼系统字体（排查用）
+        run: |
+          ls -l "/System/Library/Fonts/Hiragino Sans GB.ttc" /System/Library/Fonts/Supplemental/Songti.ttc || true
+          ls -l /System/Library/AssetsV2/com_apple_MobileAsset_Font*/*/AssetData/PingFang.ttc /Library/Fonts/PingFang.ttc || true
+
       - name: git 身份（有几项测试会在临时仓库里存档）
         run: |
           git config --global user.name "ThinkCut CI"

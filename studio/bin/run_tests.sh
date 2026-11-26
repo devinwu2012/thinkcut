@@ -21,6 +21,8 @@ from thinkcut.common import Job, rj
 from PIL import Image
 fails = []
 def check(ok, msg): print(('通过 ' if ok else '失败 ') + msg, flush=True); ok or fails.append(msg)
+_FULL = __import__('os').environ.get('THINKCUT_TEST_FULL')      # bin/test_all.py 设：没过时把子测试的完整输出打出来（2026-11-26 CI 只看得到尾巴）
+def _t(n): return 10**9 if _FULL else n
 
 r = subprocess.run([sys.executable, '-B', str(S), '-h'], capture_output=True, text=True)
 check(r.returncode == 0 and 'review' in r.stdout and 'subfix' in r.stdout, '命令行帮助能打开，列出全部命令')
@@ -249,7 +251,7 @@ console.log(JSON.stringify(r));'''
     except ValueError: jr = {}
     check(abs((jr.get('中') or 0) - 1.5) < 1e-9 and all(str(jr.get(k, '')).startswith('ERR:') and '2–6' in jr[k] for k in ('早', '晚', '中加')) and '卡点「早」在成片 1 秒' in jr.get('早', '')
           and jr.get('pad好') == 'ok' and jr.get('pad一帧内') == 'ok' and str(jr.get('pad超', '')).startswith('ERR:') and '4.004' in jr['pad超'],
-          '共用/基础.js：卡点不在镜头起止里就报错（写清卡点名、时间、镜头起止），时间轴超出镜头 1 帧以上报错' + ('' if jr else '：' + (r.stdout + r.stderr)[-300:]))
+          '共用/基础.js：卡点不在镜头起止里就报错（写清卡点名、时间、镜头起止），时间轴超出镜头 1 帧以上报错' + ('' if jr else '：' + (r.stdout + r.stderr)[-_t(300):]))
     # _frames_at：取回的帧不够、又读不出视频帧数时报错，不静默返回空帧
     pf0 = anim._ffprobe_frames
     try:
@@ -271,37 +273,37 @@ console.log(JSON.stringify(r));'''
     check(r.returncode != 0 and '动画工程文件夹不存在' in (r.stdout + r.stderr) and not (film / '合成' / '确认记录.json').exists(), '记确认时工程路径写错会拦下，不记一条对不上的确认')
 
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_tools_1112'], cwd=str(SK / 'scripts'), capture_output=True, text=True)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '水电反馈单剪辑工具测试（thinkcut/test_tools_1112.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-600:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '水电反馈单剪辑工具测试（thinkcut/test_tools_1112.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(600):]))
 # 2026-11-21《别墅装灯前》：达芬奇写入锁、审核线零碎、口播降噪修音、音效卡关键词、没看过的样张、给用户看的 MD（剪辑工具助手加）
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_tools_1121'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '别墅装灯反馈单剪辑工具测试（thinkcut/test_tools_1121.py）' + r.stdout.strip().replace('\n', '') + ('' if r.returncode == 0 else '：' + r.stderr[-800:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '别墅装灯反馈单剪辑工具测试（thinkcut/test_tools_1121.py）' + r.stdout.strip().replace('\n', '') + ('' if r.returncode == 0 else '：' + r.stderr[-_t(800):]))
 # 2026-11-12《水电阶段》动画与包装系统：包装系统组件、标签排版、布局检查、渲染前硬拦、尺寸拦截、总装（动画与包装系统会话加）
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_anim_packaging.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-check(r.returncode == 0, '水电反馈单动画与包装系统测试（bin/test_anim_packaging.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '水电反馈单动画与包装系统测试（bin/test_anim_packaging.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 # 2026-11-21《别墅装灯》反馈单 新10/11/19：人挡字同取景、逐字遮挡、单条调位置、签名；花字类型；步骤卡并排
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_occlusion_step_cards.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-check(r.returncode == 0, '别墅装灯反馈单人挡字/步骤卡测试（bin/test_occlusion_step_cards.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '别墅装灯反馈单人挡字/步骤卡测试（bin/test_occlusion_step_cards.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 # 2026-11-21《别墅装灯》新2/3/14/15/16：标签自检提速（新旧结果一致）、预览渲染并行、实拍/图片/盖实拍、标签直上直下
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_anim_speedup_footage.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-check(r.returncode == 0, '别墅装灯反馈单动画提速与实拍测试（bin/test_anim_speedup_footage.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '别墅装灯反馈单动画提速与实拍测试（bin/test_anim_speedup_footage.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 # 2026-11-21《261118 装修最后那点细节》新1/8：人挡字出片前预查头顶空间、同一遍渲染的 A肉 不误报旧
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_occlusion_precheck.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-check(r.returncode == 0, '261118 反馈单人挡字预查/渲染批次测试（bin/test_occlusion_precheck.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '261118 反馈单人挡字预查/渲染批次测试（bin/test_occlusion_precheck.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 # 2026-11-21《261118》新3：地图类画面硬拦、距离圈组件
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_map_distance_ring.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-check(r.returncode == 0, '261118 反馈单地图硬拦/距离圈测试（bin/test_map_distance_ring.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '261118 反馈单地图硬拦/距离圈测试（bin/test_map_distance_ring.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_anim_speedup.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-check(r.returncode == 0, '动画提速测试：样张一次截完、镜头不同时出（bin/test_anim_speedup.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '动画提速测试：样张一次截完、镜头不同时出（bin/test_anim_speedup.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 # 2026-11-21 体检“止血和清理”：渲染超时先叫停达芬奇、外部程序时限、写死路径自动找、达芬奇返回空不崩、审片工作台只收本页面请求、vendor/pp 下线
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_audit_hotfix.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600)
-check(r.returncode == 0, '体检止血测试（bin/test_audit_hotfix.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '体检止血测试（bin/test_audit_hotfix.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 # 2026-11-21 体检第二批：老代码动画模板下线（老片子仍能重出）、小修 a–h、用完即删的渲染临时文件放本机、说明瘦身
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_audit_batch2.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=900)
-check(r.returncode == 0, '体检第二批测试（bin/test_audit_batch2.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '体检第二批测试（bin/test_audit_batch2.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_sandbox_findings.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0, '试验田查出的问题（bin/test_sandbox_findings.py：修音后音轨开关恢复、修音轨开着）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '试验田查出的问题（bin/test_sandbox_findings.py：修音后音轨开关恢复、修音轨开着）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_review_gate.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600)
-check(r.returncode == 0, '交审前硬拦（bin/test_review_gate.py：已定规矩清单、给用户的 MD、几何遮挡、人声响度底噪、黑名单音效、关键词偏差）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-800:]))
+check(r.returncode == 0, '交审前硬拦（bin/test_review_gate.py：已定规矩清单、给用户的 MD、几何遮挡、人声响度底噪、黑名单音效、关键词偏差）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))
 # 2026-11-21《261118》新6/7：说明里有“发图片卡片前先把项目文件夹加进会话、点不开用 open 弹出”；动画案例索引查得到 4 个新镜头和代码位置
 skill_md = (SK / 'SKILL.md').read_text(encoding='utf-8'); idx = (SK / 'references' / '动画案例索引.md').read_text(encoding='utf-8')
 check('项目文件夹已加进本会话' in skill_md and '`open`' in skill_md and '要看哪里、确认什么' in skill_md, 'SKILL.md 写了：发图片、视频卡片前先确认项目文件夹已加进会话，点不开用 open 弹出并说清看哪里、确认什么')
@@ -310,29 +312,29 @@ check(all(x in idx for x in ('HF_地图/镜头/B01.html', 'HF_地图/镜头/B03.
       '动画案例索引：查得到《装修最后那点细节》B01–B04 四个镜头、各自的代码位置，“按画过的东西找”里有距离圈、手机聊天、登机牌')
 # 2026-11-21 新9：审片工作台（达芬奇用替身，起真的本机服务走一遍接口）
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_workbench'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片工作台测试（thinkcut/test_workbench.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-600:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片工作台测试（thinkcut/test_workbench.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(600):]))
 # 2026-11-22 审片台：7 个栏目、发布／读结果／回复、页面点“可以”“选这个”“写要求”“改字”、动画确认 anim.gate 认、命令行不能替用户点（要视频项目管理的 script_doc.set_section；开发时 THINKCUT_PM 指到它的 bin）
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_board'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台测试（thinkcut/test_board.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台测试（thinkcut/test_board.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 # 2026-11-22 审片台“口播剪辑”栏：剪口播的文字剪辑器并进来（转发每个接口含 409／保存进度／分段读、没口令不转、按需起后台、口播阶段没有 job.json 也能开、init 后数据接着用）
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_draft'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '初稿模式测试（thinkcut/test_draft.py：确认类不再拦渲染、导出最终闸只认审片台、机器配音没有人脸、占位图、审片台初稿和占位标记、五项进度）' + ('' if r.returncode == 0 else '：' + r.stderr[-600:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '初稿模式测试（thinkcut/test_draft.py：确认类不再拦渲染、导出最终闸只认审片台、机器配音没有人脸、占位图、审片台初稿和占位标记、五项进度）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(600):]))
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_xiubu_1123'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '初稿模式实测后的修补（thinkcut/test_xiubu_1123.py：该做动画的提醒、全片假设、达芬奇切换记录和借用库、片名、记反馈用真时间、试听收视频、花字间隔/标蓝/白字压浅色、nav-draft、占位图总览）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '初稿模式实测后的修补（thinkcut/test_xiubu_1123.py：该做动画的提醒、全片假设、达芬奇切换记录和借用库、片名、记反馈用真时间、试听收视频、花字间隔/标蓝/白字压浅色、nav-draft、占位图总览）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_wenan'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台口播剪辑栏测试（thinkcut/test_wenan.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台口播剪辑栏测试（thinkcut/test_wenan.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 # 2026-11-24 用户定：审片台第一栏“文案”（数据里叫 写稿）——在页面里写稿、和 AI 一起改（改写建议逐处采纳才落盘）、版本、定稿接出初稿
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_writing'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台文案栏测试（thinkcut/test_writing.py：读写各节、空白和贴进来、意见进 --wait、改写只有采纳才落盘、版本退回、定稿）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台文案栏测试（thinkcut/test_writing.py：读写各节、空白和贴进来、意见进 --wait、改写只有采纳才落盘、版本退回、定稿）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_engine'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], 'AI 引擎测试（thinkcut/test_engine.py：替身 AI 走通提交→后台处理→采纳、接着会话、换引擎、停止、提问、出错、未装未登录、--wait 老办法、权限参数、钥匙不泄露）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], 'AI 引擎测试（thinkcut/test_engine.py：替身 AI 走通提交→后台处理→采纳、接着会话、换引擎、停止、提问、出错、未装未登录、--wait 老办法、权限参数、钥匙不泄露）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_animclip'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '动画栏带口播播放测试（thinkcut/test_animclip.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '动画栏带口播播放测试（thinkcut/test_animclip.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 # 2026-11-25 发布前 QA 的后台问题：口令只在 HttpOnly cookie、job.json 现读、闲置退出和端口回收、坏文件能恢复、发布卡住能撤回、新建加锁去重、撤销回原 IP、长题目、编号不重用
 r = subprocess.run([sys.executable, '-B', '-W', 'ignore', '-m', 'unittest', 'thinkcut.test_qa_1125'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '发布前 QA 回归测试（thinkcut/test_qa_1125.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '发布前 QA 回归测试（thinkcut/test_qa_1125.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 r = subprocess.run([sys.executable, '-B', '-W', 'ignore', '-m', 'unittest', 'thinkcut.test_home'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '首页测试（thinkcut/test_home.py：扫片子和四步阶段、按需起单片审片台并复用、新建片子、右键改名／移到做完的／移到 NAS 回收站再拿回来、封面小图、点开先到 /open 再跳、备料拖进来和登记路径（同名不覆盖、大文件、半截不留）、等所有片子、命令行不能替用户点）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '首页测试（thinkcut/test_home.py：扫片子和四步阶段、按需起单片审片台并复用、新建片子、右键改名／移到做完的／移到 NAS 回收站再拿回来、封面小图、点开先到 /open 再跳、备料拖进来和登记路径（同名不覆盖、大文件、半截不留）、等所有片子、命令行不能替用户点）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 # 2026-11-21 新19：导航条底（nav_bg）。不连达芬奇，只用 ffmpeg 造假导航条
 from thinkcut import overlay
 check(overlay.NAV_BG_NEW == 'dim' and set(overlay.NAV_BGS) == {'opaque', 'dim', 'clear'}, '新片子默认导航条底是半透明深色（dim），三种做法 opaque/dim/clear')

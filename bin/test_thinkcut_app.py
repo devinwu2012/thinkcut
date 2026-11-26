@@ -146,6 +146,15 @@ class Build(unittest.TestCase):
             r = subprocess.run(['bash', str(ROOT / 'bin' / 'build_app.sh'), '--out', d], capture_output=True, text=True, env={**os.environ, 'THINKCUT_APP_FLAVOR': '别的'})
             self.assertNotEqual(r.returncode, 0)
 
+    def test_钥匙串里没有签名证书时退回临时签名(self):
+        """2026-11-26 GitHub 测试机上没有“Cutdesk 本机签名”：以前 security 找不到证书退出码 44，脚本开着 pipefail 一声不响退出；应退回临时签名照样构建出来。"""
+        with tempfile.TemporaryDirectory() as d:
+            env = {**os.environ, 'CUTDESK_SIGN': '没有这张证书-测试用'}
+            r = subprocess.run(['bash', str(ROOT / 'bin' / 'build_app.sh'), '--out', d], capture_output=True, text=True, errors='replace', stdin=subprocess.DEVNULL, env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr); self.assertIn('用临时签名', r.stdout)
+            app = next(Path(d).glob('*.app'))
+            self.assertIn('Signature=adhoc', subprocess.run(['codesign', '-dv', str(app)], capture_output=True, text=True).stderr)
+
     def test_构建出Cutdesk_app(self):
         with tempfile.TemporaryDirectory() as d:
             self.build(d)
