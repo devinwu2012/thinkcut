@@ -22,28 +22,21 @@ from urllib.parse import parse_qs
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent / "bin"))
 import keychain  # noqa: E402
+import locations  # noqa: E402  开发版、使用版各在哪
 import thinkcut_config  # noqa: E402  本机文件夹名（含旧名兼容）
 KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT = "cn.thinkcut.doubao", "api-key"
 # 钥匙只有使用版那一份；开发版不复制，用 THINKCUT_SECRETS_DIR 指过去（bin/dev.sh run 会设；2026-11-24）
 # 2026-11-24 初稿模式第二次实测：助手在开发版的 worktree 里直接跑 doubao_tts，没经 dev.sh run，读不到钥匙。
 # 所以不设变量时也会自己找：本仓库没有钥匙、又是开发版（目录名以“-开发”结尾）或它的 worktree，就读使用版那一份（只读，不复制）。
-DEV_SUFFIX = "-开发"
+# 2026-11-26 起开发版不再是使用版的兄弟目录：使用版按开发版的 git origin 找（bin/locations.py）。
 
 
 def prod_secrets_dir(repo=None):
     repo = Path(repo) if repo else ROOT.parent
-    main = repo
-    git = repo / ".git"
-    try:
-        if git.is_file():       # worktree：.git 是一行 “gitdir: <主仓库>/.git/worktrees/<名>”
-            line = git.read_text(encoding="utf-8").strip()
-            if line.startswith("gitdir:"):
-                main = Path(line[7:].strip()).parents[2]
-    except (OSError, IndexError):
+    if not locations.is_dev(locations.main_repo(repo)) and not locations.is_dev(repo):
         return None
-    if not main.name.endswith(DEV_SUFFIX):
-        return None
-    return main.parent / main.name[:-len(DEV_SUFFIX)] / "core" / "secrets"
+    prod = locations.prod_of(repo)
+    return prod / "core" / "secrets" if prod else None
 
 
 def pick_secrets_dir(env=None, repo=None):
@@ -78,6 +71,8 @@ def key_source():
 
 
 def load_key():
+    if os.environ.get('THINKCUT_AI_BACKGROUND'):      # 后台 AI 不拿钥匙原文（2026-11-26）：识别、合成由审片台代办
+        raise RuntimeError('后台 AI 不直接读豆包钥匙：识别、合成照常运行 transcribe_video.py／doubao_tts.py／doubao_direct_asr.py，会自动交给审片台代办')
     try:
         key = keychain.get(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
     except RuntimeError as exc:
@@ -106,6 +101,7 @@ def load_file_key():
 
 
 def save_key(key):
+    if os.environ.get('THINKCUT_AI_BACKGROUND'): raise RuntimeError('后台 AI 不能改钥匙：请用户在 ThinkCut 设置页里配')
     key = validate_key(key)
     if keychain.enabled():
         keychain.put(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, key); return "钥匙串"

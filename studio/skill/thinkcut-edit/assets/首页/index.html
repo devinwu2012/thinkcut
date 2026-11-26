@@ -1,4 +1,5 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>ThinkCut</title>
+<!--THINKCUT_TOKENS-->
 <style>
 /* 首页（2026-11-24 用户定方向 C：“像网页、丑、不合理、片子删不掉”→ 四步看板，每条片子开成自己的窗口）。thinkcut_edit.py home 起的服务给它（固定端口 8760）。
    规矩：
@@ -16,116 +17,126 @@
       “回收站…”（2026-11-25 用户要）：列出删掉的片子和 IP，点“还原”放回原处（片子回它那个 IP 的文件夹）；不做永久删除。
       选的 IP 记在服务那边（profiles/本机.json 的 "首页IP"），不靠浏览器。页面标题（Mac 窗口标题）是“IP 名 · ThinkCut”。用 --root 打开的首页只显示 IP 名、不能切。
    颜色是三块共用的苹果 macOS 配色（变量名和值见共享约定 C2_配色和约定，审片台、外壳一样）。 */
-:root{--bg:#ffffff;--bar:#f6f6f6;--side:#f9f9f9;--card:#ffffff;--text:#1d1d1f;--text-2:#3a3a3c;--muted:#6e6e73;--line:#e5e5e5;--line-2:#c7c7cc;--chip:#f0f0f2;--seg:#e3e3e8;--seg-on:#ffffff;
-  --accent:#007aff;--accent-text:#0066cc;--red:#ff3b30;
-  --s-wait:#0066cc;--s-wait-bg:#e5f0ff;--s-todo:#b35c00;--s-todo-bg:#fff1dc;--s-ai:#8944ab;--s-ai-bg:#f3e8fa;--s-ok:#248a3d;--s-ok-bg:#e3f5e8;--dot-ok:#34c759;--dot-todo:#ff9500;
-  --shadow:0 1px 2px rgba(0,0,0,.06),0 0 0 1px var(--line);--menu:rgba(246,246,246,.97);--scrim:rgba(0,0,0,.18)}
-@media (prefers-color-scheme:dark){:root{--bg:#1e1e1e;--bar:#2b2b2b;--side:#242424;--card:#2c2c2e;--text:#f5f5f7;--text-2:#d1d1d6;--muted:#98989d;--line:#3a3a3c;--line-2:#545458;--chip:#3a3a3c;--seg:#3a3a3c;--seg-on:#636366;
-  --accent:#0a84ff;--accent-text:#64a8ff;--red:#ff453a;
-  --s-wait:#64a8ff;--s-wait-bg:#0f2f55;--s-todo:#ffb340;--s-todo-bg:#4a3418;--s-ai:#da8fff;--s-ai-bg:#3b2147;--s-ok:#4cd964;--s-ok-bg:#16351f;--dot-ok:#30d158;--dot-todo:#ff9f0a;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 0 0 1px var(--line);--menu:rgba(43,43,43,.97);--scrim:rgba(0,0,0,.4)}}
+/* 颜色、线、圆角、阴影、字号、动效全部取自界面规格 design/tokens.css（2026-11-26 界面精修），这里不写死。 */
 *{box-sizing:border-box}html,body{height:100%;margin:0}[hidden]{display:none!important}
-body{display:flex;flex-direction:column;background:var(--side);color:var(--text);font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none}
+body{display:flex;flex-direction:column;background:var(--win);color:var(--t1);font-family:var(--font);font-size:var(--fs-13);line-height:var(--lh-13);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;overflow:hidden;-webkit-user-select:none;user-select:none}
 button,input{font:inherit;color:inherit}input{-webkit-user-select:text;user-select:text}
-.tbtn{height:28px;border-radius:6px;border:0;background:transparent;display:inline-flex;align-items:center;gap:6px;padding:0 10px;cursor:default;white-space:nowrap}
-.tbtn:hover:not(:disabled){background:var(--chip)}.tbtn.primary{background:var(--accent);color:#fff;font-weight:600;padding:0 12px}.tbtn.primary:hover:not(:disabled){filter:brightness(1.08);background:var(--accent)}
-.tbtn.plain{background:var(--card);box-shadow:0 0 0 1px var(--line-2);padding:0 16px}.tbtn.plain:hover:not(:disabled){background:var(--card)}
-.tbtn.danger{background:var(--red);color:#fff;font-weight:600;padding:0 16px}.tbtn.danger:hover:not(:disabled){background:var(--red);filter:brightness(1.08)}
-button:disabled{opacity:.45}button:focus-visible,.card:focus-visible,tr:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.muted{color:var(--muted)}.grow{flex:1}
-.pill{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:11px;font-size:11px;font-weight:600;white-space:nowrap}
-.st-wait{color:var(--s-wait);background:var(--s-wait-bg)}.st-todo{color:var(--s-todo);background:var(--s-todo-bg)}.st-ai{color:var(--s-ai);background:var(--s-ai-bg)}.st-ok{color:var(--s-ok);background:var(--s-ok-bg)}
-.live{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--dot-ok);margin-left:6px;flex:none}
+.tbtn{height:28px;border-radius:var(--r-m);border:0;background:transparent;display:inline-flex;align-items:center;gap:6px;padding:0 var(--sp-2);cursor:default;white-space:nowrap;color:var(--t1);transition:background-color var(--dur-1) var(--ease)}
+.tbtn:hover:not(:disabled){background:var(--fill)}.tbtn:active:not(:disabled){background:var(--fill-h)}
+.tbtn.primary{background:var(--blue);color:var(--on-blue);font-weight:var(--fw-b);padding:0 var(--sp-3);box-shadow:0 1px 1px var(--fill-h)}.tbtn.primary:hover:not(:disabled){background:var(--blue-h)}.tbtn.primary:active:not(:disabled){background:var(--blue-p)}
+.tbtn.plain{background:var(--btn);box-shadow:var(--sh-btn);padding:0 var(--sp-4);font-weight:var(--fw-b)}.tbtn.plain:hover:not(:disabled){background:var(--btn);background-image:linear-gradient(var(--fill),var(--fill))}
+.tbtn.danger{background:var(--s-err);color:var(--on-blue);font-weight:var(--fw-b);padding:0 var(--sp-4)}.tbtn.danger:hover:not(:disabled){background:var(--s-err);filter:brightness(1.06)}
+.tbtn.icon{width:24px;height:24px;padding:0;justify-content:center;color:var(--t3);border-radius:var(--r-s)}
+button:disabled{opacity:.45}button:focus-visible,.card:focus-visible,tr:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
+.muted{color:var(--t3)}.grow{flex:1}
+.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px 0 7px;border-radius:var(--r-pill);font-size:var(--fs-12);font-weight:var(--fw-b);white-space:nowrap}
+.pill.st-wait::before,.pill.st-todo::before,.pill.st-ai::before{content:"";width:6px;height:6px;border-radius:var(--r-pill);background:currentColor}
+.st-wait{color:var(--s-wait-t);background:var(--s-wait-bg)}.st-wait::before{background:var(--s-wait)!important}
+.st-todo{color:var(--s-todo-t);background:var(--s-todo-bg)}.st-todo::before{background:var(--s-todo)!important}
+.st-ai{color:var(--s-ai-t);background:var(--s-ai-bg)}.st-ai::before{background:var(--s-ai)!important}
+.st-ok{color:var(--s-ok-t);background:var(--s-ok-bg)}
+.live{display:inline-block;width:6px;height:6px;border-radius:var(--r-pill);background:var(--s-ok);margin-left:6px;flex:none}
 /* 工具栏 */
-.toolbar{height:52px;flex:0 0 52px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--bar);border-bottom:1px solid var(--line);white-space:nowrap;min-width:0}
-.toolbar h1{font-size:15px;font-weight:700;margin:0}
+.toolbar{height:var(--bar-h);flex:0 0 var(--bar-h);display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-4);background:var(--bar);border-bottom:var(--hairline);white-space:nowrap;min-width:0}
+.toolbar h1{font-size:var(--fs-15);font-weight:var(--fw-b);margin:0}
 /* IP 切换（左上角，像 Mac 工具栏的弹出按钮） */
-.ipsum{display:flex;align-items:center;gap:6px;height:30px;padding:0 8px 0 10px;border-radius:7px;font-size:15px;font-weight:700;max-width:260px}
-.ipsum:hover{background:var(--chip)}.ipsum span{overflow:hidden;text-overflow:ellipsis}.ipsum svg{flex:none;color:var(--muted)}
-.ipsum .app{font-size:12px;font-weight:400;color:var(--muted);flex:none}
-.pop-body.ipmenu{left:0;right:auto;width:260px;padding:5px;border-radius:9px;background:var(--menu);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
-.ipmenu .cap{font-size:11px;font-weight:600;color:var(--muted);padding:4px 10px 2px}
-.ipmenu button{display:flex;width:100%;height:26px;align-items:center;gap:6px;padding:0 10px;border:0;border-radius:5px;background:none;text-align:left;cursor:default}
-.ipmenu button:hover,.ipmenu button:focus{background:var(--accent);color:#fff;outline:none}.ipmenu .ck{width:14px;flex:none}
-.ipmenu button span:not(.ck){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ipmenu hr{border:0;height:1px;background:var(--line);margin:4px 8px}.ipmenu .note{font-size:12px;color:var(--muted);padding:4px 10px 6px}.ipmenu .red{color:var(--red)}
-.binlist{max-height:46vh;overflow:auto;margin:8px 0 4px;border-radius:8px;background:var(--card);box-shadow:0 0 0 1px var(--line)}
-.binlist .g{font-size:11px;font-weight:600;color:var(--muted);padding:8px 12px 4px}.binlist .it{display:flex;align-items:center;gap:10px;padding:7px 12px;border-top:1px solid var(--chip)}
-.binlist .it .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}.binlist .it .w{font-size:11px;color:var(--muted);white-space:nowrap}
-.binlist .it .tbtn{height:24px;padding:0 10px}.binlist .none{padding:18px 12px;text-align:center;color:var(--muted)}
-select.field{-webkit-appearance:none;appearance:none;padding-right:28px;background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%23888' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 10px center}
+.ipsum{display:flex;align-items:center;gap:4px;height:28px;padding:0 6px 0 8px;border-radius:var(--r-m);font-size:var(--fs-13);font-weight:var(--fw-b);max-width:260px;transition:background-color var(--dur-1) var(--ease)}
+.ipsum:hover{background:var(--fill)}.ipsum span{overflow:hidden;text-overflow:ellipsis}.ipsum svg{flex:none;color:var(--t3)}
+.ipsum .app{font-size:var(--fs-12);font-weight:var(--fw-r);color:var(--t3);flex:none}
+.pop-body.ipmenu{left:0;right:auto;width:272px;padding:5px;border-radius:var(--r-m)}
+.ipmenu .cap{font-size:var(--fs-11);font-weight:var(--fw-b);color:var(--t3);padding:4px 10px 2px}
+.ipmenu button{display:flex;width:100%;height:24px;align-items:center;gap:6px;padding:0 10px;border:0;border-radius:var(--r-s);background:none;text-align:left;cursor:default}
+.ipmenu button:hover,.ipmenu button:focus{background:var(--blue);color:var(--on-blue);outline:none}.ipmenu .ck{width:14px;flex:none;color:var(--blue);font-weight:var(--fw-b)}.ipmenu button:hover .ck{color:var(--on-blue)}
+.ipmenu button span:not(.ck){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ipmenu hr{border:0;height:var(--hair-w);background:var(--hair);margin:4px 10px}.ipmenu .note{font-size:var(--fs-11);line-height:var(--lh-11);color:var(--t3);padding:2px 10px 6px 30px}.ipmenu .red{color:var(--s-err-t)}
+.binlist{max-height:46vh;overflow:auto;margin:var(--sp-2) 0 var(--sp-1);border-radius:var(--r-m);background:var(--card);box-shadow:var(--sh-card)}
+.binlist .g{font-size:var(--fs-11);font-weight:var(--fw-b);color:var(--t3);padding:8px 12px 4px}.binlist .it{display:flex;align-items:center;gap:10px;padding:7px 12px;border-top:var(--hairline)}
+.binlist .it .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:var(--fw-b)}.binlist .it .w{font-size:var(--fs-11);color:var(--t3);white-space:nowrap}
+.binlist .it .tbtn{height:24px;padding:0 10px}.binlist .none{padding:18px 12px;text-align:center;color:var(--t3)}
+select.field{-webkit-appearance:none;appearance:none;padding-right:28px}
+.selwrap{position:relative}.selwrap::after{content:"";position:absolute;right:12px;top:50%;width:6px;height:6px;margin-top:-5px;border-right:1.5px solid var(--t3);border-bottom:1.5px solid var(--t3);transform:rotate(45deg);pointer-events:none}
 /* 程序名（2026-11-25 用户：“这里应该有应用名字 thinkcut 思刻”）：像 Mac 应用标题，IP 菜单在它右边，中间细分隔；窄窗口只留 ThinkCut */
-.appname{display:flex;align-items:baseline;gap:5px;font-size:15px;font-weight:700;letter-spacing:-.01em;flex:none;color:var(--text)}.appname .cn{font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.08em}
-.tsep{width:1px;height:18px;background:var(--line-2);flex:none;margin:0 -2px}
-.toolbar .ipsum{font-weight:600}
+.appname{display:flex;align-items:baseline;gap:6px;font-size:var(--fs-15);font-weight:var(--fw-b);letter-spacing:-.01em;flex:none;color:var(--t1)}.appname .cn{font-size:var(--fs-12);font-weight:var(--fw-r);color:var(--t3)}
+.tsep{width:var(--hair-w);height:16px;background:var(--hair2);flex:none}
 @media (max-width:720px){.appname .cn{display:none}}@media (max-width:520px){.appname,.tsep{display:none}}
 html.cutdesk-app .toolbar{padding-left:92px}   /* 在 Mac 外壳里：左边给窗口三颗灯留够空（C2 用户嫌太近）；拖窗口外壳来做 */
-.sum{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;min-width:0}.sum b.t{color:var(--s-wait)}.sum b.a{color:var(--s-ai)}
-.seg{display:flex;background:var(--seg);border-radius:6px;padding:2px;flex:none}.seg .tbtn{height:24px;padding:0 10px;border-radius:5px}.seg .tbtn:hover{background:transparent}
-.seg .tbtn[aria-pressed="true"],.seg .tbtn[aria-pressed="true"]:hover{background:var(--seg-on);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.sum{font-size:var(--fs-12);color:var(--t3);overflow:hidden;text-overflow:ellipsis;min-width:0;display:flex;gap:var(--sp-1)}
+.sum b{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 var(--sp-2);border-radius:var(--r-s);font-weight:var(--fw-b)}.sum b::before{content:"";width:6px;height:6px;border-radius:var(--r-pill);background:currentColor}
+.sum b.t{color:var(--s-wait-t)}.sum b.t::before{background:var(--s-wait)}.sum b.a{color:var(--s-ai-t)}.sum b.a::before{background:var(--s-ai)}
+.seg{display:flex;background:var(--seg);border-radius:var(--r-m);padding:2px;gap:2px;flex:none}.seg .tbtn{height:24px;padding:0 var(--sp-3);border-radius:var(--r-s);color:var(--t2)}.seg .tbtn:hover{background:var(--fill)}
+.seg .tbtn[aria-pressed="true"],.seg .tbtn[aria-pressed="true"]:hover{background:var(--seg-on);color:var(--t1);font-weight:var(--fw-b);box-shadow:var(--seg-on-sh)}
 .pop{position:relative;flex:0 0 auto}.pop>summary{list-style:none}.pop>summary::-webkit-details-marker{display:none}
-.pop-body{position:absolute;right:0;top:36px;width:420px;max-width:calc(100vw - 32px);background:var(--card);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.2),0 0 0 1px var(--line);padding:14px 16px;z-index:20;white-space:normal;-webkit-user-select:text;user-select:text}
-.pop-body h3{font-size:13px;margin:0 0 6px}.pop-body code{display:block;background:var(--bg);border-radius:6px;padding:6px 9px;font-size:12px;word-break:break-all;margin:4px 0 8px;user-select:all}
-.aisum{display:flex;align-items:center;gap:6px;font-size:12px;height:28px;padding:0 8px;border-radius:6px;color:var(--muted)}.aisum:hover{background:var(--chip)}
-.dot{width:8px;height:8px;border-radius:4px;background:var(--line-2)}.dot.on{background:var(--dot-ok)}.dot.off{background:var(--dot-todo)}
-.field{display:block;width:100%;border:0;border-radius:6px;background:var(--card);padding:7px 10px;margin:6px 0 12px;box-shadow:inset 0 0 0 1px var(--line-2)}.field:focus{outline:3px solid color-mix(in srgb,var(--accent) 40%,transparent)}
-.row{display:flex;align-items:center;gap:8px}
+.pop-body{position:absolute;right:0;top:36px;width:400px;max-width:calc(100vw - 32px);background:var(--card);border-radius:var(--r-xl);box-shadow:var(--sh-pop);padding:var(--sp-4);z-index:20;white-space:normal;-webkit-user-select:text;user-select:text;animation:popin var(--dur-2) var(--ease)}
+@keyframes popin{from{opacity:0;transform:translateY(calc(4px * var(--move))) scale(calc(1 - .02 * var(--move)))}}
+.pop-body h3{font-size:var(--fs-13);font-weight:var(--fw-b);margin:0 0 6px}.pop-body p{margin:0 0 var(--sp-2)}.pop-body code{display:block;background:var(--sunk);border-radius:var(--r-s);padding:6px 9px;font-family:var(--font-mono);font-size:var(--fs-11);word-break:break-all;margin:4px 0 8px;user-select:all;box-shadow:inset 0 0 0 var(--hair-w) var(--hair)}
+.aisum{display:flex;align-items:center;gap:6px;font-size:var(--fs-12);height:24px;padding:0 var(--sp-2);border-radius:var(--r-s);color:var(--t2);transition:background-color var(--dur-1) var(--ease)}.aisum:hover,.pop[open]>.aisum{background:var(--fill)}
+.dot{width:6px;height:6px;border-radius:var(--r-pill);background:var(--s-off);flex:none}.dot.on{background:var(--s-ok)}.dot.off{background:var(--s-off)}.dot.ai{background:var(--s-ai)}.dot.err{background:var(--s-err)}
+.field{display:block;width:100%;border:0;border-radius:var(--r-s);background:var(--card);padding:6px 10px;margin:6px 0 12px;box-shadow:var(--sh-btn);outline:none;transition:box-shadow var(--dur-1) var(--ease)}.field:focus{box-shadow:0 0 0 1px var(--blue),0 0 0 4px var(--ring)}
+.row{display:flex;align-items:center;gap:var(--sp-2)}
+/* 首页“?”：怎么用（2026-11-26 用户：底部说明太啰嗦，挪进帮助） */
+.help p{margin:0 0 var(--sp-2);font-size:var(--fs-12);line-height:19px;color:var(--t2)}.help p b{color:var(--t1)}.help kbd{font-family:inherit;font-size:var(--fs-11);padding:0 5px;border-radius:var(--r-s);background:var(--fill);box-shadow:inset 0 -.5px 0 var(--hair2);color:var(--t1)}
+.pk{margin:-8px}.pkh{display:flex;align-items:baseline;justify-content:space-between;padding:6px 10px 8px}
+.pk .eng{display:grid;grid-template-columns:20px 110px auto minmax(0,1fr) auto;align-items:center;gap:var(--sp-2);min-height:44px;padding:6px 10px;border-radius:var(--r-m);transition:background-color var(--dur-1) var(--ease)}
+.pk .eng.on{background:var(--blue-tint)}.pk .eng.can:hover{background:var(--fill)}.pk .eng .ck{color:var(--blue);font-weight:var(--fw-b);text-align:center}
+.pk .eng .why{font-size:var(--fs-11);color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pk .eng .pill{height:18px}
+.pk .note{font-size:var(--fs-11);line-height:var(--lh-11);margin:var(--sp-2) 10px 0;padding-top:var(--sp-2);border-top:var(--hairline)}.pkf{display:flex;justify-content:flex-end;padding:var(--sp-2) 10px 2px}
+.st-wait.pill::before{content:none}
 /* 看板 */
 main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
-.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;padding:20px 22px;align-items:start;min-width:760px;flex:1 0 auto}
-.colh{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:0 4px 10px}.colh .c{color:var(--muted);font-weight:400}
-.num{width:20px;height:20px;border-radius:10px;background:var(--text);color:var(--bg);font-size:11px;display:inline-flex;align-items:center;justify-content:center}
-.col{display:flex;flex-direction:column;gap:14px;min-width:0}
-.card{background:var(--card);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;cursor:default;transition:box-shadow .12s}
-.card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1),0 0 0 1px var(--line)}.card.sel{outline:2px solid var(--accent);outline-offset:1px}
-.card.last{box-shadow:0 0 0 3px var(--accent)}.thumb{position:relative}.lastpill{position:absolute;right:10px;top:10px;background:var(--card);color:var(--text-2);box-shadow:0 0 0 1px var(--line)}
-.thumb{height:150px;background:var(--chip);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;overflow:hidden}
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sp-4);padding:14px var(--sp-5) var(--sp-5);align-items:start;min-width:760px;flex:1 0 auto}
+.colh{display:flex;align-items:center;gap:var(--sp-2);height:28px;font-size:var(--fs-13);font-weight:var(--fw-b);padding:0 var(--sp-1);margin-bottom:var(--sp-3)}.colh .c{color:var(--t3);font-weight:var(--fw-r);font-size:var(--fs-12)}
+.num{width:18px;height:18px;border-radius:var(--r-pill);background:var(--fill-h);color:var(--t2);font-size:var(--fs-11);font-weight:var(--fw-b);display:inline-flex;align-items:center;justify-content:center}
+.col{display:flex;flex-direction:column;gap:var(--sp-3);min-width:0}
+.card{background:var(--card);border-radius:var(--r-l);box-shadow:var(--sh-card);overflow:hidden;display:flex;flex-direction:column;cursor:default;transition:box-shadow var(--dur-1) var(--ease)}
+.card:hover{box-shadow:0 0 0 var(--hair-w) var(--hair),var(--sh2)}.card.sel{box-shadow:0 0 0 2px var(--blue),var(--sh1)}
+.card.last{box-shadow:0 0 0 2px var(--blue),var(--sh2)}.thumb{position:relative}.lastpill{position:absolute;right:10px;top:10px;background:var(--card);color:var(--t2);box-shadow:var(--sh-btn)}
+.thumb{height:150px;background:var(--sunk);display:flex;align-items:center;justify-content:center;color:var(--t3);font-size:var(--fs-12);overflow:hidden;border-bottom:var(--hairline)}
+.nocov{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--t3)}.nocov svg{color:var(--t4)}
 .thumb img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;-webkit-user-drag:none}
-.cb{padding:10px 12px;display:flex;flex-direction:column;gap:5px;min-width:0}
-.ct{font-weight:700;display:flex;align-items:center;min-width:0}.ct span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ct .n{color:var(--muted);font-weight:400;flex:none;margin-right:.6em}
-.cn{font-size:12px;color:var(--muted)}.cf{display:flex;gap:6px;align-items:center;min-height:20px}.cf .w{margin-left:auto;font-size:11px;color:var(--muted)}
-.err{color:var(--red);font-size:12px}
-.empty{border:1.5px dashed var(--line-2);border-radius:10px;height:120px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 16px;color:var(--muted);font-size:12px}
-.done{margin:0 22px 18px;background:var(--card);border-radius:10px;box-shadow:var(--shadow);min-width:716px;flex:none}
-.done-h{display:flex;align-items:center;gap:12px;padding:10px 14px;min-width:0}.done-h b{font-weight:700}.done-h .first{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.link{border:0;background:none;color:var(--accent-text);font-size:12px;padding:0;cursor:default;margin-left:auto;white-space:nowrap}
-.done-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;padding:4px 14px 14px}.done-grid .thumb{height:110px}
-.foot{height:36px;flex:0 0 36px;display:flex;align-items:center;justify-content:center;gap:18px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);background:var(--bar);white-space:nowrap;overflow:hidden}
-.blank{margin:60px auto;text-align:center;color:var(--muted)}
+.cb{padding:var(--sp-3);display:flex;flex-direction:column;gap:var(--sp-1);min-width:0}
+.ct{font-weight:var(--fw-b);display:flex;align-items:center;min-width:0}.ct span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ct .n{color:var(--t3);font-weight:var(--fw-r);font-size:var(--fs-12);flex:none;margin-right:var(--sp-2)}
+.cn{font-size:var(--fs-12);line-height:var(--lh-12);color:var(--t3)}.cf{display:flex;gap:6px;align-items:center;min-height:20px;margin-top:var(--sp-1)}.cf .w{margin-left:auto;font-size:var(--fs-11);color:var(--t3)}
+.err{color:var(--s-err-t);font-size:var(--fs-12)}
+.empty{border:1px dashed var(--hair2);border-radius:var(--r-l);height:120px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 var(--sp-4);color:var(--t3);font-size:var(--fs-12)}
+.done{margin:0 var(--sp-5) var(--sp-5);background:var(--card);border-radius:var(--r-l);box-shadow:var(--sh-card);min-width:716px;flex:none}
+.done-h{display:flex;align-items:center;gap:var(--sp-3);padding:10px 14px;min-width:0}.done-h b{font-weight:var(--fw-b)}.done-h .first{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.link{border:0;background:none;color:var(--blue-t);font-size:var(--fs-12);padding:0;cursor:default;margin-left:auto;white-space:nowrap}
+.done-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--sp-3);padding:4px 14px 14px}.done-grid .thumb{height:110px}
+.blank{margin:60px auto;text-align:center;color:var(--t3)}
 /* 列表 */
-.table{width:100%;border-collapse:collapse;background:var(--card);min-width:760px}
-.table th{font-size:11px;font-weight:600;color:var(--muted);padding:6px 12px;border-bottom:1px solid var(--line);text-align:left;position:sticky;top:0;background:var(--card);white-space:nowrap;z-index:1}
-.table td{padding:0 12px;height:46px;border-bottom:1px solid var(--chip);white-space:nowrap}
-.table tr.film:hover td{background:var(--chip)}.table tr.film.sel td{background:var(--accent);color:#fff}
-.table .nm{max-width:0;width:40%}.table .nm>div{display:flex;align-items:center;min-width:0}.table .nm span{overflow:hidden;text-overflow:ellipsis}.table .n{color:var(--muted);margin-right:.6em;flex:none}
-.table .sub{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
-.table tr.film.sel .sub,.table tr.film.sel .n,.table tr.film.sel .muted,.table tr.film.sel .steps *{color:rgba(255,255,255,.9)!important}
-.table tr.grp td{height:28px;font-size:11px;font-weight:600;color:var(--muted);background:var(--chip)}
-.steps{display:flex;gap:4px;align-items:center}.steps i{font-style:normal;color:var(--muted)}.steps .s-done{color:var(--s-ok)}.steps .s-now{font-weight:700}.steps .s-todo{color:var(--muted)}
+.table{width:100%;border-collapse:collapse;background:var(--surface);min-width:760px}
+.table th{font-size:var(--fs-11);font-weight:var(--fw-b);color:var(--t3);padding:6px var(--sp-5);border-bottom:var(--hairline);text-align:left;position:sticky;top:0;background:var(--bar);white-space:nowrap;z-index:1}
+.table td{padding:0 var(--sp-5);height:52px;border-bottom:var(--hairline);white-space:nowrap}
+.table tr.film:hover td{background:var(--fill)}.table tr.film.sel td{background:var(--blue-tint)}
+.table .nm{max-width:0;width:40%}.table .nm>div{display:flex;align-items:center;min-width:0;font-weight:var(--fw-b)}.table .nm span{overflow:hidden;text-overflow:ellipsis}.table .n{color:var(--t3);font-weight:var(--fw-r);font-size:var(--fs-12);margin-right:var(--sp-2);flex:none}
+.table .sub{font-size:var(--fs-12);color:var(--t3);overflow:hidden;text-overflow:ellipsis}
+.table tr.grp td{height:28px;font-size:var(--fs-11);font-weight:var(--fw-b);color:var(--t3);background:var(--bar)}
+.steps{display:flex;gap:6px;align-items:center;font-size:var(--fs-12)}.steps i{font-style:normal;color:var(--t4)}.steps .s-done{color:var(--s-ok-t)}.steps .s-now{font-weight:var(--fw-b);color:var(--t1)}.steps .s-todo{color:var(--t4)}
 /* 右键菜单、确认框、提示条 */
-.menu{position:fixed;z-index:60;min-width:220px;background:var(--menu);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:5px}
-.menu button{display:flex;width:100%;height:24px;align-items:center;gap:8px;padding:0 10px;border:0;border-radius:5px;background:none;text-align:left;cursor:default}
-.menu button:hover,.menu button:focus{background:var(--accent);color:#fff;outline:none}.menu button:hover .k,.menu button:focus .k{color:#fff}
-.menu .k{margin-left:auto;color:var(--muted);font-size:12px;padding-left:16px}.menu .red{color:var(--red)}.menu hr{border:0;height:1px;background:var(--line);margin:4px 8px}
-.scrim{position:fixed;left:0;right:0;top:52px;bottom:0;background:var(--scrim);z-index:50}
-.sheet{position:fixed;left:50%;top:52px;transform:translate(-50%,0);animation:drop .22s ease-out;width:480px;max-width:calc(100vw - 32px);background:var(--chip);border-radius:0 0 12px 12px;box-shadow:0 18px 40px rgba(0,0,0,.28);padding:20px 22px 18px;z-index:51;-webkit-user-select:text;user-select:text}
-@keyframes drop{from{transform:translate(-50%,-110%)}}.sheet .sh{display:flex;gap:14px}.sheet h2{font-size:14px;font-weight:700;margin:0 0 6px;word-break:break-all}.sheet p{font-size:12px;line-height:1.6;margin:0 0 6px}
-.sheet .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}.sheet svg{flex:none}
-#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);display:flex;align-items:center;gap:14px;background:rgba(29,29,31,.94);color:#fff;border-radius:10px;padding:8px 16px;font-size:13px;max-width:min(680px,90vw);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:70}
+.menu{position:fixed;z-index:60;min-width:228px;background:var(--card);border-radius:var(--r-m);box-shadow:var(--sh-pop);padding:5px;animation:popin var(--dur-1) var(--ease)}
+.menu button{display:flex;width:100%;height:24px;align-items:center;gap:var(--sp-2);padding:0 10px;border:0;border-radius:var(--r-s);background:none;text-align:left;cursor:default}
+.menu button:hover,.menu button:focus{background:var(--blue);color:var(--on-blue);outline:none}.menu button:hover .k,.menu button:focus .k{color:var(--on-blue)}
+.menu .k{margin-left:auto;color:var(--t4);font-size:var(--fs-12);padding-left:var(--sp-4)}.menu .red{color:var(--s-err-t)}.menu hr{border:0;height:var(--hair-w);background:var(--hair);margin:5px 10px}
+.scrim{position:fixed;left:0;right:0;top:var(--bar-h);bottom:0;background:var(--scrim);z-index:50;animation:fadein var(--dur-2) var(--ease)}@keyframes fadein{from{opacity:0}}
+.sheet{position:fixed;left:50%;top:100px;transform:translate(-50%,0);animation:drop var(--dur-2) var(--ease);width:480px;max-width:calc(100vw - 32px);background:var(--card);border-radius:var(--r-xl);box-shadow:var(--sh-pop);padding:var(--sp-5);z-index:51;-webkit-user-select:text;user-select:text}
+@keyframes drop{from{opacity:0;transform:translate(-50%,calc(-6px * var(--move)))}}.sheet .sh{display:flex;gap:14px}.sheet h2{font-size:var(--fs-15);line-height:22px;font-weight:var(--fw-b);margin:0 0 6px;word-break:break-all}.sheet p{font-size:var(--fs-13);line-height:var(--lh-13);color:var(--t2);margin:0 0 6px}
+.sheet .btns{display:flex;justify-content:flex-end;gap:var(--sp-2);margin-top:var(--sp-4)}.sheet svg{flex:none}
+#toast{position:fixed;left:50%;bottom:var(--sp-6);transform:translate(-50%,calc(12px * var(--move)));display:flex;align-items:center;gap:14px;background:var(--card);color:var(--t1);box-shadow:var(--sh-pop);border-radius:var(--r-l);padding:8px var(--sp-4);font-size:var(--fs-13);max-width:min(680px,90vw);opacity:0;pointer-events:none;transition:opacity var(--dur-1) var(--ease),transform var(--dur-2) var(--ease);z-index:70}
 /* 断开提示条、按钮转圈 */
-.netbar{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:8px 22px;background:color-mix(in srgb,var(--red) 12%,var(--bar));color:var(--red);font-size:12px;border-bottom:1px solid var(--line)}.netbar span{flex:1}
-.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-#toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}#toast.err{background:var(--red)}#toast button{border:0;background:none;color:#64a8ff;font-weight:600;padding:0;cursor:default;flex:none}
+.netbar{flex:0 0 auto;display:flex;align-items:center;gap:var(--sp-3);padding:8px var(--sp-5);background:var(--s-err-bg);color:var(--s-err-t);font-size:var(--fs-12);border-bottom:var(--hairline)}.netbar span{flex:1}
+.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:var(--r-pill);vertical-align:-1px;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+#toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}#toast.err{background:var(--s-err);color:var(--on-blue)}#toast button{border:0;background:none;color:var(--blue-t);font-weight:var(--fw-b);padding:0;cursor:default;flex:none}#toast.err button{color:var(--on-blue)}
 </style>
 <header class="toolbar">
 <span class="appname" aria-label="ThinkCut 思刻">ThinkCut<span class="cn">思刻</span></span><span class="tsep" aria-hidden="true"></span><details id="ippop" class="pop ovl"><summary class="ipsum" title="切换 IP：每个 IP 有自己的项目文件夹"><span id="ipname">…</span><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="pop-body ipmenu" id="ipbody" role="menu"></div></details><span id="sum" class="sum"></span><span class="grow"></span>
 <div class="seg" role="group" aria-label="看法"><button class="tbtn" id="v-board" aria-pressed="true">看板</button><button class="tbtn" id="v-list" aria-pressed="false">列表</button></div>
-<details id="aipop" class="pop ovl"><summary class="aisum" title="AI 是否在线：点击查看连接方法"><i id="aidot" class="dot"></i><span id="aiword">AI …</span></summary><div class="pop-body" id="aibody"></div></details>
+<details id="aipop" class="pop ovl"><summary class="aisum" title="当前用哪个 AI、它的状态：点开看详情"><i id="aidot" class="dot"></i><span id="aiword">AI …</span></summary><div class="pop-body" id="aibody" style="width:440px"></div></details><button class="tbtn" id="setbtn" title="设置：选 AI、登录、豆包语音、蚁小二">设置</button>
+<details id="helppop" class="pop ovl"><summary class="tbtn icon" aria-label="首页怎么用" title="首页怎么用"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.4 1.55c-.5.25-.8.6-.8 1.15v.3"/><circle cx="8" cy="11.3" r=".6" fill="currentColor" stroke="none"/></svg></summary><div class="pop-body help" style="width:360px">
+<h3>首页怎么用</h3><p><b>打开项目：</b>双击卡片（列表里双击一行），在本窗口打开。</p><p id="backhint"><b>回到首页：</b>在项目里点左上角“全部项目”，或按 <kbd>⌘W</kbd>。</p><p><b>一次一个：</b>一次只打开一个项目（达芬奇一次只打开一个工程）。</p><p style="margin:0"><b>右键卡片：</b>打开、在访达中显示、重命名、移到“已完成”、移到回收站。</p></div></details>
 <details id="newpop" class="pop ovl"><summary class="tbtn primary" id="newbtn">＋ 新建项目</summary><div class="pop-body">
 <h3>新项目的题目</h3><span class="muted">可暂不填写，先命名为“未命名”，之后可右键“重命名…”</span><input id="newtitle" class="field" maxlength="60" placeholder="比如：卫生间防水到底刷多高">
 <div class="row"><span class="muted grow">程序直接建立项目文件夹，并进入该项目的文稿栏开始撰稿；无需 AI 在线。</span><button id="newgo" class="tbtn primary">建立并开始撰稿</button></div></div></details>
 </header>
 <div id="netbar" class="netbar" role="status" hidden></div><main id="main"><p class="blank">正在读取项目…</p></main>
-<footer class="foot"><span>双击卡片，在本窗口中打开该项目</span><span id="backhint">在项目中按 ⌘W 返回此处</span><span>一次只打开一个项目（达芬奇一次只打开一个工程）</span></footer>
 <div id="menu" class="menu" role="menu" hidden></div>
 <div id="scrim" class="scrim" hidden></div><div id="sheet" class="sheet" role="dialog" aria-modal="true" hidden></div>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -168,7 +179,7 @@ const count=(f,tag)=>{const s=ST[f.id];if(!s||!tag||tag==='已定')return 0;retu
 const listening=f=>AI.films?.includes(f.id)||(AI.all&&ST[f.id]?.open);
 const title=(f,row)=>`<span class="n">${esc(f.num)}</span><span>${esc(f.title)}</span>${listening(f)?'<i class="live" title="AI 在线（本项目）"></i>':''}${row&&LAST===f.id?'<span class="pill lastpill" style="position:static;margin-left:8px">上次开的</span>':''}`;
 function card(f){const s=ST[f.id],w=where(f);
-  const th=s?.cover?`<img alt="" src="/api/cover?id=${encodeURIComponent(f.id)}&v=${s.cover}">`:'暂无封面';
+  const th=s?.cover?`<img alt="" src="/api/cover?id=${encodeURIComponent(f.id)}&v=${s.cover}">`:'<span class="nocov"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.75" cy="6.25" r="1.1"/><path d="m2.5 12 3.75-3.5 2.5 2.25 2-1.75L14 12"/></svg>暂无封面</span>';
   const foot=s?.ok===false?`<span class="err">${esc(s.error)}</span>`:pill(w.tag,count(f,w.tag));
   return `<div class="card${SEL===f.id?' sel':''}${LAST===f.id?' last':''}" tabindex="0" data-id="${esc(f.id)}"><div class="thumb">${th}${LAST===f.id?'<span class="pill lastpill">上次开的</span>':''}</div><div class="cb"><div class="ct">${title(f)}</div>
 <div class="cn">${esc(w.note||'')}</div><div class="cf">${foot}<span class="w">${esc(when(s?.t||f.t))}</span></div></div></div>`}
@@ -189,7 +200,7 @@ function draw(){if(!loaded||!$('menu').hidden)return;const m=$('main'),y=m.scrol
   m.innerHTML=!FILMS.length?`<p class="blank">${esc(EMPTY_MSG)}</p>`:VIEW==='list'?drawList():drawBoard();m.scrollTop=y;
   if($('doneT'))$('doneT').onclick=e=>{e.stopPropagation();DONE_OPEN=!DONE_OPEN;draw();if(DONE_OPEN)fill(FILMS.filter(f=>f.done&&!ST[f.id]))};
   const tt=FILMS.filter(f=>!f.done).reduce((a,f)=>[a[0]+(ST[f.id]?.turn||0),a[1]+(ST[f.id]?.ai||0)],[0,0]);
-  $('sum').innerHTML=`待审阅 <b class="t">${tt[0]}</b> · AI 处理中 <b class="a">${tt[1]}</b>`}
+  $('sum').innerHTML=(tt[0]?`<b class="t">待审阅 ${tt[0]}</b>`:'')+(tt[1]?`<b class="a">AI 处理中 ${tt[1]}</b>`:'')}
 async function fill(list){const q=[...list];await Promise.all(Array.from({length:4},async()=>{while(q.length){const f=q.shift();const s=await get('/api/film?id='+encodeURIComponent(f.id)).catch(()=>null);if(s)ST[f.id]=s}}));draw()}
 let filling=false;
 let FAILS=0;
@@ -206,15 +217,26 @@ function setView(v){VIEW=v;store.set('cutdesk-home-view',v);$('v-board').setAttr
 $('v-board').onclick=()=>setView('board');$('v-list').onclick=()=>setView('list');setView(VIEW);
 // —— AI 在不在等（3 秒问一次） ——
 async function ai(){const a=await get('/api/ai').catch(()=>null);if(!a||!a.films){$('aidot').className='dot';$('aiword').textContent='AI …';return}const was=JSON.stringify([AI.all,AI.films]);AI=a;
-  const n=a.films.length;$('aidot').className='dot '+(a.all||n?'on':'off');$('aiword').textContent=a.all?'AI 在线':n?`AI 在线 · ${n} 个项目`:'AI 离线';
-  $('aibody').innerHTML=`<h3>${a.all?'AI 在线（所有项目）：任一项目点“提交 AI”，AI 立即接手':n?'AI 只在线等待其中 '+n+' 个项目（其他项目点“提交 AI”后需在对话中提醒）':'AI 离线：在项目中点“提交 AI”只会先记录'}</h3>
-<p class="muted">连接方法：打开 Claude Code（或 Codex），在对话中说“看思刻”，或让它运行下面这条命令（Claude Code 在后台持续运行）：</p><code>${esc(a.cmd)}</code>
-<p class="muted">项目名后的绿点表示 AI 在线等待该项目。</p>`;
+  const n=a.films.length,e=a.engine||{},up=e.state==='在线';$('aidot').className='dot '+(AIDOT[e.state]||(a.all||n?'on':'off'));
+  $('aiword').textContent=e.name?`${e.name} · ${e.state}`:a.all?'AI 在线':n?`AI 在线 · ${n} 个项目`:'AI 离线';
+  if(!$('aipop').open)aiPick();
   if(JSON.stringify([a.all,a.films])!==was)draw()}
+// —— 点右上角 AI 状态：直接列出这台 Mac 上的 AI，点一下就换（2026-11-26 用户：“我一点就能自动切换到那个 AI”）；更多设置在设置页 ——
+const AIDOT={'在线':'on','处理中':'ai','未装':'off','未登录':'off','出错':'err'};
+async function aiPick(){const r=await get('/api/settings').catch(()=>null);const box=$('aibody');if(!box)return;
+  if(!r||!r.engines){box.innerHTML='<h3>AI</h3><p class="muted">读不到 AI 设置，稍后再试。</p>';return}
+  const rows=r.engines.map(e=>{const on=r.engine===e.id,can=e.installed&&e.logged_in;
+    const tag=e.state==='在线'?(on?'在线':'已登录'):e.state;
+    return `<div class="eng${on?' on':''}${can&&!on?' can':''}" data-eng="${esc(e.id)}"><span class="ck">${on?'✓':''}</span><b>${esc(e.name)}</b><span class="pill ${{'在线':'st-ok','处理中':'st-ai','未登录':'st-todo','出错':'st-wait'}[e.state]||''}">${esc(tag)}</span><span class="why">${esc(on?'正在用 · 所有项目默认用它':can?'点一下换成它':(e.why||''))}</span>${e.installed&&!e.logged_in?`<button class="tbtn plain" data-login="${esc(e.id)}">登录</button>`:''}</div>`}).join('');
+  box.innerHTML=`<div class="pk"><div class="pkh"><b>用哪个 AI 处理</b><span class="muted">点一下就换</span></div>${rows}<p class="muted note">在首页换，是换所有项目默认用的 AI；换了以后项目在新 AI 里接着做，项目文件和之前的意见都在。AI 没在线时点“提交 AI”先存下，上线后自动开始。</p><div class="pkf"><button class="link" id="goSet2">更多设置（模型、豆包、蚁小二）›</button></div></div>`;
+  box.querySelectorAll('.eng.can').forEach(x=>x.onclick=async()=>{const j=await post('/api/settings/engine',{engine:x.dataset.eng}).catch(()=>null);if(j&&j.ok){say(`默认 AI 换成了 ${j.status?.name||''}`);ai()}else say(j?.error||'没换成',1);aiPick()});
+  box.querySelectorAll('[data-login]').forEach(x=>x.onclick=async ev=>{ev.stopPropagation();x.disabled=true;const j=await post('/api/settings/login',{engine:x.dataset.login}).catch(()=>null);x.disabled=false;say(j&&j.ok?(j.opened?'已经在“终端”里打开登录：按提示用你自己的账号登录':'没能自动打开终端：请在“终端”里运行 '+j.cmd):(j?.error||'没能打开登录'),!(j&&j.ok))});
+  $('goSet2').onclick=()=>{location.href='/settings?back=/'}}
+$('aipop').addEventListener('toggle',()=>{if($('aipop').open)aiPick()});
 // —— 打开片子：点的那一下就开成自己的窗口 ——
 const homeQ='?home='+encodeURIComponent(location.origin);
 const IN_APP=!!window.cutdeskApp||document.documentElement.classList.contains('cutdesk-app');
-if(!IN_APP)$('backhint').textContent='在项目中点浏览器的“后退”返回此处';      // 浏览器里 ⌘W 是关标签页，不能这么说
+if(!IN_APP)$('backhint').innerHTML='<b>回到首页：</b>在项目里点左上角“全部项目”，或点浏览器的“后退”。';      // 浏览器里 ⌘W 是关标签页，不能这么说
 // —— 打开片子：就在这个窗口里进去（一次只开一条片子） ——
 let LAST=null;const lastKey=()=>'cutdesk-home-last'+(IP?':'+IP:'');   // 上次开的片子：每个 IP 各记各的
 // 首页服务重启过（进程号变了）：页面里的口令已失效，直接刷新页面，免得一点就 403
@@ -292,7 +314,7 @@ function askNewIP(){openSheet(`<div class="sh">${ICON_IP}<div style="flex:1;min-
   $('no').onclick=closeSheet;$('yes').onclick=go;$('ipn').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing)go()});setTimeout(()=>$('ipn')?.focus(),70)}
 function askDelIP(){const can=(IPS?.ips||[]).filter(n=>n!==IPS.default);if(!can.length)return;
   openSheet(`<div class="sh">${ICON_TRASH}<div style="flex:1;min-width:0"><h2>删除一个 IP</h2>
-<select id="ipd" class="field" aria-label="要删的 IP">${can.map(n=>`<option${n===IP?' selected':''}>${esc(n)}</option>`).join('')}</select>
+<div class="selwrap"><select id="ipd" class="field" aria-label="要删的 IP">${can.map(n=>`<option${n===IP?' selected':''}>${esc(n)}</option>`).join('')}</select></div>
 <p>该 IP 的配置（封面颜色、配音、平台、规矩）将移入 NAS 回收站，<b>可还原，不是永久删除</b>。</p><p id="ipdinfo" class="muted">…</p>
 <p class="muted">默认 IP「${esc(IPS.default)}」不可删除，未列出。</p><p id="ipderr" class="err" hidden></p></div></div>
 <div class="btns"><button class="tbtn plain go" id="no">取消</button><button class="tbtn danger" id="yes">移到回收站</button></div>`);
@@ -318,5 +340,5 @@ async function drawBin(){const r=await get('/api/bin').catch(()=>null),el=$('bin
     $('binerr').hidden=true;say(res.name?`已还原：「${res.name}」`+(b.dataset.kind==='film'&&res.ip!==IP?`（在 IP「${res.ip}」里）`:'')+(res.note||''):'已还原');await drawBin();delete ST[res.id];await refresh()}}
 window.addEventListener('pageshow',e=>{if(e.persisted){LAST=store.get(lastKey());refresh().catch(()=>{})}});   // 从片子后退回来（浏览器可能直接拿缓存的页面）
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh().catch(()=>{})});
-ipMenu().then(refresh);ai();
+ipMenu().then(refresh);ai();$('setbtn').onclick=()=>{location.href='/settings?back=/'};
 </script>

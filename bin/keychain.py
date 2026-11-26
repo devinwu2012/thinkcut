@@ -13,7 +13,8 @@ NOT_FOUND = -25300      # errSecItemNotFound
 
 
 def enabled():
-    return sys.platform == 'darwin' and not os.environ.get('THINKCUT_NO_KEYCHAIN')
+    # 后台 AI（审片台起的 Claude Code／Codex）里也当作没有钥匙串（2026-11-26）：要用钥匙的事交给审片台代办（bin/thinkcut_broker.py）
+    return sys.platform == 'darwin' and not os.environ.get('THINKCUT_NO_KEYCHAIN') and not os.environ.get('THINKCUT_AI_BACKGROUND')
 
 
 def _lib():

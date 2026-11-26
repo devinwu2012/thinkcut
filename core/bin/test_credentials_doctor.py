@@ -30,7 +30,7 @@ class CredentialAndDoctorTests(unittest.TestCase):
             # 不设变量：本仓库的 secrets/（把程序拷到一个不叫“-开发”的临时仓库里测，免得开发版自己的“找使用版”兜底干扰）
             repo = Path(folder).resolve() / "仓库"; (repo / "core" / "bin").mkdir(parents=True)
             shutil.copy(here / "doubao_credentials.py", repo / "core" / "bin")
-            (repo / "bin").mkdir(); [shutil.copy(here.parents[1] / "bin" / n, repo / "bin") for n in ("keychain.py", "thinkcut_config.py")]      # 它要用根目录的这两个
+            (repo / "bin").mkdir(); [shutil.copy(here.parents[1] / "bin" / n, repo / "bin") for n in ("keychain.py", "thinkcut_config.py", "locations.py")]      # 它要用根目录的这几个
             got = subprocess.run([sys.executable, "-B", "-c", "import doubao_credentials as c; print(c.KEY_FILE)"], cwd=repo / "core" / "bin", env=env, capture_output=True, text=True).stdout.strip()
             self.assertEqual(got, str(repo / "core" / "secrets" / "doubao_api_key"))
         self.assertIs(doctor.SECRETS_DIR, credentials.SECRETS)      # 体检和配音读同一处钥匙位置（doctor 不再自己拼路径）
@@ -50,6 +50,10 @@ class CredentialAndDoctorTests(unittest.TestCase):
             self.assertEqual(credentials.pick_secrets_dir({"THINKCUT_SECRETS_DIR": "/x"}, wt), Path("/x"))   # 变量优先
             (wt / "core" / "secrets").mkdir(parents=True); (wt / "core" / "secrets" / "doubao_api_key").write_text("dummy-key-0000000000000")
             self.assertEqual(credentials.pick_secrets_dir({}, wt), wt / "core" / "secrets")           # 自己有就用自己的
+            # 2026-11-26 开发版搬到 Dev/ThinkCut/ 下、不再是兄弟目录：按开发版的 git origin（使用版本地路径）找
+            moved = base / "Dev" / "ThinkCut" / "ThinkCut-开发"; moved.mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", str(moved)], check=True); subprocess.run(["git", "-C", str(moved), "remote", "add", "origin", str(prod)], check=True)
+            self.assertEqual(credentials.pick_secrets_dir({}, moved), want)
 
     def test_verification_matches_used_key_during_rotation(self):
         with tempfile.TemporaryDirectory() as folder:

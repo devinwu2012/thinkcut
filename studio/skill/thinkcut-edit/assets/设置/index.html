@@ -1,0 +1,86 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>设置 · ThinkCut</title>
+<!--THINKCUT_TOKENS-->
+<style>
+/* 设置页（2026-11-26 用户定）：首页和审片台都能进（/settings）。三块：AI（用本机已登录的 Claude Code／Codex）、豆包语音 Key、蚁小二 Key。
+   钥匙只往服务里送、存钥匙串，页面上不回显；服务只回“配好了没有、存在哪”。
+   颜色、线、圆角、阴影、字号全部取自界面规格 design/tokens.css（2026-11-26 界面精修），这里不写死数值。样子：系统设置那样的分组卡片。 */
+*{box-sizing:border-box}html,body{margin:0;min-height:100%}
+body{background:var(--win);color:var(--t1);font-family:var(--font);font-size:var(--fs-13);line-height:var(--lh-13);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+.toolbar{height:var(--bar-h);display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-4);background:var(--bar);border-bottom:var(--hairline);position:sticky;top:0;z-index:2}
+html.app .toolbar{padding-left:84px}
+.toolbar h1{position:absolute;left:0;right:0;text-align:center;font-size:var(--fs-13);font-weight:var(--fw-b);margin:0;pointer-events:none}
+.btn{height:28px;border-radius:var(--r-m);border:0;background:var(--btn);box-shadow:var(--sh-btn);padding:0 var(--sp-3);cursor:default;white-space:nowrap;font-weight:var(--fw-b);transition:background-color var(--dur-1) var(--ease)}
+.btn:hover:not(:disabled){background-image:linear-gradient(var(--fill),var(--fill))}
+.btn.primary{background:var(--blue);color:var(--on-blue);box-shadow:none}.btn.primary:hover:not(:disabled){background:var(--blue-h)}
+.btn:disabled{background:var(--fill-h);color:var(--t4);box-shadow:none}
+.btn.ghost{background:transparent;box-shadow:none;color:var(--blue-t);padding:0 var(--sp-2)}.btn.ghost:hover{background:var(--fill)}
+main{max-width:712px;margin:0 auto;padding:var(--sp-8) var(--sp-4) 60px;display:flex;flex-direction:column;gap:var(--sp-6)}
+section{display:flex;flex-direction:column;gap:var(--sp-2)}
+h2{font-size:var(--fs-13);font-weight:var(--fw-b);margin:0 0 0 var(--sp-1)}
+section>p{margin:0 var(--sp-1)}
+.muted{color:var(--t3)}.small{font-size:var(--fs-12);line-height:var(--lh-12)}
+.grp{background:var(--card);border-radius:var(--r-l);box-shadow:var(--sh-card)}
+.eng,.it{display:flex;align-items:center;gap:var(--sp-3);min-height:48px;padding:10px var(--sp-4)}
+.eng+.eng,.it+.it{border-top:var(--hairline)}
+.eng .nm{font-weight:var(--fw-b);min-width:110px}.eng .why{flex:1;min-width:0;color:var(--t3);font-size:var(--fs-12)}
+.eng input[type=radio]{margin:0 2px 0 0;accent-color:var(--blue)}
+.it .lb{width:110px;color:var(--t2);flex:none}
+.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px 0 7px;border-radius:var(--r-pill);font-size:var(--fs-12);font-weight:var(--fw-b);white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:var(--r-pill);background:currentColor}
+.p-在线{color:var(--s-ok-t);background:var(--s-ok-bg)}.p-在线::before{background:var(--s-ok)}
+.p-未登录{color:var(--s-todo-t);background:var(--s-todo-bg)}.p-未登录::before{background:var(--s-todo)}
+.p-未装{color:var(--s-off-t);background:var(--s-off-bg)}.p-未装::before{background:var(--s-off)}
+.p-出错{color:var(--s-err-t);background:var(--s-err-bg)}.p-出错::before{background:var(--s-err)}
+.row{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap}
+.key{flex:1;min-width:200px;height:28px;border-radius:var(--r-s);border:0;box-shadow:var(--sh-btn);background:var(--card);padding:0 var(--sp-2);outline:none;transition:box-shadow var(--dur-1) var(--ease)}
+.key:focus{box-shadow:0 0 0 1px var(--blue),0 0 0 4px var(--ring)}
+.key::placeholder{color:var(--t4)}
+.key.model{flex:0 0 200px;min-width:0;font-size:var(--fs-12)}
+.msg{font-size:var(--fs-12);min-height:18px;margin:0 var(--sp-1)}.msg:empty{display:none}.msg.bad{color:var(--s-err-t)}.msg.good{color:var(--s-ok-t)}
+@media (max-width:560px){.eng{flex-wrap:wrap}.eng .why{flex-basis:100%}}
+</style>
+<header class="toolbar"><button id="back" class="btn ghost">‹ 返回</button><h1>设置</h1><span class="muted small" style="flex:1"></span><button id="refresh" class="btn">重新检测</button></header>
+<main>
+<section><h2>AI</h2><p class="muted small">ThinkCut 在后台直接用你这台 Mac 上已登录的 AI 命令行（用你自己的会员），审片台点“提交 AI”就开始处理，不用另开对话。账号在官方程序里自己登录，ThinkCut 不碰你的密码。选中的是默认 AI，随时可以换（换了以后项目新开一条会话，项目文件照常读）。</p>
+<div id="engines" class="grp"></div><div id="engmsg" class="msg"></div></section>
+<section><h2>豆包语音（识别、合成）</h2><p class="muted small">粘贴豆包语音控制台的 API Key（不是火山方舟的 Key）。只存在这台 Mac 的钥匙串里，不显示、不写进文件和日志、不给 AI。</p>
+<div class="grp"><div class="it"><span class="lb">状态</span><div id="dbst" class="small row"></div></div>
+<div class="it"><span class="lb">API Key</span><input id="dbkey" class="key" type="password" autocomplete="off" placeholder="粘贴 API Key"><button id="dbsave" class="btn primary">保存</button><button id="dbtest" class="btn">测试</button></div></div>
+<div id="dbmsg" class="msg"></div><p class="muted small">“测试”会用系统朗读生成两秒的话，交给豆包实测识别一次（按量计费，几分钱以内）。</p></section>
+<section><h2>蚁小二</h2><p class="muted small">上传时把成片、封面、标题简介存成各平台草稿用的 Key。存在这台 Mac 的钥匙串里（和 yxer-safe 用的是同一条），不显示、不给 AI。正式发布仍由你在蚁小二客户端里点。</p>
+<div class="grp"><div class="it"><span class="lb">状态</span><div id="yxst" class="small row"></div></div>
+<div class="it"><span class="lb">Key</span><input id="yxkey" class="key" type="password" autocomplete="off" placeholder="粘贴蚁小二 Key"><button id="yxsave" class="btn primary">保存</button></div></div>
+<div id="yxmsg" class="msg"></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+if(/AppleWebKit/.test(navigator.userAgent)&&!/Safari\//.test(navigator.userAgent)&&window.top===window)document.documentElement.classList.add('app');
+const BACK=new URLSearchParams(location.search).get('back');
+$('back').onclick=()=>{if(BACK&&BACK.startsWith('/')&&!BACK.startsWith('//'))location.href=BACK;else if(history.length>1)history.back();else location.href='/'};
+let S=null;
+async function get(){const r=await fetch('/api/settings',{cache:'no-store'});return r.json()}
+async function post(p,b){try{const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{}),credentials:'same-origin'});const j=await r.json();if(r.status===403&&j.code==='stale_page'){location.reload()}return j}catch(e){return {ok:false,error:'连不上 ThinkCut 服务：'+e}}}
+function msg(id,t,good){const m=$(id);m.textContent=t||'';m.className='msg '+(t?(good?'good':'bad'):'')}
+function render(){if(!S)return;
+  $('engines').innerHTML=S.engines.map(e=>`<div class="eng"><label class="row" style="gap:var(--sp-2)"><input type="radio" name="eng" value="${e.id}" ${S.engine===e.id?'checked':''} ${e.installed?'':'disabled'}><span class="nm">${esc(e.name)}</span></label>
+    <span class="pill p-${e.state}">${e.state==='在线'?'已登录':e.state}</span><span class="why">${esc(e.why||(S.engine===e.id?'默认用它':''))}</span>
+    ${e.installed&&!e.logged_in?`<button class="btn" data-login="${e.id}">登录</button>`:''}${e.installed?`<input class="key model" data-model="${e.id}" value="${esc(e.model||'')}" placeholder="模型：用它自己的默认" title="一般留空；它自己设置的模型你的账号用不了时，在这里填一个能用的">`:''}</div>`).join('');
+  document.querySelectorAll('[data-model]').forEach(i=>i.onchange=async()=>{const j=await post('/api/settings/model',{engine:i.dataset.model,model:i.value.trim()});msg('engmsg',j.ok?(j.model?`以后用模型 ${j.model}`:'模型改回它自己的默认'):j.error,j.ok)});
+  document.querySelectorAll('input[name=eng]').forEach(r=>r.onchange=async()=>{const j=await post('/api/settings/engine',{engine:r.value});if(!j.ok)msg('engmsg',j.error);else{msg('engmsg',`默认 AI 换成了 ${j.status.name}`+(j.status.logged_in?'':'（它还没登录，先点“登录”）'),j.status.logged_in);await load()}});
+  document.querySelectorAll('[data-login]').forEach(b=>b.onclick=async()=>{b.disabled=true;const j=await post('/api/settings/login',{engine:b.dataset.login});b.disabled=false;
+    if(!j.ok)return msg('engmsg',j.error);msg('engmsg',j.opened?'已经在“终端”里打开登录：按提示用你自己的账号登录，登录完回来这里会自动刷新。':'没能自动打开终端：请打开“终端”，粘贴运行 '+j.cmd,j.opened);poll()});
+  const d=S.doubao;$('dbst').innerHTML=d.configured?`<span class="pill p-在线">已配置</span> <span class="muted">存在${esc(d.where)}${d.verified?' · 实测识别通过过':''}</span>`:`<span class="pill p-未装">未配置</span> <span class="muted">${esc(d.error||'识别口播、机器配音要用')}</span>`;
+  const y=S.yxer;$('yxst').innerHTML=(y.configured?`<span class="pill p-在线">已配置</span> <span class="muted">存在钥匙串</span>`:`<span class="pill p-未装">未配置</span>`)+(y.installed?'':' <span class="muted">· 还没装蚁小二命令行（yxer），上传要先装</span>')+(y.error?` <span class="muted">· ${esc(y.error)}</span>`:'')}
+async function load(fresh){S=fresh?await post('/api/settings/refresh'):await get();render()}
+let pollT=0;function poll(){clearInterval(pollT);let n=0;pollT=setInterval(async()=>{n++;await load(true);if(n>24||S.engines.every(e=>!e.installed||e.logged_in))clearInterval(pollT)},5000)}
+$('refresh').onclick=async e=>{e.target.disabled=true;await load(true);e.target.disabled=false};
+$('dbsave').onclick=async e=>{const k=$('dbkey').value.trim();if(!k)return msg('dbmsg','先粘贴 Key');e.target.disabled=true;const j=await post('/api/settings/doubao',{key:k});e.target.disabled=false;$('dbkey').value='';
+  msg('dbmsg',j.ok?`已保存到${j.where==='钥匙串'?'这台 Mac 的钥匙串':'受限文件'}。可以点“测试”实测一次。`:j.error,j.ok);load()};
+$('dbtest').onclick=async e=>{e.target.disabled=true;msg('dbmsg','正在用豆包识别一小段测试音频…',true);const j=await post('/api/settings/doubao/test');e.target.disabled=false;
+  msg('dbmsg',j.ok?`识别通过（${j.resource}）：“${j.text}”`:j.error,j.ok);load()};
+$('yxsave').onclick=async e=>{const k=$('yxkey').value.trim();if(!k)return msg('yxmsg','先粘贴 Key');e.target.disabled=true;const j=await post('/api/settings/yxer',{key:k});e.target.disabled=false;$('yxkey').value='';
+  msg('yxmsg',j.ok?'已保存到这台 Mac 的钥匙串。':j.error,j.ok);load()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('back').click()});
+load();
+</script>

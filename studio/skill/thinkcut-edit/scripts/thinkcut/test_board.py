@@ -360,9 +360,10 @@ class BoardTests(unittest.TestCase):
         for c in B.COLUMNS:
             if c != '导航文字': self.assertIn(f'data-col="{c}"', html)
         # 导航文字并进审核线（2026-11-22 用户定：“合并吧”）：没有这一栏、章节标题能改、栏头有“导航条预览”、#导航文字 落到审核线
-        self.assertNotIn('data-col="导航文字"', html); self.assertIn("shownCols=()=>BD.columns.filter(c=>!MERGE[c])", html)
+        self.assertNotIn('data-col="导航文字"', html); self.assertIn("const cs=BD.columns.filter(c=>!MERGE[c])", html)   # 2026-11-26 栏目能拖动换顺序：先去掉并进去的栏，再按本机设置的顺序排
         self.assertIn('<input class="chin', html); self.assertIn('id="navbtn"', html); self.assertIn('导航条预览', html)
-        self.assertIn("const MERGE={'导航文字':'审核线'}", html); self.assertIn('function setCol(c,quiet){c=MERGE[c]||c;', html)
+        self.assertIn("const MERGE={'导航文字':'审核线','口播试听':'文案'}", html)   # 2026-11-26 配音试听并进口播精剪（右上“要你听”）
+        self.assertIn('id="listenBtn"', html); self.assertRegex(html, r'id="listen"|class="pane ovl listen"'); self.assertIn('id="colmenu" class="ovl', html); self.assertIn("'/api/settings/colorder'", html); self.assertIn('function setCol(c,quiet){c=MERGE[c]||c;', html)
         self.assertIn("h=MERGE[h]||h", html)
         for w in ('选这个', '可以', '提意见', '只看这一轮', '这一帧有问题', '<title>审片台</title>'): self.assertIn(w, html)
         self.assertNotRegex(html, r'(src|href)="https?://')

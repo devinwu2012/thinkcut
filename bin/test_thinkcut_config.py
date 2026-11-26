@@ -17,6 +17,7 @@ os.environ['THINKCUT_APP_FLAVOR'] = 'release'           # 开发版会把片子�
 os.environ['THINKCUT_RESOLVE_PREFS'] = tempfile.mkdtemp(prefix='假达芬奇设置_')      # 建项目会登记达芬奇库列表：测试只碰假的
 os.environ['THINKCUT_RESOLVE_LOCK'] = os.path.join(tempfile.mkdtemp(prefix='假达芬奇锁_'), 'lock')
 sys.path.insert(0, str(ROOT / 'bin'))
+import locations  # noqa: E402
 import thinkcut_config as C  # noqa: E402
 
 PY = [sys.executable, '-B']
@@ -211,7 +212,8 @@ class Flavor(Base):
     """QA 1.1：开发版（程序文件夹名以 -开发 结尾、或是 git worktree）默认看试验田，不碰真片子；THINKCUT_APP_FLAVOR 能强制。"""
     def test_dev_uses_trial_folder(self):
         with mock.patch.dict(os.environ, {'THINKCUT_APP_FLAVOR': 'dev'}):
-            self.assertEqual(C.load().path('片子文件夹'), C.PROGRAM.parent / '测试IP试验田')
+            self.assertEqual(C.load().path('片子文件夹'), C.base_dir().parent / 'Dev' / 'ThinkCut' / '试验项目')      # 开发版的相对路径按使用版算（2026-11-26 开发版搬到 Dev/ThinkCut/）
+            self.assertIn(C.base_dir(), (C.PROGRAM, locations.prod_of(C.PROGRAM)))
         with mock.patch.dict(os.environ, {'THINKCUT_APP_FLAVOR': 'release'}):
             self.assertEqual(C.load().path('片子文件夹'), C.PROGRAM.parent / '测试IP视频')
 

@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from fractions import Fraction
 from .common import Job, ASSETS, DEFAULTS, Broken, backup_of, thinkcut_config, die, keep_backup, read_data, rj, wj, say
-from . import board, formats, koubo, materials, publish, writing
+from . import board, design, engine, formats, koubo, materials, publish, settings, writing
 
 PAGE = ASSETS / '审片工作台' / 'index.html'
 EDITOR = ASSETS / '审片工作台' / '文案剪辑.html'          # “口播剪辑”栏下半的文字剪辑器（内嵌在审片台页面里）
@@ -491,8 +491,10 @@ def page_data(job, heard=False):
     d.update(script=lines, script_src=src)
     sp = board.script_path(job); pd = board.project_dir(job); pj = pd / '项目.json' if pd else None
     watch = (f, board.board_file(job), writing.data_file(job), materials.record_file(job), *script_files(job), *(x for x in (sp, pj) if x), job.dir / '分镜.json',
-             job.dir / 'job.json', job.dir / '导航' / 'project.json')
+             job.dir / 'job.json', job.dir / '导航' / 'project.json', engine.project_file(job))
     kb = koubo.info(aroll_of(job))
+    if not kb.get('ready'):                 # 用户点过“开始制作”、剪辑器还没出来：页面显示“AI 正在初剪”（2026-11-26 界面精修）
+        with contextlib.suppress(Exception): kb = {**kb, 'kick_at': (board.load(job).get('kickoff') or {}).get('at')}
     d.update(version=sum(x.stat().st_mtime_ns for x in watch if x.exists()) + int(kb['ready']) + 3 * int(heard), title=job.get('title', job.dir.name), W=W, H=H, nav=list(job.fmt['nav']),
              dur=round(job.get('frames', 0) / float(job.fps), 3), chapters=chapters(job), review_timeline=job.get('review_timeline', ''), lite=lite(job), koubo=kb, shots=shot_spans(job), placeholders=placeholders_of(job))
     d['board'] = board_meta(job, d, heard)
@@ -589,7 +591,15 @@ def make_handler(job, dv):
     backends = {}                          # 剪口播后台（按剪口播工程目录，一个就够）
     ears = {'t': 0.0}                      # AI 的 --wait 最近一次来问的时刻（页面据此写“AI 在等”还是“AI 没在等”）
 
-    def listening(): return time.time() - ears['t'] < 8
+    def listening(): return time.time() - ears['t'] < 8          # 对话里的 AI 挂着 --wait（老办法，照旧能接）
+
+    def brief(got):                        # 后台 AI 要处理的清单：和 --wait 打印的同一份
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf): report(job, got, again='结束这次处理（不用再起 --wait）')
+        return buf.getvalue()
+    def alive(): activity['t'] = time.time()          # AI 在后台干活时审片台别闲到自己退出
+    runner = engine.Runner(job, brief, lambda: board.pick(job), lambda: set(board.send_info(job)['ids']), lambda c: board.unsend(job, c), alive)
 
     def backend(a):
         return backends.setdefault(str(a), koubo.Backend(a))
@@ -604,7 +614,9 @@ def make_handler(job, dv):
     seen = {'t': None}                     # 页面最后一次来拿数据的时间（出样张时判断页面开着没有：开着就不再弹“预览”）
 
     def meta():
-        d = page_data(job, listening()); d['home'] = home_url(); d['wait_cmd'] = wait_cmds(job); return d
+        w = listening(); ai = engine.page_info(job, w, runner)            # 右上角：当前引擎和状态；“AI 正在做什么”的要点
+        d = page_data(job, ai['online']); d['ai'] = ai; d['board']['send']['waiter'] = w
+        d['home'] = home_url(); d['wait_cmd'] = wait_cmds(job); d['col_order'] = engine.read_settings().get('栏目顺序') or []; return d
 
     def mark(_):
         s = call(dv.status)
@@ -774,6 +786,12 @@ def make_handler(job, dv):
             except board.Oops as e: raise Oops(str(e))
         return g
 
+    def _settings(f, q):
+        try: out = f(q)
+        except settings.Oops as e: raise Oops(str(e)) from None
+        if f is settings.set_engine: threading.Thread(target=lambda: listening() or runner.kick(), daemon=True).start()    # 换好 AI：等着的事接着做
+        return out
+
     STRICT = {'/api/item/act': strict(lambda q, h: board.act(job, q, h.headers.get('User-Agent') or '')),
               '/api/script': strict(lambda q, h: board.set_script(job, str(q['field']), q['value'], str(q.get('column') or '文案'))),
               # 文案栏（写稿）：提意见、回复、采纳／不要、退回版本、贴一大段字——都只收页面的（AI 不能替用户采纳）
@@ -786,7 +804,11 @@ def make_handler(job, dv):
               '/api/item/replyimg': strict(lambda q, h: board.reply_img(job, q))}
 
     def send_ai(q, h):
-        r = board.send(job, str(q.get('column') or '')); return {**r, 'listening': listening()}
+        """用户点“提交 AI”：对话里的 AI 挂着 --wait 就交给它（老办法）；不然由审片台后台直接调本机已登录的 AI（2026-11-26）。
+        两边都没有：已存下，等 AI 上线（设置里登录或选好 AI 后自动开始）。"""
+        r = board.send(job, str(q.get('column') or '')); w = listening()
+        bg = False if w else runner.kick()
+        return {**r, 'listening': w or bg, 'waiter': w, 'engine': bg, 'ai': engine.page_info(job, w, runner)}
 
     STRICT['/api/send'] = strict(send_ai)
     STRICT['/api/settle'] = strict(lambda q, h: board.settle(job, str(q.get('column') or ''), bool(q.get('on', True)), h.headers.get('User-Agent') or ''))
@@ -794,6 +816,10 @@ def make_handler(job, dv):
     STRICT['/api/unsend'] = strict(lambda q, h: board.unsend(job, str(q.get('column') or '')))          # “AI 在处理”撤回：这一栏发出去的收回来，回到待发送（QA 1.5）
     STRICT['/api/send/cancel'] = STRICT['/api/unsend']                                                  # 同一个，页面用的名字
     STRICT['/api/publish/cancel'] = strict(lambda q, h: publish.cancel(job))                            # 发布栏：取消这次“存到蚁小二草稿”
+    STRICT['/api/ai/stop'] = strict(lambda q, h: runner.stop())                                         # “AI 正在做什么”的“停止”
+    STRICT['/api/ai/kick'] = strict(lambda q, h: {'started': (not listening()) and runner.kick()})       # 设置好 AI 后“现在开始”
+    for _p, _f in settings.POST.items():                                                                 # 设置页：AI、豆包、蚁小二（只收页面的）
+        STRICT[_p] = strict(lambda q, h, f=_f: _settings(f, q))
     STRICT['/api/repair'] = strict(lambda q, h: repair(job, str(q.get('file') or '')))                  # 数据文件坏了：留着坏的、退回上一版（QA 2.4）
     POST = {'/api/mark': mark, '/api/markrange': mark_range, '/api/range': set_range, '/api/shot': shot, '/api/upload': upload, '/api/delimg': del_img, '/api/text': set_text, '/api/delete': delete, '/api/again': again, '/api/nav': nav, '/api/markkind': set_kind, '/api/answer': answer, '/api/replyimg': reply_img,
             '/api/goto': lambda q: call(dv.goto, float(q['t'])), '/api/play': lambda q: call(dv.toggle_play), '/api/navshot': navshot}
@@ -861,7 +887,7 @@ def make_handler(job, dv):
             pi = backend(a).page_info()                      # 预览片段多长、原片多长（剪口播后台给；起不来就不放预览，页面上会显示后台的报错）
             if pi.get('segment_seconds'):
                 page = page.replace('src="/source.mp4"', f'data-segment-seconds="{pi["segment_seconds"]}" data-source-duration="{pi["source_duration"]}"')
-            self.send(page.encode(), 'text/html; charset=utf-8', cookie=True)
+            self.send(design.inject(page.encode()), 'text/html; charset=utf-8', cookie=True)
 
         def proxy(self, method, path, body=None):
             """原样转给剪口播后台，回话原样交回（状态码、409 的 reload、报错文字、预览片段的分段读）。"""
@@ -891,9 +917,11 @@ def make_handler(job, dv):
             # GET 也查 Host（2026-11-21）：必须是本机地址加本端口，防 DNS 重绑定（别的网站把自己的域名指到 127.0.0.1 来读标记和截图）。
             # 浏览器打开页面、页面拿数据和图片、程序自己 ping 的 Host 都是 127.0.0.1:端口 或 localhost:端口；没有 Host 头的照旧放行
             if not self.own_host(): return self.send({'ok': False, 'error': '只接受本机地址的请求（Host 不是本机的审片工作台）'}, code=403)
-            if p in ('/', '/index.html'): return self.send(PAGE.read_bytes().replace(b'__SHENPIAN_TOKEN__', SESSION.encode()), 'text/html; charset=utf-8', cookie=True)
+            if p in ('/', '/index.html'): return self.send(design.inject(PAGE.read_bytes().replace(b'__SHENPIAN_TOKEN__', SESSION.encode())), 'text/html; charset=utf-8', cookie=True)
             if p == '/api/ping': return self.send({'app': '审片工作台', 'dir': str(job.dir), 'pid': os.getpid(), 'lite': lite(job), 'page_seen': None if seen['t'] is None else round(time.time() - seen['t'], 1),
                                                    'listening': listening(), 'prog': PROG, 'idle': round(time.time() - activity['t'], 1)})
+            if p == '/settings': return self.send(settings.page(SESSION), 'text/html; charset=utf-8', cookie=True)
+            if p == '/api/settings': return self.send(settings.info())
             if p == '/api/material': return self.send(materials.info(job))       # 备料：正在传、复制的进度（页面传东西时每秒来问）
             if p == '/api/data':
                 seen['t'] = time.time(); return self.send(meta())
@@ -966,6 +994,7 @@ def make_handler(job, dv):
             except (KeyError, ValueError, TypeError): return self.send({'ok': False, 'error': '请求缺内容'}, code=400)
             if isinstance(out, Path): return self.image(out)
             self.send(out if 'ok' in out else {'ok': True, **out})
+    H.runner, H.listening = runner, listening
     return H
 
 
@@ -1034,7 +1063,28 @@ class NoDV:
 
 
 def make_server(job, port, dv=None):
-    return ThreadingHTTPServer(('127.0.0.1', port), make_handler(job, dv or (NoDV() if lite(job) else DVProxy(job))))
+    H = make_handler(job, dv or (NoDV() if lite(job) else DVProxy(job))); srv = ThreadingHTTPServer(('127.0.0.1', port), H)
+    srv.runner, srv.listening = H.runner, H.listening
+    threading.Thread(target=broker_loop, args=(job,), daemon=True).start()
+    return srv
+
+
+def broker_loop(job, every=0.4):
+    """审片台代办（2026-11-26）：后台 AI 不拿钥匙，豆包识别／合成、蚁小二存草稿写成单子放进 审片工作台/代办/，这里照单跑（服务进程能读钥匙），结果写回去。"""
+    sys.path.insert(0, str(engine.PROGRAM / 'bin')); import thinkcut_broker
+    while True:
+        with contextlib.suppress(Exception): thinkcut_broker.serve_once(engine.broker_dir(job), engine.writable_dirs(job))
+        time.sleep(every)
+
+
+def watch_ai(srv, every=5.0):
+    """已存下、等 AI 上线的事：后台 AI 可用了（登录了、选好了）就自动开始；对话里的 AI 挂着 --wait 时交给它。"""
+    while True:
+        time.sleep(every)
+        with contextlib.suppress(Exception):
+            if not srv.listening() and not srv.runner.busy() and board.send_info(srv.runner.job)['cols'] and any(
+                    not v.get('picked') for v in board._sent(board.load(srv.runner.job)).values()):
+                srv.runner.kick()
 
 
 def serve(d, port):
@@ -1045,6 +1095,7 @@ def serve(d, port):
     def bye(*_):
         with contextlib.suppress(Exception):
             if rj(info).get('pid') == os.getpid(): info.unlink()
+        with contextlib.suppress(Exception): srv.runner.stop()          # 审片台停了：后台 AI 一起停，没做完的退回“待提交”
         os._exit(0)
     signal.signal(signal.SIGTERM, bye); signal.signal(signal.SIGINT, bye)
     def idle():                            # 闲太久（页面关了、没人来用）自己退出，端口还回去（QA 1.2）；下次首页点开会重起，数据都在片子文件里
@@ -1052,6 +1103,8 @@ def serve(d, port):
             time.sleep(max(1.0, min(30.0, IDLE / 4)))
             if time.time() - activity['t'] > IDLE: say(f'审片台闲了 {int(IDLE)} 秒，自己退出'); bye()
     if IDLE > 0: threading.Thread(target=idle, daemon=True).start()
+    threading.Thread(target=engine.all_status, daemon=True).start()     # 先查好本机 AI 的状态，页面第一次拿数据不用等
+    threading.Thread(target=watch_ai, args=(srv,), daemon=True).start()
     say(f'审片台 http://127.0.0.1:{port}/  {job.dir}'); srv.serve_forever()
 
 
@@ -1076,6 +1129,7 @@ def running(job):
     if not f.exists(): return None
     info = rj(f); pg = ping(info.get('port'))
     if pg and pg.get('app') == '审片工作台' and pg.get('dir') == str(job.dir): return info
+    if not pg and os.environ.get('THINKCUT_AI_BACKGROUND'): return None       # 沙盒里的后台 AI 连不上本机回环：看不出来，别删服务的记录（2026-11-26）
     f.unlink(); return None
 
 
@@ -1390,14 +1444,14 @@ def launch(job, port=None, column=None):
             + ('，已在浏览器打开' if opened else '；没能自动打开浏览器：AI 去打开这个网址（或发给用户）') + '\n'
             + "文稿栏：用户在页面里写标题、封面文字、口播正文，选一段字或针对全文提意见，点“提交 AI”；AI 用 --rewrite 稿N --json 改写.json 交改写建议，用户逐处点“采纳”才写进文案文件；写好点“定稿”。\n"
             + (f"口播精剪栏：剪口播的文字剪辑器（{kb['dir']}）：删句、恢复、拖小句调顺序、改字幕、分段，点“保存到达芬奇”更新主线和字幕。\n" if kb['ready'] else '')
-            + f"【等用户】现在就挂着等 workbench {job.dir} --wait（用户点“提交 AI”或“定稿”它就打印要做的事并退出；Codex 加 --wait-timeout 1500）。\n"
+            + f"【等用户】用户点“提交 AI”或“定稿”后，审片台会在后台直接让本机已登录的 AI 处理（右上角“设置”里选 Claude Code／Codex）；你在对话里也可以挂着等 workbench {job.dir} --wait 接手（挂着时交给你；Codex 加 --wait-timeout 1500）。\n"
             + f"项目文件夹 {job.dir}：init 建 job.json 后其余栏目才有，审片台的数据接着用。停服务：workbench {job.dir} --stop")
         return page
     say(f"审片台{'已经在跑（复用）' if reused else '已启动'}：{page}  第 {d['round']} 轮"
         + ('，已在浏览器打开' + (f'“{column}”栏' if column else '') if opened else '；没能自动打开浏览器：AI 去打开这个网址（或发给用户）') + '\n'
         f"审核线：用户在达芬奇里看审核线（停在“剪辑”页）；页面上有整条口播全文：点一句达芬奇跳过去，句子上能直接记标记；也能点“这一帧有问题”。\n"
         f"其余栏目：AI 用 --publish 发布要用户看的（图、视频、试听、多选一），用户点“可以”“选这个”就是确认。\n"
-        f"【等用户】用户写完、点完会点页面顶上的“提交 AI”：现在就挂着等 workbench {job.dir} --wait（Claude Code 放后台跑，它一退出就是用户发来了，按打印的清单改；Codex 前台跑加 --wait-timeout 1500）。\n"
+        f"【等用户】用户写完、点完会点页面顶上的“提交 AI”：审片台会在后台直接让本机已登录的 AI 处理（“设置”里选 Claude Code／Codex）；你在对话里也可以挂着等 workbench {job.dir} --wait 接手（挂着时交给你；Claude Code 放后台跑，Codex 前台跑加 --wait-timeout 1500）。\n"
         f"读结果：workbench {job.dir} --list；回写：--reply 编号 --note 说明（审核线标记再加 --status 已改/没改）；停服务：--stop")
     return page
 

@@ -98,15 +98,32 @@ def flavor(program=None):
     return 'dev' if p.name.endswith('-开发') or (p / '.git').is_file() else 'release'
 
 
+_PROD = {}
+
+
+def base_dir(program=None):
+    """配置里的相对路径按哪个文件夹算：正式版＝程序文件夹；开发版＝它对应的使用版（2026-11-26 起开发版在 Dev/ThinkCut/ 下、不再是使用版的兄弟目录，
+    按使用版算，开发版和正式版的片子文件夹、用户配置档、回收站才落到同一个地方；使用版怎么找见 bin/locations.py）。找不到使用版就按程序文件夹。"""
+    prog = Path(program or PROGRAM)
+    if flavor(prog) != 'dev': return prog
+    if prog not in _PROD:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent)); import locations
+            _PROD[prog] = locations.prod_of(prog)
+        except ImportError:      # 只拷了本文件的离线测试
+            _PROD[prog] = None
+    return _PROD[prog] or prog
+
+
 def user_dir(program=None, profiles=None):
     """用户配置档：用户自己的 IP 放这里（程序文件夹外面，发版不碰）。THINKCUT_USER_PROFILES ＞ 设了 THINKCUT_PROFILES 时就是它（测试照旧一个文件夹）＞
-    本机.json／公共.json 的 "用户配置档"（相对程序目录）＞ 程序目录旁边的 ThinkCut配置档/。"""
+    本机.json／公共.json 的 "用户配置档"（相对程序目录；开发版相对使用版，见 base_dir）＞ 程序目录旁边的 ThinkCut配置档/。"""
     if os.environ.get('THINKCUT_USER_PROFILES'): return Path(os.environ['THINKCUT_USER_PROFILES'])
     if program is None and os.environ.get('THINKCUT_PROFILES'): return Path(os.environ['THINKCUT_PROFILES'])
     prog = Path(program or PROGRAM); root = Path(profiles or prog / 'profiles')
     v = _read(root / '本机.json', need=False).get('用户配置档') or _read(root / '公共.json', need=False).get('用户配置档') or USER_DIR
     q = Path(str(v)).expanduser()
-    return q if q.is_absolute() else (prog / q).resolve()
+    return q if q.is_absolute() else (base_dir(prog) / q).resolve()
 
 
 def hidden():
@@ -250,7 +267,7 @@ class Config(dict):
         v = self.get(key, default)
         if v is None or v is default: return v
         p = Path(str(v)).expanduser()
-        return p if p.is_absolute() else (PROGRAM / p).resolve()
+        return p if p.is_absolute() else (base_dir() / p).resolve()
 
     @property
     def rules_file(self):

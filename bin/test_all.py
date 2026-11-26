@@ -27,7 +27,7 @@ def label(name): return '根目录' if name == '.' else name
 def test_commands(repo, name):
     py = sys.executable
     if name == '.':
-        cmds = [c for c in ([py, 'bin/test_placeholder.py'], ['bash', 'bin/test_sync_env.sh'], [py, 'bin/test_release.py'], [py, 'bin/test_merge_once.py'], [py, 'bin/test_thinkcut_config.py'], [py, 'bin/test_thinkcut_app.py'], [py, 'bin/test_legacy_names.py']) if (repo / c[1]).exists()]
+        cmds = [c for c in ([py, 'bin/test_placeholder.py'], ['bash', 'bin/test_sync_env.sh'], [py, 'bin/test_release.py'], [py, 'bin/test_merge_once.py'], [py, 'bin/test_thinkcut_config.py'], [py, 'bin/test_thinkcut_app.py'], [py, 'bin/test_legacy_names.py'], [py, 'bin/test_design.py']) if (repo / c[1]).exists()]
     elif (repo / 'bin' / 'run_tests.sh').exists(): cmds = [['bash', 'bin/run_tests.sh']]
     elif (repo / 'bin' / 'test_project.py').exists(): cmds = [[py, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', 'bin/test_project.py']]
     else: cmds = []
@@ -46,7 +46,7 @@ def run_tests(dev, say=print, folders=FOLDERS):
     """跑测试：返回没过的 [(文件夹, 命令, 输出末尾)]。测试输出放本机临时文件，跑完删。"""
     before = set(leftovers(dev))      # 开跑前就有的改动（正在改的程序）不算测试留下的
     base = {k: v for k, v in os.environ.items() if k != 'THINKCUT_NO_OPEN'}
-    base.update({'PYTHONUTF8': '1', 'PYTHONDONTWRITEBYTECODE': '1', 'THINKCUT_APP_FLAVOR': 'release', 'THINKCUT_NO_KEYCHAIN': '1'})      # 测试不碰真的钥匙串      # 测试在开发版跑，但测的是正式版的读法（开发版会把片子文件夹换成试验田）
+    base.update({'PYTHONUTF8': '1', 'PYTHONDONTWRITEBYTECODE': '1', 'THINKCUT_APP_FLAVOR': 'release', 'THINKCUT_NO_KEYCHAIN': '1', 'THINKCUT_AI_PATH': ''})      # 也不碰真的 AI 命令行（2026-11-26 AI 引擎）      # 测试不碰真的钥匙串      # 测试在开发版跑，但测的是正式版的读法（开发版会把片子文件夹换成试验田）
     failed = []
     fonts = Path(os.environ.get('THINKCUT_FONT_DIR') or dev / '素材库' / '字体')
     missing = [f for f in FONTS if not (fonts / f).is_file()] if 'studio' in folders and (dev / 'studio/skill/thinkcut-edit/assets/包装系统/rendang.py').is_file() else []      # 只查真有人挡字程序的（发版测试里的假仓库没有）

@@ -5,8 +5,8 @@
 #   bash bin/setup_mac.sh --links   # 只链接技能（发版后 bin/release.py 自动跑这一步）
 set -u
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P) || exit 1
-# 2026-11-24：技能只链接使用版。在开发版（使用版文件夹名后面加 -开发）跑会把用户做片子用的技能指到开发中的程序上，所以停下
-if [[ "$ROOT" == *-开发 ]]; then echo "这是开发版（${ROOT}），技能只链接使用版：请运行 bash \"${ROOT%-开发}/bin/setup_mac.sh\""; exit 2; fi
+# 2026-11-24：技能只链接使用版。在开发版（文件夹名以 -开发 结尾）跑会把用户做片子用的技能指到开发中的程序上，所以停下；使用版位置见 bin/locations.py
+if [[ "$ROOT" == *-开发 ]]; then echo "这是开发版（${ROOT}），技能只链接使用版：请运行 bash \"$(python3 "$ROOT/bin/locations.py" prod "$ROOT" || echo '<使用版>')/bin/setup_mac.sh\""; exit 2; fi
 only_links=0
 for a in "$@"; do case "$a" in --links) only_links=1 ;; *) echo "未知参数：$a"; exit 2 ;; esac; done
 failed=0

@@ -10,8 +10,11 @@
 set -u
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P) || exit 1
 NAS="${THINKCUT_ENV_NAS:-$ROOT/环境}"                                         # 两个 THINKCUT_ENV_* 只给离线测试换成临时目录用
-# 2026-11-24：环境原件只有使用版那一份；在开发版（使用版文件夹名后面加 -开发）里跑时用使用版的
-[[ -z "${THINKCUT_ENV_NAS:-}" && "$ROOT" == *-开发 && ! -d "$NAS" ]] && NAS="${ROOT%-开发}/环境"
+# 2026-11-24：环境原件只有使用版那一份；在开发版（文件夹名以 -开发 结尾或是 worktree）里跑时用使用版的（2026-11-26 起按 git origin 找，见 bin/locations.py）
+HOME_ROOT=$ROOT
+if [[ -z "${THINKCUT_ENV_NAS:-}" && ! -d "$NAS" && ( "$ROOT" == *-开发 || -f "$ROOT/.git" ) ]]; then
+  p=$(python3 "$ROOT/bin/locations.py" prod "$ROOT") && [[ -n "$p" ]] && { HOME_ROOT=$p; NAS="$p/环境"; }
+fi
 [[ -f "$ROOT/bin/legacy_names.sh" ]] && source "$ROOT/bin/legacy_names.sh"     # 从改名前升级来的机器：环境文件夹还叫旧名字
 ALIGN=${THINKCUT_ALIGN_ENV:-thinkcut-align}; MATTING=${THINKCUT_MATTING_ENV:-thinkcut-matting}
 LOCAL="${THINKCUT_ENV_LOCAL:-$HOME/Library/Application Support/${THINKCUT_APP_DIR:-ThinkCut}/环境}"
@@ -72,7 +75,7 @@ if [[ $push == 1 ]]; then
     echo "这次更新会从 NAS 原件里去掉 $(echo "$gone" | wc -l | tr -d ' ') 个 Mac 副本没有的文件（先列 20 个）："; echo "$gone" | head -20 | sed 's/^/  /'
     echo "确认 Mac 副本是完整的、就是要这样，再运行：bash bin/sync_env.sh --push --yes（旧文件会挪进 NAS 回收站）"; exit 3
   fi
-  bak="${THINKCUT_RECYCLE_ROOT:-$(dirname "$ROOT")/#recycle/$(basename "${ROOT%-开发}")}/环境_$(date +%Y%m%d_%H%M%S)"      # THINKCUT_RECYCLE_ROOT 只给离线测试换成临时目录用
+  bak="${THINKCUT_RECYCLE_ROOT:-$(dirname "$HOME_ROOT")/#recycle/$(basename "$HOME_ROOT")}/环境_$(date +%Y%m%d_%H%M%S)"      # THINKCUT_RECYCLE_ROOT 只给离线测试换成临时目录用
   # 系统自带的 rsync 带 --backup-dir 时 --delete 不生效（2026-11-13 实测）：多出来的文件这里自己挪进回收站，下面 rsync 只管新增和替换
   if [[ -n "$gone" ]]; then
     while IFS= read -r g; do

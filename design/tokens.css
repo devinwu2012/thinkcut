@@ -1,0 +1,114 @@
+/* ThinkCut 界面规格 v1（2026-11-26 用户定稿，设计稿 https://claude.ai/artifact/4NA4TyvfJFMXF7higWU8r5）
+   全站唯一一份：首页、审片台、口播精剪编辑器、设置页的颜色、发丝线、圆角、阴影、字号、间距、动效都从这里取。
+   页面里不准再写死颜色和这些数值（bin/test_design.py 会查）。改规格只改这一个文件；说明见 design/README.md，
+   样张见 design/样张.html（直接用这里的变量渲染，变量一改样张跟着变）。
+   服务发页面时把这份文件原样塞进页面里的规格占位（thinkcut/design.py）。 */
+:root{
+  --tc-spec:"界面规格 v1";
+  color-scheme:light dark;
+  /* —— 中性灰（浅色 10 档） —— */
+  --win:#f5f5f7;          /* 窗口底 */
+  --bar:#fbfbfc;          /* 顶栏、细栏 */
+  --side:#f8f8fa;         /* 右边意见栏、侧栏 */
+  --surface:#ffffff;      /* 正文区、表格底 */
+  --card:#ffffff;         /* 卡片、浮层、菜单 */
+  --sunk:#f2f2f5;         /* 下沉块：引用、只读框、音频条 */
+  --btn:#ffffff;          /* 次按钮底 */
+  --t1:#1d1d1f;           /* 正文 */
+  --t2:#48484a;           /* 次要字 */
+  --t3:#6e6e73;           /* 说明字（最浅的可读字，白底对比 5:1） */
+  --t4:#aeaeb2;           /* 禁用、占位 */
+  /* —— 线和填充：0.5px 半透明发丝线 —— */
+  --hair-w:.5px;
+  --hair:rgba(0,0,0,.10);
+  --hair2:rgba(0,0,0,.16);
+  --hairline:var(--hair-w) solid var(--hair);
+  --hairline2:var(--hair-w) solid var(--hair2);
+  --fill:rgba(0,0,0,.045);     /* 悬停 */
+  --fill-h:rgba(0,0,0,.075);   /* 按下、禁用主按钮底 */
+  --fill-p:rgba(0,0,0,.11);
+  --scrim:rgba(0,0,0,.18);     /* 弹窗后面的暗层 */
+  /* —— 蓝：只给能点的和选中的 —— */
+  --blue:#007aff;
+  --blue-h:#1a86ff;
+  --blue-p:#006ae0;
+  --blue-t:#0066cc;            /* 蓝字、链接 */
+  --blue-tint:rgba(0,122,255,.09);
+  --blue-tint-h:rgba(0,122,255,.14);
+  --ring:rgba(0,122,255,.32);  /* 键盘聚焦光圈 */
+  --sel:rgba(0,122,255,.14);   /* 选中文字、当前句 */
+  --on-blue:#ffffff;           /* 蓝底上的字 */
+  /* —— 分段控件 —— */
+  --seg:rgba(0,0,0,.055);
+  --seg-on:#ffffff;
+  --seg-on-sh:0 0 0 .5px rgba(0,0,0,.14),0 1px 1px rgba(0,0,0,.06);
+  /* —— 状态色：实色点 · 文字 · 极淡底 —— */
+  --s-wait:#2f7de1; --s-wait-t:#1f5fae; --s-wait-bg:rgba(47,125,225,.09);   /* 待审阅 */
+  --s-todo:#e08a1e; --s-todo-t:#8f520a; --s-todo-bg:rgba(224,138,30,.11);   /* 待提交 */
+  --s-ai:#8e5cc8;   --s-ai-t:#683c9b;   --s-ai-bg:rgba(142,92,200,.10);     /* AI 处理中 */
+  --s-ok:#34a05a;   --s-ok-t:#23703e;   --s-ok-bg:rgba(52,160,90,.10);      /* 已定稿、在线 */
+  --s-err:#d9443a;  --s-err-t:#ad2c25;  --s-err-bg:rgba(217,68,58,.09);     /* 出错、达芬奇断开、删除 */
+  --s-off:#b0b0b5;  --s-off-t:#5c5c60;  --s-off-bg:rgba(0,0,0,.045);        /* 未登录、未装、灰 */
+  --hl:rgba(255,204,0,.22);    /* 高亮（文稿里 AI 改过的地方） */
+  /* —— 画面、时间条 —— */
+  --media:#1c1c1e;             /* 视频、图片底 */
+  --on-media:#ffffff;
+  --tl:#eeeef1; --tl-t:#48484a; --tl-line:rgba(0,0,0,.12);   /* 审片全片时间条：浅色模式浅底 */
+  --shot-anim:#5aa9a6; --shot-live:#b08a5a; --shot-pic:#8e8e96;
+  --playhead:#ff3b30;
+  /* —— 圆角 4 档 + 胶囊 —— */
+  --r-s:6px;      /* 小控件：分段格、小按钮、输入框、标签 */
+  --r-m:8px;      /* 按钮、分段外框、意见条 */
+  --r-l:12px;     /* 卡片、面板、封面图 */
+  --r-xl:14px;    /* 浮层、弹窗 */
+  --r-pill:999px; /* 胶囊：状态标签、圆点 */
+  --r-tip:2px;    /* 不算一档：浮层小箭头的尖、细进度条两头 */
+  /* —— 阴影 3 档（每档两层：紧贴细影＋很淡散影） —— */
+  --sh1:0 1px 1px rgba(0,0,0,.04),0 1px 3px rgba(0,0,0,.05);     /* 贴边：卡片 */
+  --sh2:0 1px 2px rgba(0,0,0,.06),0 6px 16px rgba(0,0,0,.08);    /* 浮起：悬停卡片、拖动中 */
+  --sh3:0 2px 6px rgba(0,0,0,.08),0 14px 32px rgba(0,0,0,.14);   /* 弹窗：浮层、菜单 */
+  --sh-btn:0 0 0 .5px rgba(0,0,0,.16),0 1px 1px rgba(0,0,0,.05); /* 次按钮、输入框的边 */
+  --sh-card:0 0 0 .5px rgba(0,0,0,.10),var(--sh1);
+  --sh-pop:0 0 0 .5px rgba(0,0,0,.16),var(--sh3);
+  /* —— 字 —— */
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB",sans-serif;
+  --font-mono:"SF Mono",ui-monospace,Menlo,monospace;
+  --fs-11:11px; --fs-12:12px; --fs-13:13px; --fs-15:15px; --fs-20:20px; --fs-28:28px;
+  --lh-11:16px; --lh-12:18px; --lh-13:20px; --lh-15:24px; --lh-20:28px; --lh-28:36px;
+  --fw-r:400; --fw-b:600;
+  /* —— 间距：4 的倍数 —— */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
+  --bar-h:52px; --sub-h:44px;
+  /* —— 动效：0.15–0.25 秒，同一条曲线 —— */
+  --ease:cubic-bezier(.2,0,0,1);
+  --dur-1:.15s;   /* 悬停、按下 */
+  --dur-2:.2s;    /* 浮层出现、拖动让位 */
+  --dur-3:.25s;   /* 栏目滑块、大块内容切换 */
+  --move:1;       /* 位移动画开关：系统开了“减少动态效果”时为 0，页面里位移量乘它 */
+}
+@media (prefers-color-scheme:dark){:root{
+  --win:#1e1e20; --bar:#28282b; --side:#242427; --surface:#1e1e20; --card:#2a2a2d; --sunk:#202023; --btn:#3a3a3e;
+  --t1:#f5f5f7; --t2:#d1d1d6; --t3:#98989d; --t4:#636366;
+  --hair:rgba(255,255,255,.10); --hair2:rgba(255,255,255,.16);
+  --fill:rgba(255,255,255,.06); --fill-h:rgba(255,255,255,.09); --fill-p:rgba(255,255,255,.13); --scrim:rgba(0,0,0,.42);
+  --blue:#0a84ff; --blue-h:#2a94ff; --blue-p:#0070e0; --blue-t:#4da3ff;
+  --blue-tint:rgba(10,132,255,.16); --blue-tint-h:rgba(10,132,255,.24); --ring:rgba(10,132,255,.45); --sel:rgba(10,132,255,.30);
+  --seg:rgba(255,255,255,.07); --seg-on:#5a5a5f; --seg-on-sh:0 0 0 .5px rgba(255,255,255,.08),0 1px 1px rgba(0,0,0,.3);
+  --s-wait:#4c9bff; --s-wait-t:#8dbfff; --s-wait-bg:rgba(76,155,255,.14);
+  --s-todo:#f0a240; --s-todo-t:#f5c27d; --s-todo-bg:rgba(240,162,64,.14);
+  --s-ai:#b48ae6;   --s-ai-t:#d2b6f3;   --s-ai-bg:rgba(180,138,230,.15);
+  --s-ok:#55c07a;   --s-ok-t:#93dba9;   --s-ok-bg:rgba(85,192,122,.14);
+  --s-err:#ff6a5f;  --s-err-t:#ffa199;  --s-err-bg:rgba(255,106,95,.14);
+  --s-off:#7c7c82;  --s-off-t:#c7c7cc;  --s-off-bg:rgba(255,255,255,.07);
+  --hl:rgba(255,214,10,.20);
+  --media:#0e0e10;
+  --tl:#141416; --tl-t:rgba(255,255,255,.78); --tl-line:rgba(255,255,255,.10);
+  --shot-anim:#3f8f8c; --shot-live:#8a6a42; --shot-pic:#5c5c62; --playhead:#ff453a;
+  --sh1:0 1px 1px rgba(0,0,0,.22),0 1px 3px rgba(0,0,0,.18);
+  --sh2:0 1px 2px rgba(0,0,0,.3),0 8px 20px rgba(0,0,0,.32);
+  --sh3:0 2px 6px rgba(0,0,0,.35),0 16px 36px rgba(0,0,0,.5);
+  --sh-btn:0 0 0 .5px rgba(255,255,255,.16),0 1px 1px rgba(0,0,0,.2);
+  --sh-card:0 0 0 .5px rgba(255,255,255,.10),var(--sh1);
+  --sh-pop:0 0 0 .5px rgba(255,255,255,.18),var(--sh3);
+}}
+@media (prefers-reduced-motion:reduce){:root{--move:0;--dur-3:.15s}}

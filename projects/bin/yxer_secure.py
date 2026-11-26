@@ -27,6 +27,8 @@ def keychain():
 
 
 def credential(value=None):
+    if os.environ.get('THINKCUT_AI_BACKGROUND'):      # 后台 AI 不直接读钥匙（2026-11-26）：上传、存草稿由审片台代办跑这个程序
+        raise RuntimeError('后台 AI 不直接读蚁小二的钥匙：yxer-safe 会自动交给审片台代办')
     lib = keychain()
     size, data, item = ctypes.c_uint32(), ctypes.c_void_p(), ctypes.c_void_p()
     status = lib.SecKeychainFindGenericPassword(None, len(SERVICE), SERVICE, len(ACCOUNT), ACCOUNT, ctypes.byref(size), ctypes.byref(data), ctypes.byref(item))
@@ -168,4 +170,6 @@ def main():
 
 
 if __name__ == '__main__':
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'bin')); import thinkcut_broker      # noqa: E402
+    if thinkcut_broker.active(): sys.exit(thinkcut_broker.forward(__file__, sys.argv[1:]))     # 后台 AI 不拿钥匙：交给审片台代办（2026-11-26）
     sys.exit(main())

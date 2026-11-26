@@ -5,7 +5,7 @@ description: 剪辑第 1 步「剪口播」（由 thinkcut-edit 入口调用，�
 
 # AI 口播剪辑
 
-> **路径和 IP**（2026-11-24 配置档）：下文 `$AI` 是程序目录：`AI=$(cd -P ~/.claude/skills/thinkcut-edit/../../.. && pwd)`（技能链接指着的使用版；在开发版试验时换成开发版目录）。`<片子文件夹>`、`<试验田>`、`<回收站>` 是这个 IP 配置的位置，用 `python3 "$AI/bin/thinkcut_config.py" show --key 片子文件夹` 查（默认是程序目录旁边的 `<IP 名>视频/`、`<IP 名>试验田/`、`#recycle/`）。做哪个项目先读它所属 IP 的规矩：`python3 "$AI/bin/thinkcut_config.py" rules --project <项目根>`（在用户配置档 `<IP>/规矩.md`；用户配置档默认是程序目录旁边的 `ThinkCut配置档/`，`python3 "$AI/bin/thinkcut_config.py" where` 查），和这里冲突时以那份为准。
+> **路径和 IP**（2026-11-24 配置档）：下文 `$AI` 是程序目录：`AI=$(cd -P ~/.claude/skills/thinkcut-edit/../../.. && pwd)`（技能链接指着的使用版；在开发版试验时换成开发版目录）。`<片子文件夹>`、`<试验田>`、`<回收站>` 是这个 IP 配置的位置，用 `python3 "$AI/bin/thinkcut_config.py" show --key 片子文件夹` 查（默认是程序目录旁边的 `<IP 名>视频/`、`#recycle/`；试验田默认是程序目录旁边的 `Dev/ThinkCut/试验项目/`）。做哪个项目先读它所属 IP 的规矩：`python3 "$AI/bin/thinkcut_config.py" rules --project <项目根>`（在用户配置档 `<IP>/规矩.md`；用户配置档默认是程序目录旁边的 `ThinkCut配置档/`，`python3 "$AI/bin/thinkcut_config.py" where` 查），和这里冲突时以那份为准。
 
 
 ## 必守规则

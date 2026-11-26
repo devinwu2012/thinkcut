@@ -203,4 +203,5 @@ def main():
 
 
 if __name__ == '__main__':
+    sys.path.insert(0, str(SKILL.parents[2] / 'bin')); import thinkcut_broker; thinkcut_broker.hook(__file__)      # noqa: E402  后台 AI：交给审片台代办（2026-11-26）
     main()

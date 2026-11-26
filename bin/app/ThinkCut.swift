@@ -75,15 +75,15 @@ func esc(_ s: String) -> String {
     s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
 }
 
-/// 外壳自己的提示页（正在打开、出错）：颜色照第二轮三块共用的那套（共享笔记 C2_配色和约定.md），跟系统深浅色走
+/// 外壳自己的提示页（正在打开、出错）：颜色、字号照界面规格 v1（design/tokens.css，2026-11-26 界面精修；外壳编进程序里，读不到仓库文件，值抄自规格，改规格时一起改）
 func notice(_ title: String, _ body: String) -> String {
     """
     <!doctype html><meta charset="utf-8"><title>ThinkCut</title>
-    <style>:root{--bg:#ffffff;--text:#1d1d1f;--text-2:#3a3a3c;--muted:#6e6e73;--chip:#f0f0f2;color-scheme:light dark}
-    @media(prefers-color-scheme:dark){:root{--bg:#1e1e1e;--text:#f5f5f7;--text-2:#d1d1d6;--muted:#98989d;--chip:#3a3a3c}}
-    body{font:14px -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--text-2);-webkit-user-select:none;cursor:default}
-    div{max-width:560px;padding:24px;line-height:1.7} h2{font-size:17px;font-weight:600;color:var(--text);margin:0 0 8px} p{margin:6px 0}
-    code{font:12px ui-monospace,Menlo,monospace;word-break:break-all;background:var(--chip);border-radius:6px;padding:1px 6px;-webkit-user-select:text}</style>
+    <style>:root{--win:#f5f5f7;--t1:#1d1d1f;--t2:#48484a;--t3:#6e6e73;--fill:rgba(0,0,0,.045);--hair:rgba(0,0,0,.10);color-scheme:light dark}
+    @media(prefers-color-scheme:dark){:root{--win:#1e1e20;--t1:#f5f5f7;--t2:#d1d1d6;--t3:#98989d;--fill:rgba(255,255,255,.06);--hair:rgba(255,255,255,.10)}}
+    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;font-size:13px;line-height:20px;margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:var(--win);color:var(--t2);-webkit-user-select:none;cursor:default;-webkit-font-smoothing:antialiased}
+    div{max-width:560px;padding:24px} h2{font-size:20px;line-height:28px;font-weight:600;color:var(--t1);margin:0 0 8px} p{margin:6px 0}
+    code{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11px;word-break:break-all;background:var(--fill);box-shadow:inset 0 0 0 .5px var(--hair);border-radius:6px;padding:1px 6px;-webkit-user-select:text}</style>
     <div><h2>\(esc(title))</h2>\(body)</div>
     """
 }

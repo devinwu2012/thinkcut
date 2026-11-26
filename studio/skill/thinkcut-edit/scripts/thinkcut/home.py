@@ -21,7 +21,7 @@ import contextlib, fcntl, hashlib, html, http.cookies, json, os, re, signal, sub
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from .common import ASSETS, rj, say, die
-from . import board, workbench as WB
+from . import design, board, engine, settings, workbench as WB
 
 PAGE = ASSETS / '首页' / 'index.html'
 PORT = WB.HOME_PORT
@@ -509,7 +509,9 @@ def make_handler(root, ports=None):
             pg = WB.ping(p, 0.3)
             if pg and pg.get('app') == '审片工作台' and pg.get('listening'):
                 with contextlib.suppress(ValueError): films.append(str(Path(pg['dir']).resolve().relative_to(root)).split('/02_制作')[0])
-        return {'all': heard(), 'films': films, 'cmd': f'python3 "{Path(__file__).resolve().parents[1] / "thinkcut_edit.py"}" home --wait' + (f' --root "{root}"' if pin and root != video_root() else '')}
+        try: st = engine.engine_status(engine.chosen()); eng = {'id': st['id'], 'name': st['name'], 'state': st['state'], 'why': st['why']}
+        except Exception as e: eng = {'id': '', 'name': 'AI', 'state': '出错', 'why': f'查不了本机 AI：{type(e).__name__}'}
+        return {'all': heard(), 'films': films, 'engine': eng, 'cmd': f'python3 "{Path(__file__).resolve().parents[1] / "thinkcut_edit.py"}" home --wait' + (f' --root "{root}"' if pin and root != video_root() else '')}
 
     opening = {}; opening_guard = threading.Lock()
 
@@ -538,6 +540,7 @@ def make_handler(root, ports=None):
               '/api/reveal': lambda q: reveal(same_ip(q), q.get('id')),
               '/api/ip': lambda q: switch(q.get('name')), '/api/ip-new': new_ip, '/api/ip-del': del_ip, '/api/ip-undel': undel_ip,
               '/api/bin-restore': bin_restore}
+    for _p, _f in settings.POST.items(): STRICT[_p] = _f            # 设置页（AI、豆包、蚁小二）：和别的操作一样只收首页页面带口令的请求
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *_): pass
@@ -580,7 +583,7 @@ def make_handler(root, ports=None):
             if not self.own_host(): return self.send({'ok': False, 'error': '只接受本机地址的请求'}, code=403)
             u = urlsplit(self.path); p = unquote(u.path); q = {k: v[0] for k, v in parse_qs(u.query, keep_blank_values=True).items()}
             ip, root = here()
-            if p in ('/', '/index.html'): return self.send(PAGE.read_bytes().replace(b'__SHENPIAN_TOKEN__', SESSION.encode()), 'text/html; charset=utf-8', cookie=True)
+            if p in ('/', '/index.html'): return self.send(design.inject(PAGE.read_bytes().replace(b'__SHENPIAN_TOKEN__', SESSION.encode())), 'text/html; charset=utf-8', cookie=True)
             if p == '/api/ping': return self.send({'app': '首页', 'root': str(root), 'ip': ip, 'pin': str(pin or ''), 'pid': os.getpid(), 'ai_all': heard(), 'session': SESSION, 'prog': WB.PROG})
             if p == '/api/films': return self.send({'ok': True, 'root': str(root), 'ip': ip, 'pinned': bool(pin), 'exists': root.is_dir(), 'films': scan(root) if root.is_dir() else []})
             if p == '/api/ips': return self.send(ip_list())
@@ -593,6 +596,8 @@ def make_handler(root, ports=None):
                 except Oops as e: return self.send({'ok': False, 'id': q.get('id'), 'code': e.code, 'error': str(e), **e.extra})
                 except Exception as e: return self.send({'ok': False, 'id': q.get('id'), 'error': f'读取该项目出错：{e}'})
             if p == '/api/ai': return self.send({'ok': True, **ai_info()})
+            if p == '/settings': return self.send(settings.page(SESSION), 'text/html; charset=utf-8', cookie=True)
+            if p == '/api/settings': return self.send(settings.info())
             if p == '/api/cover':                  # 卡片上的封面小图
                 try: cv = cover_of(film_dir(root, q.get('id', '')))
                 except Oops: cv = None
@@ -633,6 +638,7 @@ def make_handler(root, ports=None):
             except Refuse as e: return self.send({'ok': False, 'need_ok': True, 'error': str(e)})
             except SystemExit as e: return self.send({'ok': False, 'error': str(e).replace('停止：', '')})
             except Oops as e: return self.send({'ok': False, 'code': e.code, 'error': str(e), **e.extra})
+            except settings.Oops as e: return self.send({'ok': False, 'error': str(e)})
             except WB.Broken as e: return self.send({'ok': False, 'code': 'broken_file', 'file': e.file.name, 'error': str(e)})
             except (RuntimeError, OSError) as e: return self.send({'ok': False, 'code': 'os_error', 'error': str(e)})
     return H

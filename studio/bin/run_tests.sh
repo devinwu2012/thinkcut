@@ -9,6 +9,8 @@ export THINKCUT_LOCAL_TMP; trap 'rm -rf "$THINKCUT_LOCAL_TMP"' EXIT
 if [[ -z "${THINKCUT_PROFILES:-}" ]]; then THINKCUT_PROFILES=$(python3 "$ROOT/../bin/make_test_profile.py" "$THINKCUT_LOCAL_TMP/配置档") || exit 1; export THINKCUT_PROFILES; fi
 # 模板 出片.py 会被复制到片子里用，默认按写死的使用版路径找程序；测试要测的是这一份自己（开发版、worktree 里也一样），所以指回自己（2026-11-24）
 export THINKCUT_SKILL="${THINKCUT_SKILL:-$ROOT/skill/thinkcut-edit}"
+# 测试不碰这台 Mac 上真的 AI 命令行（2026-11-26 AI 引擎）：只在这里找，空＝一个都没装；test_engine 自己放假的替身
+export THINKCUT_AI_PATH="${THINKCUT_AI_PATH-}"
 PYTHONUTF8=1 THINKCUT_NO_OPEN=1 python3 -B - "$ROOT" <<'PY'
 import hashlib, json, shutil, subprocess, sys, tempfile
 from pathlib import Path
@@ -322,6 +324,8 @@ check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台口播�
 # 2026-11-24 用户定：审片台第一栏“文案”（数据里叫 写稿）——在页面里写稿、和 AI 一起改（改写建议逐处采纳才落盘）、版本、定稿接出初稿
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_writing'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台文案栏测试（thinkcut/test_writing.py：读写各节、空白和贴进来、意见进 --wait、改写只有采纳才落盘、版本退回、定稿）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
+r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_engine'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], 'AI 引擎测试（thinkcut/test_engine.py：替身 AI 走通提交→后台处理→采纳、接着会话、换引擎、停止、提问、出错、未装未登录、--wait 老办法、权限参数、钥匙不泄露）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_animclip'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '动画栏带口播播放测试（thinkcut/test_animclip.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-900:]))
 # 2026-11-25 发布前 QA 的后台问题：口令只在 HttpOnly cookie、job.json 现读、闲置退出和端口回收、坏文件能恢复、发布卡住能撤回、新建加锁去重、撤销回原 IP、长题目、编号不重用

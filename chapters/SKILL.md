@@ -5,7 +5,7 @@ description: 剪辑第 5 步「章节导航」（由 thinkcut-edit 入口调用�
 
 # 视频章节导航
 
-> **路径和 IP**（2026-11-24 配置档）：下文 `$AI` 是程序目录：`AI=$(cd -P ~/.claude/skills/thinkcut-edit/../../.. && pwd)`（技能链接指着的使用版；在开发版试验时换成开发版目录）。`<片子文件夹>`、`<试验田>`、`<回收站>` 是这个 IP 配置的位置，用 `python3 "$AI/bin/thinkcut_config.py" show --key 片子文件夹` 查（默认是程序目录旁边的 `<IP 名>视频/`、`<IP 名>试验田/`、`#recycle/`）。做哪个项目先读它所属 IP 的规矩：`python3 "$AI/bin/thinkcut_config.py" rules --project <项目根>`（在用户配置档 `<IP>/规矩.md`；用户配置档默认是程序目录旁边的 `ThinkCut配置档/`，`python3 "$AI/bin/thinkcut_config.py" where` 查），和这里冲突时以那份为准。
+> **路径和 IP**（2026-11-24 配置档）：下文 `$AI` 是程序目录：`AI=$(cd -P ~/.claude/skills/thinkcut-edit/../../.. && pwd)`（技能链接指着的使用版；在开发版试验时换成开发版目录）。`<片子文件夹>`、`<试验田>`、`<回收站>` 是这个 IP 配置的位置，用 `python3 "$AI/bin/thinkcut_config.py" show --key 片子文件夹` 查（默认是程序目录旁边的 `<IP 名>视频/`、`#recycle/`；试验田默认是程序目录旁边的 `Dev/ThinkCut/试验项目/`）。做哪个项目先读它所属 IP 的规矩：`python3 "$AI/bin/thinkcut_config.py" rules --project <项目根>`（在用户配置档 `<IP>/规矩.md`；用户配置档默认是程序目录旁边的 `ThinkCut配置档/`，`python3 "$AI/bin/thinkcut_config.py" where` 查），和这里冲突时以那份为准。
 
 
 交付正常速度、覆盖指定区间的独立导航 MP4，让观众知道当前章节、话题或步骤和播放进度。默认用「短标签样式」（2026-11-14 用户定稿）：底默认是半透明深色（`background_mode`：opaque 不透明黑底／dim 半透明深色／clear 完全透明，详见 runtime.md；老项目是不透明黑底），一条按大章节分段的蓝色进度条，每段正下方写两到五个字的短标签，正在讲的那段标签变白加粗，红色发光光标跟着播放连续滑动（常亮，不闪）。不写短标签时是旧的两行文字样式。章节数量和层级由内容决定，不承诺任意视频都适合导航。

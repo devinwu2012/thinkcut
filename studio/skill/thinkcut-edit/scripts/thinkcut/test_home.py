@@ -230,7 +230,8 @@ class IPTests(Base):
         (self.prof / '公共.json').write_text(json.dumps(pub, ensure_ascii=False), encoding='utf-8')
         for n in ('甲', '乙'): (self.prof / n).mkdir(); (self.prof / n / 'ip.json').write_text(json.dumps({'名字': n}, ensure_ascii=False), encoding='utf-8')
         (self.prof / '本机.json').write_text(json.dumps({'_说明': '这台机器的'}, ensure_ascii=False), encoding='utf-8')
-        self.old = {k: os.environ.get(k) for k in ('THINKCUT_PROFILES', 'THINKCUT_IP', 'THINKCUT_VIDEO_ROOT', 'THINKCUT_RECYCLE_ROOT')}
+        self.old = {k: os.environ.get(k) for k in ('THINKCUT_PROFILES', 'THINKCUT_IP', 'THINKCUT_VIDEO_ROOT', 'THINKCUT_RECYCLE_ROOT', 'THINKCUT_APP_FLAVOR')}
+        os.environ['THINKCUT_APP_FLAVOR'] = 'release'      # 按正式版读配置：开发版直接跑这个测试时，不会把片子文件夹换成真的试验项目、往里建片子（2026-11-26 界面精修查出）
         os.environ['THINKCUT_PROFILES'] = str(self.prof); os.environ['THINKCUT_RECYCLE_ROOT'] = str(self.root.parent / '回收站'); os.environ.pop('THINKCUT_IP', None); os.environ.pop('THINKCUT_VIDEO_ROOT', None)
         self.srvs = []
 
