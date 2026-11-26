@@ -26,7 +26,9 @@ PROGRAM = Path(__file__).resolve().parents[1]
 THINKCUT_EDIT = PROGRAM / 'studio' / 'skill' / 'thinkcut-edit' / 'scripts' / 'thinkcut_edit.py'
 PORT = 8760
 # 从程序坞打开的程序拿不到终端里的 PATH：把 Homebrew 的位置补上，首页替片子起的审片台要用 ffmpeg 这些
-EXTRA_PATH = ('/opt/homebrew/bin', '/usr/local/bin')
+_H = str(Path.home())
+EXTRA_PATH = ('/opt/homebrew/bin', '/usr/local/bin', _H + '/.local/bin', _H + '/.local/node-system/bin', _H + '/.claude/local', _H + '/.npm-global/bin',
+              _H + '/.bun/bin', _H + '/.volta/bin')      # 程序坞打开时 PATH 很短：Homebrew 和用户自己装的命令行（claude、codex、yxer、yxer-safe）都补上（2026-11-26 设置页显示“未装”）
 
 
 def ping(port, timeout=0.5):

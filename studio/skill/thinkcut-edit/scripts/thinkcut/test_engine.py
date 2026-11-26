@@ -400,5 +400,17 @@ class KeyTests(Base):
         self.assertNotIn(K, json.dumps(self.data(), ensure_ascii=False))
 
 
+class AppLaunched(unittest.TestCase):
+    """2026-11-26 用户在 Mac 程序的设置页看到 Claude Code、Codex 都“未装”：程序起的服务带着 THINKCUT_NO_OPEN，以前被当成测试、一个 AI 都不找。"""
+    def test_no_open_is_not_a_test_marker(self):
+        old = os.environ.pop('THINKCUT_AI_PATH', None)
+        try:
+            os.environ['THINKCUT_NO_OPEN'] = '1'
+            dirs = [str(p) for p in E.search_dirs()]
+            self.assertIn(str(Path.home() / '.local/node-system/bin'), dirs, '程序起的服务也要到常见安装位置找 AI 命令行')
+        finally:
+            if old is not None: os.environ['THINKCUT_AI_PATH'] = old
+
+
 if __name__ == '__main__':
     unittest.main()

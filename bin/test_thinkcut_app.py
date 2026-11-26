@@ -114,6 +114,7 @@ class Launch(unittest.TestCase):
     def test_程序坞打开时补上Homebrew的路径(self):
         env = A.child_env()
         self.assertIn('/opt/homebrew/bin', env['PATH'].split(':')); self.assertEqual(env['THINKCUT_NO_OPEN'], '1')
+        self.assertIn(str(Path.home() / '.local/node-system/bin'), env['PATH'].split(':'), '用户自己装的命令行（claude、codex、yxer）也要找得到')
 
 
 @unittest.skipUnless(sys.platform == 'darwin', '只在 Mac 上构建')

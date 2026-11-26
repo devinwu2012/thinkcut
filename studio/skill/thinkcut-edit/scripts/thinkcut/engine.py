@@ -12,7 +12,7 @@
   Codex：--sandbox workspace-write（只能写项目文件夹、ThinkCut 程序数据文件夹、系统临时目录）、approval never（不卡在等批准）。
   两边都不用 --dangerously-bypass-approvals-and-sandbox / bypassPermissions。确认、采纳、定稿、发布只收审片台页面带口令（HttpOnly cookie，只在服务内存里）的请求，AI 拿不到。
 - 旧的 `workbench … --wait` 挂对话方式照旧：对话里的 AI 挂着等时，提交的事交给它，不起后台 AI。
-测试：THINKCUT_AI_PATH 指一个放假命令行的文件夹（空字符串＝一个 AI 都没装）；设了 THINKCUT_NO_OPEN 又没设 THINKCUT_AI_PATH 时当一个都没装（测试不会真起 AI）。
+测试：THINKCUT_AI_PATH 指一个放假命令行的文件夹（空字符串＝一个 AI 都没装）；全套测试（test_all、studio/bin/run_tests.sh）都设 THINKCUT_AI_PATH，不会真起 AI。不能拿 THINKCUT_NO_OPEN 当测试标记：Mac 程序起的服务都带着它。
 """
 import contextlib
 import json
@@ -63,7 +63,6 @@ def write_settings(**kw):
 def search_dirs():
     """去哪找 AI 命令行。Mac 程序外壳起的服务 PATH 很短，常见安装位置都看一遍。"""
     if 'THINKCUT_AI_PATH' in os.environ: return [Path(x) for x in os.environ['THINKCUT_AI_PATH'].split(os.pathsep) if x]
-    if os.environ.get('THINKCUT_NO_OPEN'): return []          # 测试：不碰本机真的 AI
     h = Path.home()
     extra = [h / '.local/bin', h / '.local/node-system/bin', h / '.claude/local', h / '.npm-global/bin', h / '.bun/bin', h / '.volta/bin',
              Path('/opt/homebrew/bin'), Path('/usr/local/bin')]
@@ -321,12 +320,12 @@ def ready():
 
 
 def login(eid):
-    """在终端里跑登录命令（账号由用户自己登，程序不碰密码）。测试（THINKCUT_NO_OPEN）时只返回命令不弹终端。"""
+    """在终端里跑登录命令（账号由用户自己登，程序不碰密码）。测试（设了 THINKCUT_AI_PATH）时只返回命令不弹终端。"""
     if eid not in ENGINES: raise ValueError('不认识的 AI：' + str(eid))
     a = ENGINES[eid]; exe = a.find()
     if not exe: raise ValueError(f'这台 Mac 上没装 {a.name} 的命令行，装好再登录')
     cmd = a.login_cmd(exe); opened = False
-    if not os.environ.get('THINKCUT_NO_OPEN'):
+    if 'THINKCUT_AI_PATH' not in os.environ:      # 不能看 THINKCUT_NO_OPEN：Mac 程序起的服务都带着它（2026-11-26 设置页误报“未装”）
         path = os.pathsep.join([str(exe.parent), '/usr/bin', '/bin'])
         script = f'export PATH={_q(path)}:"$PATH"; {cmd}'
         with contextlib.suppress(Exception):
