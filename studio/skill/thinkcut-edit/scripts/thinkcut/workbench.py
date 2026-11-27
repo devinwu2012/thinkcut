@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from fractions import Fraction
 from .common import Job, ASSETS, DEFAULTS, Broken, backup_of, thinkcut_config, die, keep_backup, read_data, rj, wj, say
-from . import board, design, engine, formats, koubo, materials, publish, settings, writing
+from . import board, chat, design, engine, formats, koubo, materials, publish, settings, writing
 
 PAGE = ASSETS / '审片工作台' / 'index.html'
 EDITOR = ASSETS / '审片工作台' / '文案剪辑.html'          # “口播剪辑”栏下半的文字剪辑器（内嵌在审片台页面里）
@@ -600,6 +600,8 @@ def make_handler(job, dv):
         return buf.getvalue()
     def alive(): activity['t'] = time.time()          # AI 在后台干活时审片台别闲到自己退出
     runner = engine.Runner(job, brief, lambda: board.pick(job), lambda: set(board.send_info(job)['ids']), lambda c: board.unsend(job, c), alive)
+    talk = chat.for_project(job, runner, alive)            # AI 对话侧栏（2026-11-27）：和“提交 AI”同一条会话，不同时跑
+    runner.blocked = talk.busy
 
     def backend(a):
         return backends.setdefault(str(a), koubo.Backend(a))
@@ -821,6 +823,15 @@ def make_handler(job, dv):
     for _p, _f in settings.POST.items():                                                                 # 设置页：AI、豆包、蚁小二（只收页面的）
         STRICT[_p] = strict(lambda q, h, f=_f: _settings(f, q))
     STRICT['/api/repair'] = strict(lambda q, h: repair(job, str(q.get('file') or '')))                  # 数据文件坏了：留着坏的、退回上一版（QA 2.4）
+
+    def chat_call(fn):
+        def g(q, h):
+            try: return fn(q)
+            except chat.Oops as e: raise Oops(str(e)) from None
+        return strict(g)
+    STRICT['/api/chat/send'] = chat_call(lambda q: talk.send(q.get('text'), q.get('files')))            # 对话侧栏：说一句（只收页面的）
+    STRICT['/api/chat/stop'] = chat_call(lambda q: talk.stop())
+    STRICT['/api/chat/clear'] = chat_call(lambda q: talk.clear())
     POST = {'/api/mark': mark, '/api/markrange': mark_range, '/api/range': set_range, '/api/shot': shot, '/api/upload': upload, '/api/delimg': del_img, '/api/text': set_text, '/api/delete': delete, '/api/again': again, '/api/nav': nav, '/api/markkind': set_kind, '/api/answer': answer, '/api/replyimg': reply_img,
             '/api/goto': lambda q: call(dv.goto, float(q['t'])), '/api/play': lambda q: call(dv.toggle_play), '/api/navshot': navshot}
 
@@ -923,6 +934,7 @@ def make_handler(job, dv):
             if p == '/settings': return self.send(settings.page(SESSION), 'text/html; charset=utf-8', cookie=True)
             if p == '/api/settings': return self.send(settings.info())
             if p == '/api/material': return self.send(materials.info(job))       # 备料：正在传、复制的进度（页面传东西时每秒来问）
+            if p == '/api/chat': return self.send(talk.state())                   # 对话侧栏：记录、在不在回复
             if p == '/api/data':
                 seen['t'] = time.time(); return self.send(meta())
             if p == '/api/wait':                # AI 的 --wait 每 2 秒来问一次：记下“AI 在等”
@@ -946,6 +958,20 @@ def make_handler(job, dv):
                 except Oops as e: return self.send({'ok': False, 'error': str(e)})
             if p.startswith('/图/') and '/' not in p[3:] and not p[3:].startswith('.'): return self.image(home(job) / '图' / p[3:])
             self.send({'ok': False, 'error': '没有这个地址'}, code=404)
+
+        def chat_upload(self):
+            """对话侧栏拖进来的文件：和备料一样放进这个项目的 01_原始素材（同名不覆盖、边收边写、半截不留），只收本页面带口令的。"""
+            from urllib.parse import parse_qs, urlsplit
+            if not (self.own_page() and from_page(self)):
+                self.close_connection = True
+                return self.send({'ok': False, 'error': '放文件只能在审片台页面上拖（这个请求不是页面发的）'}, code=403)
+            name = (parse_qs(urlsplit(self.path).query).get('name') or [''])[0]
+            try: n = int(self.headers.get('Content-Length') or -1)
+            except ValueError: n = -1
+            try: rec = materials.receive(job, name, self.rfile, n)
+            except materials.Oops as e:
+                self.close_connection = True; return self.send({'ok': False, 'error': str(e)})
+            self.send({'ok': True, 'file': rec})
 
         def material_upload(self):
             """备料：页面拖进来的一个文件（请求体就是文件本身，?name=文件名）。和确认一样只收本页面带口令的；边收边写，不整个读进内存。"""
@@ -976,6 +1002,7 @@ def make_handler(job, dv):
 
         def _post(self):
             if self.path.split('?')[0] == '/api/material/upload': return self.material_upload()
+            if self.path.split('?')[0] == '/api/chat/upload': return self.chat_upload()
             try: raw = self.rfile.read(int(self.headers.get('Content-Length') or 0))
             except ValueError: return self.send({'ok': False, 'error': '格式不对'}, code=400)
             if not self.own_page(): return self.send({'ok': False, 'error': '只接受审片工作台页面自己发来的请求（来源不是本页面）'}, code=403)
@@ -994,7 +1021,7 @@ def make_handler(job, dv):
             except (KeyError, ValueError, TypeError): return self.send({'ok': False, 'error': '请求缺内容'}, code=400)
             if isinstance(out, Path): return self.image(out)
             self.send(out if 'ok' in out else {'ok': True, **out})
-    H.runner, H.listening = runner, listening
+    H.runner, H.listening, H.chat = runner, listening, talk
     return H
 
 
@@ -1064,7 +1091,7 @@ class NoDV:
 
 def make_server(job, port, dv=None):
     H = make_handler(job, dv or (NoDV() if lite(job) else DVProxy(job))); srv = ThreadingHTTPServer(('127.0.0.1', port), H)
-    srv.runner, srv.listening = H.runner, H.listening
+    srv.runner, srv.listening, srv.chat = H.runner, H.listening, H.chat
     threading.Thread(target=broker_loop, args=(job,), daemon=True).start()
     return srv
 
@@ -1074,6 +1101,8 @@ def broker_loop(job, every=0.4):
     sys.path.insert(0, str(engine.PROGRAM / 'bin')); import thinkcut_broker
     while True:
         with contextlib.suppress(Exception): thinkcut_broker.serve_once(engine.broker_dir(job), engine.writable_dirs(job))
+        with contextlib.suppress(Exception):          # 对话侧栏的代办：同样的规矩，另外不跑导出、上传（2026-11-27）
+            thinkcut_broker.serve_once(job.dir / '审片工作台' / '代办-对话', engine.writable_dirs(job), policy=thinkcut_broker.chat_policy)
         time.sleep(every)
 
 
@@ -1096,6 +1125,7 @@ def serve(d, port):
         with contextlib.suppress(Exception):
             if rj(info).get('pid') == os.getpid(): info.unlink()
         with contextlib.suppress(Exception): srv.runner.stop()          # 审片台停了：后台 AI 一起停，没做完的退回“待提交”
+        with contextlib.suppress(Exception): srv.chat.stop()
         os._exit(0)
     signal.signal(signal.SIGTERM, bye); signal.signal(signal.SIGINT, bye)
     def idle():                            # 闲太久（页面关了、没人来用）自己退出，端口还回去（QA 1.2）；下次首页点开会重起，数据都在片子文件里
@@ -1381,6 +1411,7 @@ def cli(job, a):
     if a.stop: return stop(job)
     adopt(job)
     if a.publish: return publish_cli(job, a)
+    if getattr(a, 'add_material', None): return add_material_cli(job, a.add_material)
     if getattr(a, 'withdraw', None): return board.withdraw(job, a.withdraw.strip(), a.note)
     if getattr(a, 'rewrite', None): return writing.rewrite_cli(job, a.rewrite.strip(), getattr(a, 'json', None), a.note)   # 文案栏：交改写建议（用户点“采纳”才写进文件）
     if a.reply is not None:
@@ -1403,6 +1434,20 @@ def cli(job, a):
         if un: say(f"【注意】这几件用户还没点“提交 AI”（可能还在写），先别动：{'、'.join(un)}")
         return
     launch(job, a.port, a.column)
+
+
+def add_material_cli(job, paths):
+    """往项目 01_原始素材 里放素材（对话框里用户说了文件在哪，AI 用它；2026-11-27）：和页面上“写路径复制进来”同一套规矩。"""
+    try: r = materials.add_paths(job, '\n'.join(str(x) for x in paths), wait=True)
+    except materials.Oops as e: die(str(e))
+    rec = {Path(x.get('src', '')).name: x for x in (materials.read_data(materials.record_file(job)).get('files') or []) if x.get('src')}
+    for x in r['started']:
+        got = rec.get(x['name'])
+        say(f"放好了：{x['name']} → {got['path'] if got else '01_原始素材'}（{materials.size_text(x['size'])}）")
+    bad = materials.info(job)['failed']
+    for x in bad: say('没成：' + x['error'])
+    for e in r['errors']: say('没放：' + e)
+    if not r['started'] or bad: sys.exit(1)
 
 
 def _split(x): return [v.strip() for v in x.split(',') if v.strip()] if x else None          # 只按英文逗号分（路径、名字里常有中文逗号）

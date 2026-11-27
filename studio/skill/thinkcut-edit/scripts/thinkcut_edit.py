@@ -166,6 +166,7 @@ def main():
     p.add_argument('--wait-timeout', type=float, default=0, metavar='秒', help='和 --wait 一起用：最多等多少秒（默认一直等）')
     p.add_argument('--rewrite', metavar='稿N', help='文案栏：针对用户的一条意见交改写建议（把哪几段改成什么，可以多处、可以整篇），配 --json 改写.json、可带 --note 说明；只是建议，用户在页面上逐处点“采纳”才写进文案文件'); p.add_argument('--json', metavar='文件', help='和 --rewrite 一起用：改写内容（格式见 references/审片工作台.md「文案栏」）')
     p.add_argument('--withdraw', metavar='编号', help='撤回一项（发布错了或用不上了；不删，页面和 --list 不再显示），可带 --note 说明');
+    p.add_argument('--add-material', nargs='+', metavar='路径', help='往项目 01_原始素材 里放素材：这台 Mac 上的文件或文件夹（复制，原文件不动；同名不覆盖、改成“名字 (2)”；复制到一半断了不留半截）。和文稿栏“素材”、对话框拖进来的是同一套，记在 审片工作台/备料.json（2026-11-27 对话框）')
     p.add_argument('--title', help='和 --publish 一起用：卡片标题'); p.add_argument('--look', help='和 --publish 一起用：一句“看哪里、确认什么”')
     p.add_argument('--kind', choices=['多选一', '可以', '试听', '改字'], help='和 --publish 一起用：多选一（每个选项下“选这个”）、可以、试听（音频）、改字（默认 可以）')
     p.add_argument('--files', help='和 --publish/--reply 一起用：图片、视频（mp4/mov/webm）或音频，逗号分隔（--reply 带文件＝换新版）'); p.add_argument('--labels', help='每个文件的名字，逗号分隔（多选一默认 A、B、C）')

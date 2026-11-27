@@ -132,7 +132,7 @@ main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
 <details id="aipop" class="pop ovl"><summary class="aisum" title="当前用哪个 AI、它的状态：点开看详情"><i id="aidot" class="dot"></i><span id="aiword">AI …</span></summary><div class="pop-body" id="aibody" style="width:440px"></div></details><button class="tbtn" id="setbtn" title="设置：选 AI、登录、豆包语音、蚁小二">设置</button>
 <details id="helppop" class="pop ovl"><summary class="tbtn icon" aria-label="首页怎么用" title="首页怎么用"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.4 1.55c-.5.25-.8.6-.8 1.15v.3"/><circle cx="8" cy="11.3" r=".6" fill="currentColor" stroke="none"/></svg></summary><div class="pop-body help" style="width:360px">
 <h3>首页怎么用</h3><p><b>打开项目：</b>双击卡片（列表里双击一行），在本窗口打开。</p><p id="backhint"><b>回到首页：</b>在项目里点左上角“全部项目”，或按 <kbd>⌘W</kbd>。</p><p><b>一次一个：</b>一次只打开一个项目（达芬奇一次只打开一个工程）。</p><p style="margin:0"><b>右键卡片：</b>打开、在访达中显示、重命名、移到“已完成”、移到回收站。</p></div></details>
-<details id="newpop" class="pop ovl"><summary class="tbtn primary" id="newbtn">＋ 新建项目</summary><div class="pop-body">
+<button id="tcChatBtn" type="button" title="跟 AI 说一句（⌘K）" aria-label="对话（⌘K）" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3h9c.83 0 1.5.67 1.5 1.5V10c0 .83-.67 1.5-1.5 1.5H8l-3 2.5v-2.5H3.5C2.67 11.5 2 10.83 2 10V4.5C2 3.67 2.67 3 3.5 3z"/></svg>对话<kbd>⌘K</kbd></button><details id="newpop" class="pop ovl"><summary class="tbtn primary" id="newbtn">＋ 新建项目</summary><div class="pop-body">
 <h3>新项目的题目</h3><span class="muted">可暂不填写，先命名为“未命名”，之后可右键“重命名…”</span><input id="newtitle" class="field" maxlength="60" placeholder="比如：卫生间防水到底刷多高">
 <div class="row"><span class="muted grow">程序直接建立项目文件夹，并进入该项目的文稿栏开始撰稿；无需 AI 在线。</span><button id="newgo" class="tbtn primary">建立并开始撰稿</button></div></div></details>
 </header>
@@ -342,3 +342,4 @@ window.addEventListener('pageshow',e=>{if(e.persisted){LAST=store.get(lastKey())
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh().catch(()=>{})});
 ipMenu().then(refresh);ai();$('setbtn').onclick=()=>{location.href='/settings?back=/'};
 </script>
+<!--THINKCUT_CHAT-->

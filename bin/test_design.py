@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TOKENS = ROOT / 'design' / 'tokens.css'
 ASSETS = ROOT / 'studio/skill/thinkcut-edit/assets'
 PAGES = [ASSETS / '首页/index.html', ASSETS / '审片工作台/index.html', ASSETS / '审片工作台/文案剪辑.html', ASSETS / '设置/index.html']
+PARTS = [ASSETS / '对话/对话.html']          # 页面片段（服务发页面时塞进页面，自己不带规格占位）：AI 对话侧栏（2026-11-27）
 SAMPLE = ROOT / 'design' / '样张.html'
 MARK = '<!--THINKCUT_TOKENS-->'
 # 例外清单：(文件, 这一行里一定有的一段原文, 原因)。改了这些行就要同步改这里和 design/README.md
@@ -114,6 +115,14 @@ for p in PAGES:
     bad = bad_lines(text, name=str(name))
     check(not bad, f'{name} 没有绕过规格自己写颜色、圆角、阴影、字体、字号' + ('' if not bad else '：' + '；'.join(f'第{i}行 {k} {s}' for i, k, s in bad[:12]) + (f' 等 {len(bad)} 处' if len(bad) > 12 else '')))
 
+for p in PARTS:
+    name = p.relative_to(ROOT); text = p.read_text(encoding='utf-8') if p.exists() else ''
+    check(bool(text) and MARK not in text, f'{name}（页面片段）存在，不另带规格占位')
+    bad = bad_lines(text, name=str(name))
+    check(not bad, f'{name} 没有绕过规格自己写颜色、圆角、阴影、字体、字号' + ('' if not bad else '：' + '；'.join(f'第{i}行 {k} {s}' for i, k, s in bad[:12])))
+for p in (ASSETS / '首页/index.html', ASSETS / '审片工作台/index.html'):
+    check(p.read_text(encoding='utf-8').count('<!--THINKCUT_CHAT-->') == 1, f'{p.relative_to(ROOT)} 里有一处对话侧栏占位')
+
 # 例外清单要和 README 对得上，每一条在页面里都还真的存在（改掉了就删掉这条，别留着放水）
 readme = (ROOT / 'design/README.md').read_text(encoding='utf-8') if (ROOT / 'design/README.md').exists() else ''
 for f, key, why in EXCEPTIONS:
@@ -127,6 +136,16 @@ sys.path.insert(0, str(ROOT / 'studio/skill/thinkcut-edit/scripts'))
 from thinkcut import design  # noqa: E402
 out = design.inject(('<html><head>' + MARK + '</head></html>').encode()).decode()
 check('--win' in out and MARK not in out and 'thinkcut-tokens' in out, '服务发页面时把 design/tokens.css 换进占位')
+import os  # noqa: E402
+_old = os.environ.get('THINKCUT_APP_FLAVOR')
+try:      # 2026-11-27 用户：开发版左上角一直写“开发版”；正式版没有
+    os.environ['THINKCUT_APP_FLAVOR'] = 'dev'; dev_out = design.inject(MARK.encode()).decode()
+    os.environ['THINKCUT_APP_FLAVOR'] = 'release'; rel_out = design.inject(MARK.encode()).decode()
+finally:
+    if _old is None: os.environ.pop('THINKCUT_APP_FLAVOR', None)
+    else: os.environ['THINKCUT_APP_FLAVOR'] = _old
+check('tc-dev' in dev_out and '\\u5f00\\u53d1\\u7248' in dev_out and 'tc-dev' not in rel_out, '开发版页面挂“开发版”标签，正式版不挂')
+check(not bad_lines(design.DEV_BADGE.decode().split('<script>')[0]), '“开发版”标签的样式也只用规格变量')
 
 # 4. 样张页：直接用规格变量，自己不写死
 s = SAMPLE.read_text(encoding='utf-8') if SAMPLE.exists() else ''

@@ -79,13 +79,15 @@ class Adapter:
             if f.is_file() and os.access(f, os.X_OK): return f
         return None
 
-    def env(self, exe, job=None):
+    def env(self, exe, job=None, broker=None):
         """给 AI 子进程的环境：程序所在文件夹放进 PATH（node 写的命令行要找得到 node）；标明是后台 AI。
-        拿不到钥匙（2026-11-26）：钥匙串当作没有、老位置的钥匙文件指到一个空文件夹；豆包识别／合成、蚁小二存草稿由审片台代办（bin/thinkcut_broker.py）。"""
+        拿不到钥匙（2026-11-26）：钥匙串当作没有、老位置的钥匙文件指到一个空文件夹；豆包识别／合成、蚁小二存草稿由审片台代办（bin/thinkcut_broker.py）。
+        broker：代办文件夹（不给＝这个项目“提交 AI”用的那个；对话用自己的，2026-11-27）。"""
         e = {k: v for k, v in os.environ.items() if k not in ('THINKCUT_SECRETS_DIR', 'THINKCUT_BROKER_PROGRAM')}
         e['PATH'] = os.pathsep.join([str(exe.parent), e.get('PATH', '/usr/bin:/bin')]); e['THINKCUT_AI_BACKGROUND'] = '1'; e['THINKCUT_NO_KEYCHAIN'] = '1'
-        if job is not None:
-            e['THINKCUT_BROKER_DIR'] = str(broker_dir(job)); e['THINKCUT_SECRETS_DIR'] = str(broker_dir(job) / '没有钥匙')
+        if broker is None and job is not None: broker = broker_dir(job)
+        if broker is not None:
+            e['THINKCUT_BROKER_DIR'] = str(broker); e['THINKCUT_SECRETS_DIR'] = str(Path(broker) / '没有钥匙')
         return e
 
     def logged_in(self, exe):
@@ -102,8 +104,9 @@ class Adapter:
 
     def login_cmd(self, exe): return ' '.join([_q(str(exe)), *self.login_args])
 
-    def command(self, exe, prompt, cwd, session, writable, model=''):
-        """返回 (命令, 新会话 id 或 None)。session：接着用的会话 id（None＝新开）；model：设置里填的模型（空＝用这个 AI 自己的默认）。"""
+    def command(self, exe, prompt, cwd, session, writable, model='', stream=False):
+        """返回 (命令, 新会话 id 或 None)。session：接着用的会话 id（None＝新开）；model：设置里填的模型（空＝用这个 AI 自己的默认）；
+        stream：对话框用，回复一个字一个字吐出来（能做到的 AI 才做，2026-11-27）。"""
         raise NotImplementedError
 
     def parse(self, ev):
@@ -143,20 +146,24 @@ class Claude(Adapter):
                             'filesystem': {'denyRead': self.DENY_READ, 'allowWrite': [str(x) for x in writable],
                                            'denyWrite': [str(PROGRAM), str(PROGRAM.resolve())]}}}      # 程序文件夹不能写：代办在沙盒外跑的就是它
 
-    def command(self, exe, prompt, cwd, session, writable, model=''):
+    def command(self, exe, prompt, cwd, session, writable, model='', stream=False):
         new = None
         if not session: new = session = str(uuid.uuid4())
         argv = [str(exe), '-p', prompt, '--output-format', 'stream-json', '--verbose',
                 '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--setting-sources', 'project',
                 '--settings', json.dumps(self.sandbox(writable), ensure_ascii=False),
                 '--allowedTools', *self.ALLOW, '--disallowedTools', *self.DENY,
-                *(['--session-id', session] if new else ['--resume', session]), *(['--model', model] if model else [])]
+                *(['--session-id', session] if new else ['--resume', session]), *(['--model', model] if model else []),
+                *(['--include-partial-messages'] if stream else [])]
         return argv, new
 
     def parse(self, ev):
         t = ev.get('type'); out = []
         if ev.get('session_id') and t in ('system', 'result'): out.append(('session', ev['session_id']))
-        if t == 'assistant':
+        if t == 'stream_event':                            # --include-partial-messages：正在说的话，一小段一小段来
+            e = ev.get('event') or {}; d = e.get('delta') or {}
+            if e.get('type') == 'content_block_delta' and d.get('type') == 'text_delta' and d.get('text'): out.append(('delta', d['text']))
+        elif t == 'assistant':
             for c in (ev.get('message') or {}).get('content') or []:
                 if c.get('type') == 'text' and c.get('text', '').strip(): out.append(('say', c['text']))
                 elif c.get('type') == 'tool_use': out.append(('step', tool_step(c.get('name', ''), c.get('input') or {})))
@@ -176,7 +183,7 @@ class Codex(Adapter):
         if r.returncode == 0 and 'logged in' in text.lower() and 'not logged' not in text.lower(): return True, ''
         return False, 'Codex 的命令行还没登录：点“登录”，在弹出的终端里登录你的 ChatGPT 账号。'
 
-    def command(self, exe, prompt, cwd, session, writable, model=''):
+    def command(self, exe, prompt, cwd, session, writable, model='', stream=False):
         cfg = [*(['-m', model] if model else []), '-c', 'sandbox_mode="workspace-write"', '-c', 'approval_policy="never"', '-c', 'sandbox_workspace_write.network_access=false',
                '-c', 'sandbox_workspace_write.writable_roots=' + json.dumps([str(x) for x in writable], ensure_ascii=False)]
         if session: return [str(exe), 'exec', 'resume', session, '--json', '--skip-git-repo-check', *cfg, prompt], None
@@ -406,9 +413,9 @@ class Runner:
     """用户点“提交 AI”（且没有对话里的 AI 挂着 --wait）→ 起后台 AI 处理这一批；处理中又提交的，处理完接着做下一批。
     brief(got)：把这一批要处理的事印成清单（workbench.report 的字），pick()：标记 AI 接了并返回这一批；unsend(col)：停了／出错时退回“待提交”。"""
 
-    def __init__(self, job, brief, pick, pending, unsend, alive=lambda: None):
-        self.job, self.brief, self.pick, self.pending, self.unsend, self.alive = job, brief, pick, pending, unsend, alive
-        self.lock = threading.Lock(); self.proc = None; self.thread = None; self.stopping = False
+    def __init__(self, job, brief, pick, pending, unsend, alive=lambda: None, blocked=lambda: False):
+        self.job, self.brief, self.pick, self.pending, self.unsend, self.alive, self.blocked = job, brief, pick, pending, unsend, alive, blocked
+        self.lock = threading.Lock(); self.proc = None; self.thread = None; self.stopping = False; self.waiting = None
 
     def busy(self):
         return bool(self.thread and self.thread.is_alive())
@@ -418,10 +425,18 @@ class Runner:
         with self.lock:
             if self.busy(): return True
             if not ready(): return False
+            if self.blocked():                   # 对话框正在用同一条会话（2026-11-27）：等它说完再接着做，不同时起两个 AI
+                if not (self.waiting and self.waiting.is_alive()):
+                    self.waiting = threading.Thread(target=self._after_block, daemon=True); self.waiting.start()
+                return True
             self.stopping = False
             self.thread = threading.Thread(target=self._loop, daemon=True); self.thread.start()
         if wait: self.thread.join()
         return True
+
+    def _after_block(self):
+        while self.blocked(): time.sleep(0.5)
+        self.kick()
 
     def stop(self):
         """用户点“停止”：结束 AI 进程（连同它起的子进程）和审片台替它代办的程序，这一批没处理完的退回“待提交”。"""
@@ -485,32 +500,54 @@ class Runner:
         argv, new = a.command(exe, text, workdir(self.job), session, writable_dirs(self.job), model_of(eid))
         if new: self._record(lambda d: d.setdefault('sessions', {}).__setitem__(eid, {'id': new, 'at': now()}))
         log = self.job.dir / '审片工作台' / 'AI记录' / f'{time.strftime("%Y%m%d-%H%M%S")}-{eid}.jsonl'
-        log.parent.mkdir(parents=True, exist_ok=True)
-        err = ''; final = ''; said = False; tail = []
-        try:
-            self.proc = subprocess.Popen(argv, cwd=str(workdir(self.job)), env=a.env(exe, self.job), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                         stdin=subprocess.DEVNULL, text=True, encoding='utf-8', errors='replace', start_new_session=True, bufsize=1)
-        except OSError as e:
-            return '出错', humane(eid, str(e)), '', False
-        with open(log, 'w', encoding='utf-8') as lf:
-            for line in self.proc.stdout:
-                lf.write(line); line = line.strip()
-                if not line: continue
-                try: ev = json.loads(line)
-                except ValueError:
-                    tail = (tail + [line])[-5:]; continue
-                if not isinstance(ev, dict): continue
-                for kind, val in a.parse(ev):
-                    if kind == 'session':
-                        self._record(lambda d, v=val: d.setdefault('sessions', {}).__setitem__(eid, {'id': v, 'at': now()}))
-                    elif kind == 'step' and val: said = True; self._step('step', val)
-                    elif kind == 'say': said = True; final = val; self._step('say', val)
-                    elif kind == 'final': final = val
-                    elif kind == 'error': err = val
-        code = self.proc.wait(); self.proc.stdout.close()
+        got = {'final': '', 'said': False}
+
+        def on(kind, val):
+            if kind == 'session': self._record(lambda d, v=val: d.setdefault('sessions', {}).__setitem__(eid, {'id': v, 'at': now()}))
+            elif kind == 'step' and val: got['said'] = True; self._step('step', val)
+            elif kind == 'say': got['said'] = True; got['final'] = val; self._step('say', val)
+            elif kind == 'final': got['final'] = val
+        code, err, tail = run_once(a, argv, workdir(self.job), a.env(exe, self.job), log, on, lambda p: setattr(self, 'proc', p))
+        final, said = got['final'], got['said']
+        if code is None: return '出错', humane(eid, err), '', False
         if self.stopping: return '已停止', '你点了“停止”：没处理完的已退回“待提交”，改好可以再提交。', final, said
         if code != 0 or err: return '出错', humane(eid, err or '\n'.join(tail), code), final, said
         return '完成', '', final, said
+
+
+def run_once(a, argv, cwd, env, log, on, keep=lambda p: None):
+    """跑一次 AI 命令行（提交 AI 和对话框共用，2026-11-27）：逐条读它吐的 JSON 事件，翻成 (种类, 内容) 交给 on；原始输出记进 log（排查用）。
+    keep(进程)：把进程交给调用方（“停止”要用）。返回 (返回码, 出错原话, 最后几行不是 JSON 的输出)；起不来时返回码是 None。"""
+    Path(log).parent.mkdir(parents=True, exist_ok=True)
+    err = ''; tail = []
+    try:
+        p = subprocess.Popen(argv, cwd=str(cwd), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             stdin=subprocess.DEVNULL, text=True, encoding='utf-8', errors='replace', start_new_session=True, bufsize=1)
+    except OSError as e:
+        return None, str(e), []
+    keep(p)
+    with open(log, 'w', encoding='utf-8') as lf:
+        for line in p.stdout:
+            lf.write(line); line = line.strip()
+            if not line: continue
+            try: ev = json.loads(line)
+            except ValueError:
+                tail = (tail + [line])[-5:]; continue
+            if not isinstance(ev, dict): continue
+            for kind, val in a.parse(ev):
+                if kind == 'error': err = val
+                else: on(kind, val)
+    code = p.wait(); p.stdout.close()
+    return code, err, tail
+
+
+def kill(p):
+    """结束 AI 进程（连同它起的子进程）。"""
+    if p and p.poll() is None:
+        with contextlib.suppress(Exception): os.killpg(p.pid, signal.SIGTERM)
+        try: p.wait(5)
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(Exception): os.killpg(p.pid, signal.SIGKILL)
 
 
 def page_info(job, waiter=False, runner=None):

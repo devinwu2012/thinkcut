@@ -328,6 +328,9 @@ r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_writi
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '审片台文案栏测试（thinkcut/test_writing.py：读写各节、空白和贴进来、意见进 --wait、改写只有采纳才落盘、版本退回、定稿）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_engine'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], 'AI 引擎测试（thinkcut/test_engine.py：替身 AI 走通提交→后台处理→采纳、接着会话、换引擎、停止、提问、出错、未装未登录、--wait 老办法、权限参数、钥匙不泄露）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
+# 2026-11-27 用户要：AI 对话侧栏（首页和审片台随时跟 AI 说一句）
+r = subprocess.run([sys.executable, '-B', '-W', 'ignore', '-m', 'unittest', 'thinkcut.test_chat'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600)
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], 'AI 对话侧栏测试（thinkcut/test_chat.py：替身 AI 走通首页开项→接到新项目、拖入素材登记、说路径放素材、存档走代办、停止、提问选项、导出发布定稿被拦、和提交 AI 共用会话不同时跑、未登录、记录和清空）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_animclip'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '动画栏带口播播放测试（thinkcut/test_animclip.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(900):]))
 # 2026-11-25 发布前 QA 的后台问题：口令只在 HttpOnly cookie、job.json 现读、闲置退出和端口回收、坏文件能恢复、发布卡住能撤回、新建加锁去重、撤销回原 IP、长题目、编号不重用

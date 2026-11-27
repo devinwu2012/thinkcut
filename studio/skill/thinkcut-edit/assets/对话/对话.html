@@ -1,0 +1,210 @@
+<!-- AI 对话侧栏（2026-11-27 用户要：“加一个我跟AI的对话框，但平时对话框可以隐藏起来，我可以随时在程序里跟AI说一句话”）。
+     首页和审片台共用这一份：服务发页面时把页面里的对话占位（THINKCUT_CHAT）换成这个文件（thinkcut/design.py）。
+     顶栏右边“对话 ⌘K”开关；从右边滑出，页面内容区跟着变窄（推开、不盖住）；按住左边缘拖宽（320–640，记在这台电脑的浏览器里）。
+     接口：GET /api/chat（记录、在不在回复、范围）；POST /api/chat/send｜stop｜clear｜open（只收页面带口令的）；POST /api/chat/upload?name=（拖进来的文件，请求体就是文件）。
+     颜色、圆角、阴影、字号都取 design/tokens.css 的变量（bin/test_design.py 查）。设计稿：Claude Design 画布第 6 页“AI 对话侧栏”。 -->
+<style>
+#tcChatBtn{height:24px;border:0;border-radius:var(--r-s);background:transparent;color:var(--t2);display:inline-flex;align-items:center;gap:6px;padding:0 var(--sp-2);font:inherit;font-size:var(--fs-12);line-height:var(--lh-12);white-space:nowrap;cursor:default;position:relative;flex:none;transition:background-color var(--dur-1) var(--ease)}
+#tcChatBtn:hover{background:var(--fill)}#tcChatBtn:active{background:var(--fill-h)}
+#tcChatBtn.on{background:var(--blue-tint);color:var(--blue-t)}
+#tcChatBtn kbd{font:inherit;font-size:var(--fs-11);color:var(--t3)}#tcChatBtn.on kbd{color:var(--blue-t)}
+#tcChatBtn .tc-dot{position:absolute;right:2px;top:2px;width:6px;height:6px;border-radius:var(--r-pill);background:var(--s-ai)}
+#tcChatBtn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
+body.tc-chat-on{padding-right:var(--tc-chat-w,380px)}
+body.tc-chat-on #aiact{right:calc(var(--tc-chat-w,380px) + 16px)}
+body.tc-chat-on.tc-chat-over{padding-right:0}body.tc-chat-over #tcChat{box-shadow:var(--sh-pop)}body.tc-chat-on.tc-chat-over #aiact{right:16px}
+#tcChat{position:fixed;top:0;right:0;bottom:0;width:var(--tc-chat-w,380px);z-index:40;background:var(--side);box-shadow:calc(-1 * var(--hair-w)) 0 0 var(--hair2);display:flex;flex-direction:column;
+  font-family:var(--font);font-size:var(--fs-13);line-height:var(--lh-13);color:var(--t1);-webkit-user-select:text;user-select:text;
+  transform:translateX(calc(24px * var(--move)));opacity:0;visibility:hidden;transition:transform var(--dur-3) var(--ease),opacity var(--dur-2) var(--ease),visibility 0s linear var(--dur-3)}
+#tcChat.open{transform:none;opacity:1;visibility:visible;transition:transform var(--dur-3) var(--ease),opacity var(--dur-2) var(--ease)}
+#tcChat *{box-sizing:border-box}
+#tcChat .grip{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:2}
+#tcChat .grip i{position:absolute;left:2px;top:50%;width:2px;height:28px;margin-top:-14px;border-radius:var(--r-tip);background:var(--hair2);opacity:0;transition:opacity var(--dur-1) var(--ease)}
+#tcChat .grip:hover i,#tcChat.drag .grip i{opacity:1}
+#tcChat .sh{height:var(--bar-h);flex:none;display:flex;align-items:center;gap:var(--sp-2);padding:0 10px 0 var(--sp-4);border-bottom:var(--hairline)}
+#tcChat .sh b{font-weight:var(--fw-b)}
+#tcChat .eng{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-12);color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#tcChat .dot{width:6px;height:6px;border-radius:var(--r-pill);flex:none;display:inline-block;background:var(--s-off)}
+#tcChat .dot.ok{background:var(--s-ok)}#tcChat .dot.ai{background:var(--s-ai)}#tcChat .dot.err{background:var(--s-err)}
+#tcChat .ib{width:24px;height:24px;border:0;border-radius:var(--r-s);background:transparent;color:var(--t3);display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:default;flex:none}
+#tcChat .ib:hover{background:var(--fill)}#tcChat .ib:active{background:var(--fill-h)}#tcChat .ib:disabled{opacity:.45}
+#tcChat .scope{display:flex;align-items:center;gap:6px;min-height:32px;flex:none;padding:4px var(--sp-4);font-size:var(--fs-12);line-height:var(--lh-12);color:var(--t3);border-bottom:var(--hairline)}
+#tcChat .scope span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+#tcChat .scope b{font-weight:var(--fw-b);color:var(--t2)}
+#tcChat .msgs{flex:1;overflow-y:auto;padding:var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-4);overscroll-behavior:contain}
+#tcChat .empty{margin:auto;text-align:center;color:var(--t3);font-size:var(--fs-12);line-height:var(--lh-12);display:flex;flex-direction:column;gap:var(--sp-2);max-width:280px}
+#tcChat .empty b{font-size:var(--fs-15);line-height:var(--lh-15);color:var(--t1);font-weight:var(--fw-b)}
+#tcChat .empty button{align-self:center}
+#tcChat .me{align-self:flex-end;max-width:88%;background:var(--blue-tint);border-radius:var(--r-l);padding:var(--sp-2) var(--sp-3);white-space:pre-wrap;word-break:break-word}
+#tcChat .when{align-self:flex-end;font-size:var(--fs-11);line-height:var(--lh-11);color:var(--t3);margin-top:calc(-1 * var(--sp-3))}
+#tcChat .files+.when{margin-top:calc(-1 * var(--sp-2))}
+#tcChat .ai{display:flex;flex-direction:column;gap:var(--sp-2);min-width:0}
+#tcChat .who{display:flex;align-items:center;gap:6px;font-size:var(--fs-12);line-height:var(--lh-12);font-weight:var(--fw-b);color:var(--t2)}
+#tcChat .who span{font-weight:var(--fw-r);color:var(--t3);font-size:var(--fs-11)}
+#tcChat .txt{word-break:break-word}#tcChat .txt p{margin:0 0 var(--sp-2)}#tcChat .txt p:last-child{margin:0}
+#tcChat .txt code{font-family:var(--font-mono);font-size:var(--fs-12);background:var(--sunk);border-radius:var(--r-s);padding:0 4px}
+#tcChat .txt ul{margin:0 0 var(--sp-2);padding-left:20px}
+#tcChat .caret{display:inline-block;width:7px;height:14px;margin-left:2px;vertical-align:-2px;background:var(--s-ai);border-radius:var(--r-tip);animation:tcblink 1s steps(2) infinite}
+@keyframes tcblink{50%{opacity:0}}
+#tcChat .thinking{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-12);color:var(--s-ai-t)}
+#tcChat details.steps{border-radius:var(--r-m);background:var(--sunk);padding:6px 10px}
+#tcChat details.steps summary{font-size:var(--fs-12);line-height:var(--lh-12);color:var(--t3);cursor:default;list-style:none}
+#tcChat details.steps summary::-webkit-details-marker{display:none}
+#tcChat details.steps summary::before{content:"▸ ";color:var(--t4)}#tcChat details.steps[open] summary::before{content:"▾ "}
+#tcChat .step{display:grid;grid-template-columns:38px minmax(0,1fr);gap:6px;font-size:var(--fs-12);line-height:var(--lh-12);color:var(--t2);margin-top:2px}
+#tcChat .step i{font-style:normal;color:var(--t4)}#tcChat .step.say{color:var(--t3)}#tcChat .step.now{color:var(--s-ai-t)}
+#tcChat .opts{display:flex;flex-wrap:wrap;gap:6px}
+#tcChat .b{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:24px;padding:0 10px;border:0;border-radius:var(--r-s);font:inherit;font-size:var(--fs-12);line-height:var(--lh-12);font-weight:var(--fw-b);white-space:nowrap;background:var(--btn);color:var(--t1);box-shadow:var(--sh-btn);cursor:default}
+#tcChat .b:hover:not(:disabled){background-image:linear-gradient(var(--fill),var(--fill))}
+#tcChat .b.tint{background:var(--blue-tint);color:var(--blue-t);box-shadow:none}#tcChat .b.tint:hover:not(:disabled){background:var(--blue-tint-h)}
+#tcChat .b.pri{background:var(--blue);color:var(--on-blue);box-shadow:none}#tcChat .b.pri:hover:not(:disabled){background:var(--blue-h)}
+#tcChat .b.ghost{background:transparent;box-shadow:none;color:var(--t2);font-weight:var(--fw-r)}
+#tcChat .b:disabled{background:var(--fill-h);color:var(--t4);box-shadow:none}
+#tcChat .b.opt{white-space:normal;height:auto;min-height:24px;padding:3px 10px;text-align:left;font-weight:var(--fw-r)}
+#tcChat .b:focus-visible,#tcChat .ib:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
+#tcChat .note,#tcChat .err{display:flex;flex-direction:column;gap:var(--sp-2);padding:10px var(--sp-3);border-radius:var(--r-m);font-size:var(--fs-12);line-height:var(--lh-12)}
+#tcChat .note{background:var(--sunk);color:var(--t2)}#tcChat .err{background:var(--s-err-bg);color:var(--s-err-t)}
+#tcChat .row{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
+#tcChat .files{display:flex;flex-direction:column;gap:6px;align-self:flex-end;width:min(300px,88%)}
+#tcChat .chip{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) 10px;border-radius:var(--r-m);background:var(--card);box-shadow:var(--sh-card);min-width:0}
+#tcChat .chip .nm{font-size:var(--fs-12);line-height:var(--lh-12);font-weight:var(--fw-b);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#tcChat .chip .sz{font-size:var(--fs-11);line-height:var(--lh-11);color:var(--t3);white-space:nowrap}
+#tcChat .chip .ok{color:var(--s-ok-t)}#tcChat .chip .bad{color:var(--s-err-t)}
+#tcChat .bar{height:4px;border-radius:var(--r-tip);background:var(--fill-h);overflow:hidden}#tcChat .bar i{display:block;height:4px;background:var(--blue);width:0;transition:width var(--dur-1) linear}
+#tcChat .comp{flex:none;padding:var(--sp-3) var(--sp-4) 14px;border-top:var(--hairline);display:flex;flex-direction:column;gap:var(--sp-2)}
+#tcChat textarea{width:100%;min-height:64px;max-height:180px;resize:none;border:0;border-radius:var(--r-m);background:var(--surface);box-shadow:var(--sh-btn);padding:var(--sp-2) 10px;font:inherit;font-size:var(--fs-13);line-height:var(--lh-13);color:var(--t1);outline:none}
+#tcChat textarea::placeholder{color:var(--t4)}
+#tcChat textarea:focus{box-shadow:0 0 0 var(--hair-w) var(--blue),0 0 0 3px var(--ring)}
+#tcChat .hint{flex:1;font-size:var(--fs-11);line-height:var(--lh-11);color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tcChat .cerr{font-size:var(--fs-12);line-height:var(--lh-12);color:var(--s-err-t)}
+#tcChat .drop{position:absolute;inset:var(--sp-2);border-radius:var(--r-l);border:1.5px dashed var(--blue);background:var(--blue-tint);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-2);color:var(--blue-t);text-align:center;pointer-events:none;z-index:3;padding:var(--sp-4)}
+#tcChat .drop b{font-size:var(--fs-13)}#tcChat .drop span{font-size:var(--fs-12);color:var(--t2)}
+#tcChat .confirm{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-4);background:var(--s-err-bg);color:var(--s-err-t);font-size:var(--fs-12);border-bottom:var(--hairline)}
+#tcChat .confirm span{flex:1}
+@media (max-width:760px){body.tc-chat-on{padding-right:0}#tcChat{width:100%!important}}
+</style>
+<aside id="tcChat" aria-label="AI 对话" aria-hidden="true">
+<div class="grip" title="拖动调宽度"><i></i></div>
+<div class="sh"><b>对话</b><span class="eng" id="tcEng"><i class="dot"></i><span>AI</span></span><span style="flex:1"></span>
+<button class="ib" id="tcClear" type="button" title="清空这段对话" aria-label="清空这段对话"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.25c.05.7.63 1.25 1.33 1.25h3.14c.7 0 1.28-.55 1.33-1.25l.6-8.25"/></svg></button>
+<button class="ib" id="tcClose" type="button" title="收起（⌘K）" aria-label="收起对话"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg></button></div>
+<div class="confirm" id="tcConfirm" hidden><span>清空这段对话的记录？</span><button class="b ghost" id="tcNo" type="button">取消</button><button class="b" id="tcYes" type="button">清空</button></div>
+<div class="scope" id="tcScope"></div>
+<div class="msgs" id="tcMsgs" aria-live="polite"></div>
+<div class="comp"><div class="files" id="tcPend" style="align-self:stretch;width:auto;flex:none;max-height:180px;overflow-y:auto" hidden></div>
+<textarea id="tcText" rows="3" placeholder="跟 AI 说一句…（可以把文件拖进来）" aria-label="跟 AI 说的话"></textarea>
+<div class="cerr" id="tcErr" hidden></div>
+<div class="row" style="flex-wrap:nowrap"><button class="ib" id="tcAttach" type="button" title="添加文件（放进项目的 01_原始素材）" aria-label="添加文件"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 7.5-5.2 5.2a3 3 0 0 1-4.25-4.25L9 3a2 2 0 0 1 2.85 2.85l-5.4 5.4a1 1 0 0 1-1.4-1.4l4.9-4.9"/></svg></button>
+<span class="hint" id="tcHint">⏎ 发送　⇧⏎ 换行</span><button class="b pri" id="tcSend" type="button" title="发送（⏎）" aria-label="发送" style="width:28px;padding:0"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V3.5M3.75 7.5 8 3.25l4.25 4.25"/></svg></button>
+<button class="b" id="tcStop" type="button" hidden><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></svg>停止</button></div>
+<input type="file" id="tcFile" multiple hidden></div>
+<div class="drop" id="tcDrop" hidden><svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.75 7.5 8 10.75l3.25-3.25M2.5 11.5v1A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5v-1"/></svg><b id="tcDropT">松手放进这个项目的 01_原始素材</b><span>同名不覆盖；大文件也行，传到一半断了不留半截</span></div>
+</aside>
+<script>
+(()=>{
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const box=$('tcChat'),btn=$('tcChatBtn'),msgs=$('tcMsgs'),ta=$('tcText');
+const store={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
+let S=null,open=false,pend=[],timer=0,lastSig='',sending=false;
+const W=()=>Math.max(320,Math.min(640,+store.get('tc-chat-w')||380,innerWidth-420));
+function setW(){const w=W();document.documentElement.style.setProperty('--tc-chat-w',w+'px');document.body.classList.toggle('tc-chat-over',innerWidth-w<760)}   // 窗口太窄：浮在页面上面，不把页面挤坏
+async function api(p,b){const o=b===undefined?{cache:'no-store'}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)};
+  try{const r=await fetch(p,o);const t=await r.text();let x;try{x=JSON.parse(t)}catch{x={ok:false,error:`服务出错（${r.status}）`}}
+    if(r.status===403&&x.code==='stale_page'){x.error='服务重启过：刷新一下页面再发（打的字不会丢）'}return x}catch{return {ok:false,error:'连不上服务：稍后再试'}}}
+function show(on){open=on;box.classList.toggle('open',on);box.setAttribute('aria-hidden',on?'false':'true');document.body.classList.toggle('tc-chat-on',on);
+  btn&&btn.classList.toggle('on',on);btn&&btn.setAttribute('aria-pressed',on?'true':'false');store.set('tc-chat-open',on?'1':'');
+  if(on){setW();poll(true);setTimeout(()=>ta.focus(),60)}else if(box.contains(document.activeElement))btn&&btn.focus();
+  dispatchEvent(new Event('resize'))}
+const toggle=()=>show(!open);
+window.tcChat={toggle,open:()=>show(true),close:()=>show(false)};
+btn&&(btn.onclick=toggle);$('tcClose').onclick=()=>show(false);
+// ⌘K：页面里、同源的内嵌框（口播精剪编辑器）里都认；Mac 程序里由菜单“显示 › 对话”接（菜单先拿到就不会到这里）
+function onKey(e){if((e.metaKey||e.ctrlKey)&&!e.altKey&&!e.shiftKey&&(e.key==='k'||e.key==='K')){e.preventDefault();e.stopPropagation();toggle()}}
+addEventListener('keydown',onKey,true);
+setInterval(()=>{for(const f of document.querySelectorAll('iframe')){try{const w=f.contentWindow;if(w&&!w.__tcKey&&w.document){w.addEventListener('keydown',onKey,true);w.__tcKey=1}}catch{}}},1500);
+// 拖宽
+box.querySelector('.grip').addEventListener('pointerdown',e=>{e.preventDefault();box.classList.add('drag');const mv=ev=>{store.set('tc-chat-w',Math.round(innerWidth-ev.clientX));setW()};
+  const up=()=>{box.classList.remove('drag');removeEventListener('pointermove',mv);removeEventListener('pointerup',up);dispatchEvent(new Event('resize'))};addEventListener('pointermove',mv);addEventListener('pointerup',up)});
+addEventListener('resize',()=>{if(open)setW()});
+// 文字：只认 **粗**、`代码`、- 列表、空行分段（AI 的话不当 HTML）
+function md(t){const blocks=String(t||'').trim().split(/\n{2,}/);return blocks.map(b=>{const ls=b.split('\n');
+  const inl=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  if(ls.every(l=>/^\s*[-•·]\s+/.test(l)))return '<ul>'+ls.map(l=>'<li>'+inl(l.replace(/^\s*[-•·]\s+/,''))+'</li>').join('')+'</ul>';
+  return '<p>'+ls.map(inl).join('<br>')+'</p>'}).join('')}
+const hm=t=>String(t||'').slice(11,16),mb=n=>n>=1<<30?(n/(1<<30)).toFixed(2)+' GB':n>=1<<20?(n/(1<<20)).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+const acts=a=>(a||[]).map((x,i)=>`<button class="b ${i?'ghost':''}" type="button" data-act='${esc(JSON.stringify(x))}'>${esc(x.label)}</button>`).join('');
+const put=(el,h)=>{if(el.__h!==h){el.__h=h;el.innerHTML=h}};      // 一样就不重画（重画会吃掉正在点的按钮）
+function render(){if(!S)return;const e=S.engine||{};const live=S.busy||S.other;
+  const dot=live?'ai':e.online?'ok':e.state==='出错'?'err':'';
+  put($('tcEng'),`<i class="dot ${dot}"></i><span>${esc(e.name||'AI')} · ${esc(S.busy?'回复中':S.other?'处理提交的意见':e.state||'')}</span>`);
+  $('tcEng').title=e.why||'';
+  if(btn){let d=btn.querySelector('.tc-dot');if(!d){d=document.createElement('i');d.className='tc-dot';btn.appendChild(d)}d.hidden=!S.busy}
+  put($('tcScope'),S.kind==='project'?`<span>这个项目：<b>${esc(S.project||'')}</b> · 和“提交 AI”是同一条会话</span>`
+    :S.focus?`<span>首页 · 刚转到项目 <b>${esc(S.focus.name)}</b></span><button class="b tint" type="button" data-act='${esc(JSON.stringify({open:S.focus.path,chat:1}))}'>进入项目</button>`
+    :'<span>首页 · 开项、找项目、存档（某个项目里的事进那个项目说）</span>');
+  $('tcDropT').textContent=S.kind==='project'?'松手放进这个项目的 01_原始素材':'首页不收文件：进那个项目，在项目的对话里拖';
+  $('tcSend').hidden=S.busy;$('tcStop').hidden=!S.busy;$('tcHint').textContent=S.busy?'AI 正在回复：可以先打下一句':S.other?'AI 正在处理你提交的意见，做完再发':'⏎ 发送　⇧⏎ 换行';
+  const sig=JSON.stringify([S.messages,S.busy]);if(sig===lastSig)return;lastSig=sig;
+  const near=msgs.scrollHeight-msgs.scrollTop-msgs.clientHeight<80;
+  const M=S.messages||[];const lastAi=[...M].reverse().find(m=>m.role==='ai');
+  if(!M.length){msgs.innerHTML=S.kind==='project'?`<div class="empty"><b>跟 AI 说一句</b><span>比如“把桌面上的三段 B-roll 放进来整理好”“这个项目到哪一步了”。文件可以直接拖进来。</span></div>`
+    :`<div class="empty"><b>跟 AI 说一句</b><span>比如“开一个新项目：卫生间防水刷多高”“把 261124 那条存档一下”“哪几个项目在等我看”。</span></div>`;return}
+  msgs.innerHTML=M.map(m=>{
+    if(m.role==='me')return `<div class="me">${esc(m.text)}</div>${(m.files||[]).length?`<div class="files">${m.files.map(f=>`<div class="chip"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><div class="row" style="flex-wrap:nowrap"><span class="nm">${esc(f.name)}</span><span style="flex:1"></span><span class="sz">${mb(f.size||0)}</span></div><span class="sz ok">已放进 ${esc(f.path)}</span></div></div>`).join('')}</div>`:''}<div class="when">${hm(m.at)}</div>`;
+    if(m.role==='note')return `<div class="note"><span>${md(m.text)}</span>${m.actions&&m.actions.length?`<div class="row">${acts(m.actions)}</div>`:''}</div>`;
+    if(m.role==='err')return `<div class="err"><span>${md(m.text)}</span><div class="row">${acts(m.actions)}${m.retry?`<button class="b ghost" type="button" data-retry="${esc(m.retry)}">重新发送</button>`:''}</div></div>`;
+    const run=m.state==='回复中',st=m.steps||[];
+    const steps=st.length?`<details class="steps" ${run?'open':''}><summary>${run?'正在做':'做了'} ${st.length} 件事</summary>${st.map((x,i)=>`<div class="step ${x.kind==='say'?'say':''} ${run&&i===st.length-1&&x.kind!=='say'?'now':''}"><i>${hm(x.at)}</i><span>${esc(x.text)}</span></div>`).join('')}</details>`:'';
+    const body=(m.text?md(m.text):'')+(m.live?md(m.live):'');
+    const txt=body?`<div class="txt">${body}${run?'<span class="caret"></span>':''}</div>`:run?'<span class="thinking"><i class="dot ai"></i>正在想…</span>':'';
+    const fin=m.state==='已停止'?'<div class="note"><span>你点了“停止”，这一句没做完。</span></div>':m.state==='出错'?`<div class="err"><span>${md(m.error||'出错了')}</span><div class="row">${acts(m.actions)}</div></div>`:'';
+    const opts=m===lastAi&&!S.busy&&(m.options||[]).length?`<div class="opts">${m.options.map(o=>`<button class="b tint opt" type="button" data-opt="${esc(o)}">${esc(o)}</button>`).join('')}</div>`:'';
+    return `<div class="ai"><div class="who">${esc(m.name||'AI')}<span>${hm(m.at)}${m.resumed===false?' · 新开会话':''}</span></div>${steps}${txt}${fin}${opts}</div>`}).join('');
+  if(near||sending)msgs.scrollTop=msgs.scrollHeight}
+msgs.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.opt){ta.value=b.dataset.opt;return send()}
+  if(b.dataset.retry){const m=(S.messages||[]).find(x=>x.id===b.dataset.retry);if(m){ta.value=m.text;ta.focus()}return}
+  if(b.dataset.act)return act(JSON.parse(b.dataset.act))});
+$('tcScope').addEventListener('click',e=>{const b=e.target.closest('button[data-act]');if(b)act(JSON.parse(b.dataset.act))});
+async function act(a){if(a.go==='settings'){location.href='/settings?back='+encodeURIComponent(location.pathname+location.search+location.hash);return}
+  if(a.open){const r=await api('/api/chat/open',{path:a.open});if(!r.ok)return err(r.error);location.href=r.url+(r.url.includes('?')?'&':'?')+'home='+encodeURIComponent(location.origin+'/')+(a.chat?'&tcchat=1':'')+(a.col?'#'+encodeURIComponent(a.col):'');return}
+  if(a.send){if(S&&S.busy)return err('AI 还在回上一句');ta.value=a.send;return send()}
+  if(a.col){if(S.kind==='project'){location.hash='#'+encodeURIComponent(a.col)}else if(S.focus){act({open:S.focus.path,col:a.col})}return}}
+function err(t){const x=$('tcErr');x.textContent=t||'';x.hidden=!t}
+async function send(){const text=ta.value.trim();if(pend.some(p=>p.state==='传'))return err('文件还在传，传完再发');
+  const files=pend.filter(p=>p.state==='好').map(p=>({name:p.name,path:p.path,size:p.size}));
+  if(!text&&!files.length)return;if(sending)return;sending=true;err('');
+  const r=await api('/api/chat/send',{text,files});sending=false;
+  if(!r.ok)return err(r.error);ta.value='';pend=pend.filter(p=>p.state==='传');drawPend();fit();poll(true)}
+$('tcSend').onclick=send;
+$('tcStop').onclick=async()=>{$('tcStop').disabled=true;const r=await api('/api/chat/stop',{});$('tcStop').disabled=false;if(!r.ok)err(r.error);poll(true)};
+$('tcClear').onclick=()=>{$('tcConfirm').hidden=false;$('tcNo').focus()};$('tcNo').onclick=()=>{$('tcConfirm').hidden=true};
+$('tcYes').onclick=async()=>{const r=await api('/api/chat/clear',{});$('tcConfirm').hidden=true;if(!r.ok)err(r.error);lastSig='';poll(true)};
+const fit=()=>{ta.style.height='auto';ta.style.height=Math.min(180,Math.max(64,ta.scrollHeight))+'px'};
+ta.addEventListener('input',fit);
+ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();if(!S||!S.busy)send()}
+  else if(e.key==='Escape'){e.preventDefault();show(false)}});
+// 文件：拖进来、或点回形针选；一个一个传（请求体就是文件），传好的跟着下一句话一起发给 AI
+function drawPend(){const p=$('tcPend');p.hidden=!pend.length;p.innerHTML=pend.map((f,i)=>`<div class="chip"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><div class="row" style="flex-wrap:nowrap"><span class="nm">${esc(f.name)}</span><span style="flex:1"></span><span class="sz ${f.state==='错'?'bad':''}">${f.state==='传'?mb(f.size)+' · '+Math.floor(f.pct)+'%':f.state==='好'?mb(f.size):'没传上'}</span><button class="ib" type="button" data-rm="${i}" aria-label="去掉" title="去掉（已放进项目的不删）" style="width:20px;height:20px">×</button></div>${f.state==='传'?`<div class="bar"><i style="width:${f.pct}%"></i></div>`:`<span class="sz ${f.state==='好'?'ok':'bad'}">${esc(f.state==='好'?(f.path!==('01_原始素材/'+f.name)?'同名已有，存成 '+f.path:'已放进 '+f.path):f.error)}</span>`}</div></div>`).join('')}
+$('tcPend').addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(b){pend.splice(+b.dataset.rm,1);drawPend()}});
+function upload(file){if(S&&S.kind==='home'){err('首页的对话只管首页：放素材请进那个项目，在项目里的对话框拖进来');return}
+  const f={name:file.name,size:file.size,pct:0,state:'传'};pend.push(f);drawPend();
+  const x=new XMLHttpRequest();x.open('POST','/api/chat/upload?name='+encodeURIComponent(file.name));
+  x.upload.onprogress=e=>{if(e.lengthComputable){f.pct=e.loaded/e.total*100;drawPend()}};
+  x.onload=()=>{let r={};try{r=JSON.parse(x.responseText)}catch{}if(r.ok){f.state='好';f.path=r.file.path}else{f.state='错';f.error=r.error||'没传上'}drawPend()};
+  x.onerror=()=>{f.state='错';f.error='连不上服务，没传上';drawPend()};x.send(file)}
+$('tcAttach').onclick=()=>$('tcFile').click();$('tcFile').onchange=e=>{[...e.target.files].forEach(upload);e.target.value=''};
+let dragN=0;const hasFiles=e=>[...(e.dataTransfer?.types||[])].includes('Files');
+box.addEventListener('dragenter',e=>{if(!hasFiles(e))return;e.preventDefault();dragN++;$('tcDrop').hidden=false});
+box.addEventListener('dragover',e=>{if(!hasFiles(e))return;e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='copy'});
+box.addEventListener('dragleave',e=>{if(!hasFiles(e))return;if(--dragN<=0){dragN=0;$('tcDrop').hidden=true}});
+box.addEventListener('drop',e=>{if(!hasFiles(e))return;e.preventDefault();e.stopPropagation();dragN=0;$('tcDrop').hidden=true;
+  const items=[...(e.dataTransfer.items||[])];if(items.some(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()?.isDirectory))err('文件夹拖不进来：跟 AI 说文件夹在哪（完整路径），它会复制进来');
+  [...e.dataTransfer.files].filter((f,i)=>!(items[i]?.webkitGetAsEntry&&items[i].webkitGetAsEntry()?.isDirectory)).forEach(upload)});
+// 拿数据：开着时回复中半秒一次、平时三秒一次；收着时八秒一次（只为按钮上“回复中”的小点）
+async function poll(now){clearTimeout(timer);const r=await api('/api/chat');if(r.ok){S=r;render()}
+  timer=setTimeout(poll,!open?8000:S&&(S.busy||S.other)?500:3000)}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')poll(true)});
+setW();if(store.get('tc-chat-open')==='1'||/[?&]tcchat=1/.test(location.search))show(true);else poll(true);   // 从首页对话“进入项目”过来：直接打开项目的对话
+})();
+</script>

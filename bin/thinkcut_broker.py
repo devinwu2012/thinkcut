@@ -41,11 +41,13 @@ SCRIPTS = {
     'thinkcut_edit.py': EDIT, 'project.py': 'projects/bin/project.py',
     # 生图（命令里起 codex exec）
     'thinkcut_cover.py': COVER,
+    # 挪进回收站（2026-11-27 对话框：不永久删，回收站在项目文件夹以外，AI 自己写不了）
+    'thinkcut_trash.py': 'bin/thinkcut_trash.py',
 }
 TEMPLATES = {'出片.py': ('studio/skill/thinkcut-edit/assets/hyperframes_template', 'studio/skill/thinkcut-edit/assets/blender_template')}
 WAIT_TAKEN = float(os.environ.get('THINKCUT_BROKER_TAKE') or 30)      # 这么久审片台还没接单：多半审片台没在跑
 LIMIT = 8 * 3600
-_WB_LOCAL = ('--reply', '--rewrite', '--publish', '--withdraw', '--list', '--round', '--stop', '--wait')
+_WB_LOCAL = ('--reply', '--rewrite', '--publish', '--withdraw', '--list', '--round', '--stop', '--wait', '--add-material')      # --add-material：放素材只写项目文件夹（2026-11-27）
 
 
 def background(environ=None):
@@ -116,9 +118,11 @@ def _template_copy(path, roots, program):
     raise ValueError('项目里的 出片.py（或它旁边的 .py）和程序里的模板不一样（改过，或是旧版模板）：不代跑。请用户在对话里让 AI 跑，或先用新模板重建')
 
 
-def check(req, roots):
-    """单子合不合规矩：白名单程序、工作目录和参数里的路径都在允许的文件夹里。返回 (程序, 工作目录) 或报 ValueError。"""
+def check(req, roots, policy=None):
+    """单子合不合规矩：白名单程序、工作目录和参数里的路径都在允许的文件夹里。返回 (程序, 工作目录) 或报 ValueError。
+    policy(单子)：这个代办文件夹另加的限制（对话框的代办不跑导出、上传，2026-11-27），不合就报 ValueError。"""
     name = str(req.get('script') or '')
+    if policy: policy(req)
     program = Path(os.environ.get('THINKCUT_BROKER_PROGRAM') or PROGRAM)       # 测试用替身程序目录
     roots = [Path(r).resolve() for r in roots]
     if name in TEMPLATES: prog = _template_copy(req.get('path') or '', roots, program)
@@ -152,10 +156,10 @@ _procs = {}            # 代办文件夹 → 正在跑的进程
 _lock = threading.Lock()
 
 
-def _run_one(q, rid, req, roots, log):
+def _run_one(q, rid, req, roots, log, policy=None):
     taken = q / f'run-{rid}.json'
     try:
-        prog, cwd = check(req, roots)
+        prog, cwd = check(req, roots, policy)
         env = {k: v for k, v in os.environ.items() if k not in (BACKGROUND, ENV_DIR, 'THINKCUT_BROKER_PROGRAM')}
         if log: log(f"代办 {req.get('script')} {' '.join(req.get('argv', [])[:2])}")
         p = subprocess.Popen([sys.executable, str(prog), *req.get('argv', [])], cwd=str(cwd), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -175,7 +179,7 @@ def _run_one(q, rid, req, roots, log):
     with contextlib.suppress(OSError): taken.unlink()
 
 
-def serve_once(queue, roots, log=None, wait=False):
+def serve_once(queue, roots, log=None, wait=False, policy=None):
     """接代办文件夹里还没接的单子，每张一个线程跑。返回接了几张（wait=True 时等它们跑完，测试用）。"""
     q = Path(queue)
     if not q.is_dir(): return 0
@@ -185,7 +189,7 @@ def serve_once(queue, roots, log=None, wait=False):
         try: req = json.loads(f.read_text(encoding='utf-8')); f.unlink()
         except (OSError, ValueError): continue
         _write(q / f'run-{rid}.json', {'at': time.time(), 'script': req.get('script')})
-        t = threading.Thread(target=_run_one, args=(q, rid, req, roots, log), daemon=True); t.start(); threads.append(t)
+        t = threading.Thread(target=_run_one, args=(q, rid, req, roots, log, policy), daemon=True); t.start(); threads.append(t)
     if wait:
         for t in threads: t.join()
     return len(threads)
@@ -197,3 +201,24 @@ def stop_all(queue):
     for p in ps:
         with contextlib.suppress(Exception): os.killpg(p.pid, signal.SIGTERM)
     return len(ps)
+
+
+# ---------- 对话框的代办（2026-11-27）：整片导出、上传发布、定稿只认用户在页面上亲手点，对话里说了也不跑 ----------
+PAGE_ONLY = '只认你在页面上亲手点：整片导出在审片栏点“这一栏定了”，上传到蚁小二在发布栏点“存到蚁小二草稿”。对话里说了不算'
+
+
+def chat_policy(req):
+    """项目里的对话框：别的照常代办，导出、上传不跑。"""
+    name = str(req.get('script') or ''); argv = [str(a) for a in req.get('argv') or []]
+    sub = next((a for a in argv if not a.startswith('-')), '')
+    if name == 'thinkcut_edit.py' and sub.startswith('export'): raise ValueError('导出整片' + PAGE_ONLY)
+    if name == 'project.py' and sub in ('upload', 'copy-apply'): raise ValueError('上传' + PAGE_ONLY)
+    if name == 'yxer_secure.py': raise ValueError('蚁小二' + PAGE_ONLY)
+
+
+def home_policy(req):
+    """首页的对话框：只代办建项目、整理、存档这些（project.py，除了上传）和挪进回收站；要剪辑、做封面先“接到”那个项目，用项目的对话。"""
+    name = str(req.get('script') or '')
+    if name not in ('project.py', 'thinkcut_trash.py'):
+        raise ValueError(f'首页对话只代办 project.py（开项、整理、存档）和挪进回收站；{name} 要在项目里做：先进那个项目，在审片台的对话里说')
+    chat_policy(req)

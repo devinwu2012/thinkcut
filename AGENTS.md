@@ -30,6 +30,7 @@
 | 某个项目的东西（原片、成片、复盘、反馈记录） | 那个项目的项目文件夹，不在这里 |
 | 跑全套离线测试、查代码 | `python3 bin/test_all.py`（和发版时跑的同一套；`python3 bin/test_all.py cover` 只跑一块）；`uvx ruff@0.17.6 check .`（只查真错误，配置 `ruff.toml`）；要装的 Python 包见 `requirements/`；缺字体 `bash bin/fetch_fonts.sh`；GitHub 自动测试 `.github/workflows/test.yml` |
 | 审片台后台怎么调本机 AI（Claude Code／Codex）、设置页、后台 AI 的钥匙代办 | `studio/skill/thinkcut-edit/references/审片工作台.md`「AI 引擎」；程序 `scripts/thinkcut/engine.py`、`settings.py`、`bin/thinkcut_broker.py` |
+| 首页、审片台的 AI 对话侧栏（⌘K）：范围、权限、接到项目、只认页面上点的 | `studio/skill/thinkcut-edit/references/审片工作台.md`「AI 对话侧栏」；程序 `scripts/thinkcut/chat.py`、页面片段 `assets/对话/对话.html` |
 | 新 Mac 或链接坏了 | `bash bin/setup_mac.sh`（链接 5 个技能、恢复环境运行副本、自检） |
 | Mac 程序外壳（ThinkCut：一个窗口，首页和项目在里面来回走） | 构建 `bash bin/build_app.sh`（`--install` 放进应用程序；在开发用的程序文件夹里构建出的是“ThinkCut 开发版”：另一个程序标识、橙色“开发”角标、首页端口 8762）；外壳代码 `bin/app/`，起停首页的判断 `bin/thinkcut_app.py`（测试 `bin/test_thinkcut_app.py`） |
 

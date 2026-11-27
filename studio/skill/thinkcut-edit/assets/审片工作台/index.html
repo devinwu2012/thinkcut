@@ -523,7 +523,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 <li><b>封面：</b>点“全部摆开”把所有方向、所有版本摆成一面墙，滑杆调大小；点图看大图，← → 换图，“选来对比”选两张并排看；每张图下能直接提意见。</li>
 <li><b>导航条文字</b>即审片栏全文里每一章的标题：直接点标题改，自动保存；改过、AI 还没做进导航条的标题旁有“改过”记号；栏头“导航条预览”按你改的字画在达芬奇当前这一帧上。</li>
 <li><b>发布：</b>简介、标签直接改，自动保存进 项目.json（标签 8–10 个、数字只用口播里说过的，不合要求会写原因、先存成草稿）。</li>
-<li>写的字都自动保存，不用点保存。</li></ul></div></details><div class="ch-main tb-main" id="tbmain"></div></header>
+<li>写的字都自动保存，不用点保存。</li></ul></div></details><button id="tcChatBtn" type="button" title="跟 AI 说一句（⌘K）" aria-label="对话（⌘K）" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3h9c.83 0 1.5.67 1.5 1.5V10c0 .83-.67 1.5-1.5 1.5H8l-3 2.5v-2.5H3.5C2.67 11.5 2 10.83 2 10V4.5C2 3.67 2.67 3 3.5 3z"/></svg>对话<kbd>⌘K</kbd></button><div class="ch-main tb-main" id="tbmain"></div></header>
 <div id="netbar" class="netbar" role="status" hidden></div>
 <div class="shell"><div class="panes">
 <div class="pane" data-col="写稿"><div class="colhead"><div class="ch-name"><h2>文稿</h2><span class="ch-sum" data-sum="写稿"></span></div>
@@ -1274,8 +1274,7 @@ function writingEditor(){const w=BD.writing,box=$('wdoc');if(!w||!box)return;
   if(!WR.built){box.innerHTML=`<div class="wdoc"><p class="wwhy" id="wwhy" hidden></p><input id="wtitle" class="wtitle" placeholder="标题" autocomplete="off">
 <div class="wl">封面文字<span class="muted">一行一行写，每行是封面上的一行字；没想好可以先空着</span></div><textarea id="wcover" class="wcover" rows="2"></textarea>
 <div class="wl"><span id="wbname">口播正文</span><span class="muted" id="wbtip"></span></div>
-<div id="wtrack" class="wtrack" hidden></div><div id="wbody" contenteditable="plaintext-only" spellcheck="false" data-ph="在这里写口播正文，一个自然段空一行。只有题目也行：点右上“对全文提意见”，让 AI 先写一版。"></div>
-<div id="wpaste" class="wpaste" hidden><b>在别处写好了？</b>把一大段文字贴到下面，自动分成标题和正文（第一行短、不像一句话就当标题）。<textarea id="wptext" placeholder="贴在这里"></textarea><button id="wpgo" class="btn">分成标题和正文</button></div>
+<div id="wtrack" class="wtrack" hidden></div><div id="wbody" contenteditable="plaintext-only" spellcheck="false" data-ph="在这里写口播正文，一个自然段空一行。在别处写好了就直接贴进来，会自动分出标题。只有题目也行：点右上“对全文提意见”，让 AI 先写一版。"></div>
 <div class="wfoot"><span class="muted" id="wsave"></span><span class="grow"></span><span class="muted" id="wfile"></span></div></div>`;WR.built=true;wFont(0)}
   // 正在改的、还没存出去的不盖；采纳、退回、贴进来之后（WR.force）一定换成文件里现在的字
   const put=(el,v,key,get,set)=>{if(!WR.force&&(document.activeElement===el||PEND['w'+key]))return;if(get()!==v)set(v)};
@@ -1287,7 +1286,6 @@ function writingEditor(){const w=BD.writing,box=$('wdoc');if(!w||!box)return;
   const kb=D.koubo||{};$('wbname').textContent=kb.ready?'口播正文 · 原稿（录之前的定稿）':'口播正文';
   $('wbtip').textContent=(kb.ready?'剪口播改的是剪后的文字，不会盖掉这里。':'')+'一个自然段空一行；### 开头是小标题、> 开头是备注，都不算口播';
   $('wfile').textContent=w.exists?'文件：'+w.rel:'还没有文案文件：一动笔就建 '+w.rel;
-  $('wpaste').hidden=!!wText()||document.activeElement===$('wbody')||!!why['口播正文'];
   wKick();wSide();wVersions();wPaint();wLay()}
 // 定稿以后栏头下面的一条：AI 先开项 → 你把素材备好（放进 01_原始素材，或写路径）→ 点“开工”AI 才开始做
 function wKick(){const k=BD.writing.kick,box=$('wkick');if(!k){box.hidden=true;box.innerHTML='';return}box.hidden=false;if(box.contains(document.activeElement)&&document.activeElement.tagName==='TEXTAREA')return;
@@ -1420,7 +1418,8 @@ $('wselbtn').onmousedown=e=>e.preventDefault();$('wselbtn').onclick=()=>{const s
 $('wall').onclick=()=>wNew({});$('wfm').onclick=()=>wFont(-1);$('wfp').onclick=()=>wFont(1);
 const wpane=document.querySelector('.pane[data-col="写稿"]');
 wpane.addEventListener('keydown',e=>{if(e.target.id!=='wbody'||e.key!=='Enter'||e.isComposing||e.metaKey||e.ctrlKey)return;e.preventDefault();document.execCommand('insertText',false,e.shiftKey?'\n':'\n\n')});   // 回车＝新的一个自然段（空一行）
-wpane.addEventListener('focusin',e=>{if(e.target.id==='wbody')$('wpaste').hidden=true});
+wpane.addEventListener('paste',async e=>{if(!e.target.closest?.('#wbody')||wText())return;const tx=e.clipboardData?.getData('text/plain')||'';if(!/\n/.test(tx.trim()))return;   // 2026-11-27 用户：贴字框“一会儿有一会儿没有”，去掉它；正文还空着时直接贴进一大段字，自动分成标题和正文（只填空着的标题、封面文字，存成一版，不想要在“版本”里退回）
+  e.preventDefault();const r=await wAct('/api/draft/import',{text:tx},'已自动分成标题和正文；不想要可以在“版本”里退回上一版');if(!r.ok)document.execCommand('insertText',false,tx)});
 wpane.addEventListener('click',e=>{if(!e.target.closest?.('#wbody'))return;const g=getSelection();if(!g.rangeCount||!g.isCollapsed)return;const off=wOff(g.anchorNode,g.anchorOffset);
   const n=BD.writing.notes.find(n=>{if(!n.quote||(n.field&&n.field!=='口播正文'))return false;const r=wFind(n.quote);return r&&off>=r[0]&&off<=r[1]});if(n)wShow(n.nid)});
 wpane.addEventListener('input',e=>{const t=e.target,card=t.closest('.wn');
@@ -1433,7 +1432,6 @@ wpane.addEventListener('input',e=>{const t=e.target,card=t.closest('.wn');
   else if(card&&t.classList.contains('wrt')){grow(t);wLay();WR.draft[card.dataset.n]=t.value}});
 wpane.addEventListener('click',async e=>{const t=e.target,card=t.closest('.wn'),id=card?.dataset.n,n=id&&BD.writing.notes.find(x=>x.nid===id),wc=t.closest('.wc'),ver=t.closest('.wv');
   if(t.id==='wkgo'){say('正在提交 AI…');const r=await wAct('/api/draft/kickoff',{materials:$('wkm')?.value||''},'已开始制作：AI 正在整理素材、制作初剪');if(r.ok)WR.km='';return}
-  if(t.id==='wpgo'){const r=await wAct('/api/draft/import',{text:$('wptext').value},'分好了：标题和正文都在上面，接着改就行');if(r.ok)$('wptext').value='';return}
   if(ver){const v=+ver.dataset.v;
     if(t.classList.contains('wvd')){if(WR.vd[v])delete WR.vd[v];else{const d=await api('/api/draft/diff?v='+v);if(!d.ok)return say(d.error,1);
         const cs=[...d.fields.map(f=>({field:f.field,op:'改',old:f.old,new:f.new})),...d.body.map(c=>({field:'口播正文',...c}))];
@@ -1508,4 +1506,6 @@ addEventListener('hashchange',()=>{const h=decodeURIComponent(location.hash.slic
 setCoverView(coverView);
 netbar('wait','正在读取项目…');
 load(true).then(()=>{if(cur)setCol(cur,true);tick()}).catch(()=>{$('summary').textContent='读取失败';netbar('err','连不上审片台服务：可能已停止，或这个项目的数据暂时读不到。')});
-</script></html>
+</script>
+<!--THINKCUT_CHAT-->
+</html>

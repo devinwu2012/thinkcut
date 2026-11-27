@@ -244,6 +244,11 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
 
     @objc func showHome(_ s: Any?) { goHome() }
 
+    /// ⌘K：开关 AI 对话侧栏（2026-11-27）。走菜单，焦点在内嵌框（口播精剪编辑器）里也能用
+    @objc func toggleChat(_ s: Any?) {
+        home.makeKeyAndOrderFront(nil); home.web.evaluateJavaScript("window.tcChat&&window.tcChat.toggle()", completionHandler: nil)
+    }
+
     /// ⌘W：在片子里＝回首页（不关窗口）；已经在首页（或是外壳自己的提示页）＝照常关窗口，程序不退出
     @objc func closeOrHome(_ s: Any?) {
         guard let w = NSApp.keyWindow else { return }
@@ -364,7 +369,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         _ = menu("编辑", [("撤销", Selector(("undo:")), "z"), ("重做", Selector(("redo:")), "Z"), ("-", nil, ""),
                         ("剪切", #selector(NSText.cut(_:)), "x"), ("拷贝", #selector(NSText.copy(_:)), "c"),
                         ("粘贴", #selector(NSText.paste(_:)), "v"), ("全选", #selector(NSText.selectAll(_:)), "a")])
-        _ = menu("显示", [("重新载入", #selector(reload(_:)), "r")], mine: ["重新载入"])
+        _ = menu("显示", [("重新载入", #selector(reload(_:)), "r"), ("对话", #selector(toggleChat(_:)), "k")], mine: ["重新载入", "对话"])
         let wm = menu("窗口", [("最小化", #selector(NSWindow.performMiniaturize(_:)), "m"), ("缩放", #selector(NSWindow.performZoom(_:)), ""), ("-", nil, ""),
                              ("全部项目", #selector(showHome(_:)), "0")], mine: ["全部项目"])
         NSApp.mainMenu = bar; NSApp.windowsMenu = wm

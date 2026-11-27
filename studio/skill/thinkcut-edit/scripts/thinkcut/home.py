@@ -21,7 +21,7 @@ import contextlib, fcntl, hashlib, html, http.cookies, json, os, re, signal, sub
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from .common import ASSETS, rj, say, die
-from . import design, board, engine, settings, workbench as WB
+from . import chat, design, board, engine, materials, settings, workbench as WB
 
 PAGE = ASSETS / '首页' / 'index.html'
 PORT = WB.HOME_PORT
@@ -542,6 +542,26 @@ def make_handler(root, ports=None):
               '/api/bin-restore': bin_restore}
     for _p, _f in settings.POST.items(): STRICT[_p] = _f            # 设置页（AI、豆包、蚁小二）：和别的操作一样只收首页页面带口令的请求
 
+    # AI 对话侧栏（2026-11-27）：首页的对话不属于某个项目；开项、存档走代办里的 project.py，AI 说清楚以后“接到”一个项目才能写它
+    def chat_roots(): return [pin] if pin else all_roots()
+    talk = chat.for_home(chat_roots, open_job, current=here)
+
+    def chat_open(q):
+        """对话里点“进入项目”：起（或复用）那个项目的审片台，返回网址（只认放项目的文件夹里的真项目）。"""
+        d = Path(str(q.get('path') or '')).expanduser().resolve()
+        if not (d / '项目.json').is_file() or not any(Path(r).resolve() in d.parents for r in chat_roots()): raise Oops('这个项目找不到了')
+        url = ensure(open_job(d), ports); root = here()[1].resolve()
+        if root in d.parents: started[int(url.rsplit(':', 1)[1].strip('/'))] = str(d.relative_to(root))      # ⌘R 找回、AI 的 home --wait 要用
+        return {'url': url}
+
+    def chat_call(fn):
+        def g(q):
+            try: return fn(q)
+            except chat.Oops as e: raise Oops(str(e)) from None
+        return g
+    STRICT.update({'/api/chat/send': chat_call(lambda q: talk.send(q.get('text'), q.get('files'))), '/api/chat/stop': chat_call(lambda q: talk.stop()),
+                   '/api/chat/clear': chat_call(lambda q: talk.clear()), '/api/chat/open': chat_call(chat_open)})
+
     class H(BaseHTTPRequestHandler):
         def log_message(self, *_): pass
 
@@ -596,6 +616,7 @@ def make_handler(root, ports=None):
                 except Oops as e: return self.send({'ok': False, 'id': q.get('id'), 'code': e.code, 'error': str(e), **e.extra})
                 except Exception as e: return self.send({'ok': False, 'id': q.get('id'), 'error': f'读取该项目出错：{e}'})
             if p == '/api/ai': return self.send({'ok': True, **ai_info()})
+            if p == '/api/chat': return self.send(talk.state())
             if p == '/settings': return self.send(settings.page(SESSION), 'text/html; charset=utf-8', cookie=True)
             if p == '/api/settings': return self.send(settings.info())
             if p == '/api/cover':                  # 卡片上的封面小图
@@ -623,7 +644,21 @@ def make_handler(root, ports=None):
                 ears['t'] = time.time(); return self.send({'ok': True, 'root': str(root), 'ports': sorted(started)})
             self.send({'ok': False, 'error': '没有这个地址'}, code=404)
 
+        def chat_upload(self):
+            """对话侧栏拖进来的文件：放进对话接到的那个项目的 01_原始素材（和审片台备料同一套：同名不覆盖、边收边写、半截不留）。只收首页页面带口令的。"""
+            from urllib.parse import parse_qs, urlsplit
+            if not self.from_page():
+                self.close_connection = True; return self.send({'ok': False, 'error': '放文件只能在首页页面上拖（这个请求不是页面发的）'}, code=403)
+            name = (parse_qs(urlsplit(self.path).query).get('name') or [''])[0]
+            try: n = int(self.headers.get('Content-Length') or -1)
+            except ValueError: n = -1
+            try: rec = materials.receive(talk.material_job(), name, self.rfile, n)
+            except (materials.Oops, chat.Oops, Oops) as e:
+                self.close_connection = True; return self.send({'ok': False, 'error': str(e)})
+            self.send({'ok': True, 'file': rec})
+
         def _post(self):
+            if self.path.split('?')[0] == '/api/chat/upload': return self.chat_upload()
             try: raw = self.rfile.read(int(self.headers.get('Content-Length') or 0))
             except ValueError: return self.send({'ok': False, 'error': '格式不对'}, code=400)
             fn = STRICT.get(self.path.split('?')[0])
@@ -641,17 +676,33 @@ def make_handler(root, ports=None):
             except settings.Oops as e: return self.send({'ok': False, 'error': str(e)})
             except WB.Broken as e: return self.send({'ok': False, 'code': 'broken_file', 'file': e.file.name, 'error': str(e)})
             except (RuntimeError, OSError) as e: return self.send({'ok': False, 'code': 'os_error', 'error': str(e)})
+    H.chat = talk
     return H
 
 
 def make_server(root, port, ports=None):
     """root=None：跟着当前 IP 走（能切）；给了 root：钉死看这个文件夹。"""
-    return ThreadingHTTPServer(('127.0.0.1', port), make_handler(Path(root).resolve() if root else None, ports))
+    H = make_handler(Path(root).resolve() if root else None, ports)
+    srv = ThreadingHTTPServer(('127.0.0.1', port), H); srv.chat = H.chat
+    threading.Thread(target=chat_broker, args=(H.chat,), daemon=True).start()
+    return srv
+
+
+def chat_broker(talk, every=0.4):
+    """首页对话的代办（2026-11-27）：后台 AI 开项、存档要写到片子文件夹，AI 自己写不了；只代办 project.py（除了上传）和挪进回收站，
+    路径只收工作区、临时目录和放项目的文件夹。"""
+    sys.path.insert(0, str(engine.PROGRAM / 'bin')); import thinkcut_broker
+    while True:
+        with contextlib.suppress(Exception): thinkcut_broker.serve_once(talk.broker, chat.broker_roots_home(talk), policy=thinkcut_broker.home_policy)
+        time.sleep(every)
 
 
 def serve(root, port, ports=None):
     srv = make_server(root or None, port, film_ports(ports))
-    signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
+    def bye(*_):
+        with contextlib.suppress(Exception): srv.chat.stop()          # 首页停了：对话里的 AI 一起停
+        os._exit(0)
+    signal.signal(signal.SIGTERM, bye)
     say(f'首页 http://127.0.0.1:{port}/  {root or "跟着当前 IP"}'); srv.serve_forever()
 
 
