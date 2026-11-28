@@ -112,6 +112,52 @@ class RecomputeAfterWebEdit(unittest.TestCase):
         process.assert_not_called()
 
 
+class SoftTailAndCapTests(unittest.TestCase):
+    """2026-11-27 261114 反馈单 新5：轻声字尾对齐时间整段落在静音里，贴回前一个字的尾音；两字之间最后留下的最多 7 帧。"""
+    def test_silent_phrase_final_word_snaps_to_previous_tail_and_pause_is_trimmed(self):
+        from pause_refine import snap_quiet_words, MAX_KEPT
+        total = 200; levels = [-90.0] * total
+        for f in range(10, 22): levels[f] = -30.0           # “拆”：10–20 帧，尾音到 22
+        for f in range(60, 70): levels[f] = -30.0           # 下一句
+        aligned = {'tokens': [token('拆', 0, 10, 20), token('了', 0, 36, 40), token('那', 1, 60, 70)]}
+        aligned['tokens'][1].update(char_start=1, char_end=2)
+        texts = {0: '拆了。', 1: '那'}
+        state = {'natural_pause_mode': 'sentence'}
+        new, moved = snap_quiet_words([], state, aligned, total, levels, texts=texts)
+        self.assertEqual([m['字'] for m in moved], ['了'])
+        self.assertEqual(round(new['tokens'][1]['start_ms'] * 30 / 1001), 20)        # 从“拆”的结尾起，贴着尾音
+        self.assertEqual(round(new['tokens'][1]['end_ms'] * 30 / 1001), 22)
+        self.assertEqual(aligned['tokens'][1]['start_ms'], 36 * 1001 / 30)          # 原对象不动
+        cut_state, _ = refine_state([], state, new, total, levels)
+        mapping = active_map([], cut_state, new, total)                              # 不再被“删掉整个字”拦下
+        kept = 60 - 22 - sum(min(b, 60) - max(a, 22) for a, b in (c['source_frames'] for c in cut_state['resolve_frame_cuts']) if a < 60 and b > 22)
+        self.assertLessEqual(kept, MAX_KEPT); self.assertTrue(mapping['segments'])
+        # 没贴的话：静音里夹着“了”，两段停顿各自收，中间留下的远超 7 帧
+        old_state, _ = refine_state([], state, aligned, total, levels)
+        self.assertGreater(sum(1 for c in old_state['resolve_frame_cuts']), 0)
+
+    def test_word_in_the_middle_of_a_phrase_is_not_moved(self):
+        from pause_refine import snap_quiet_words
+        total = 200; levels = [-90.0] * total
+        for f in range(10, 20): levels[f] = -30.0
+        for f in range(40, 50): levels[f] = -30.0
+        aligned = {'tokens': [token('计', 0, 10, 20), token('一', 0, 30, 33), token('个', 0, 40, 50)]}
+        aligned['tokens'][1].update(char_start=3, char_end=4)
+        _, moved = snap_quiet_words([], {'natural_pause_mode': 'sentence'}, aligned, total, levels, texts={0: '设计，一个'})
+        self.assertEqual(moved, [])
+
+    def test_long_protected_tails_are_capped_at_seven_frames(self):
+        from pause_refine import MAX_KEPT
+        total = 200; levels = [-90.0] * total
+        for f in range(10, 24): levels[f] = -30.0           # 字 10–20，尾音（换气）一直响到 24
+        for f in range(56, 70): levels[f] = -30.0           # 下一句字头前 4 帧有声
+        aligned = {'tokens': [token('多', 0, 10, 20), token('外', 1, 60, 70)]}
+        state, _ = refine_state([], {'natural_pause_mode': 'sentence'}, aligned, total, levels)
+        cut = state['resolve_frame_cuts'][0]['source_frames']
+        self.assertEqual((cut[0] - 20) + (60 - cut[1]), MAX_KEPT)                   # 以前 4＋4＋4＝12 帧（0.4 秒）
+        self.assertGreaterEqual(cut[0] - 20, 3)                                       # 字尾先保 3 帧
+
+
 class VadGate(unittest.TestCase):
     """2026-11-22 方法 C：音量过门限、而且语音检测也认为是人声，才算有声；算不出人声概率就照旧只看音量。"""
     def setUp(self):
@@ -128,7 +174,7 @@ class VadGate(unittest.TestCase):
 
     def test_low_noise_pause_counts_as_silence_with_vad(self):
         _, plain = self.cuts(self.noisy)
-        self.assertIn([36, 54], plain)                       # 只看音量：底噪被当成字尾字头，两边各多留 1、2 帧
+        self.assertIn([34, 57], plain)                       # 只看音量：底噪被当成字尾字头；2026-11-27 起两字之间最多留 7 帧（以前 [36, 54] 留 12 帧）
         state, gated = self.cuts(self.noisy, self.vad)
         self.assertIn([35, 58], gated)                       # 加语音检测：和没有底噪时一样
         self.assertEqual(gated, self.cuts(self.clean)[1])

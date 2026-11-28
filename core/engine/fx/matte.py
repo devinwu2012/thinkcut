@@ -95,11 +95,11 @@ def frame_directory(root=None):
         shutil.rmtree(path, ignore_errors=True)
 
 
-def cache_key(path, start, end, width, height):
+def cache_key(path, start, end, width, height, retime=None):
     path = Path(path).resolve(); stat = path.stat()
     return ledger.digest({'path':str(path),'size':stat.st_size,'mtime_ns':stat.st_mtime_ns,
                          'start':start,'end':end,'model':MODEL_VERSION,'format':FORMAT_VERSION,
-                         'width':width,'height':height,'fps':'30000/1001'})
+                         'width':width,'height':height,'fps':'30000/1001',**({'retime':retime} if retime else {})})
 
 
 def cached(directory, key):
@@ -114,15 +114,17 @@ def cached(directory, key):
     return None
 
 
-def generate(path, start, end, width, height, work_dir):
+def generate(path, start, end, width, height, work_dir, retime=None):
+    """retime：V1 是在达芬奇里设了速度的原片（2026-11-27 起口播 1.2 倍速这样放）时 {'seconds': 原片起点秒, 'speed': 倍速}，
+    按原片时间取帧、加速成 29.97 帧再抠；没有时按 29.97 帧原片的帧号取。"""
     directory = Path(work_dir)/'抠像'; directory.mkdir(parents=True,exist_ok=True)
-    key = cache_key(path,start,end,width,height)
+    key = cache_key(path,start,end,width,height,retime)
     result = cached(directory,key)
     if result: return result
     ready, reason = environment_check()
     if not ready: raise RuntimeError(reason+'；运行 bash bin/setup_mac.sh 自动准备')
     request = {'source':str(path),'start':start,'end':end,'width':width,'height':height,
-               'directory':str(directory),'cache_key':key}
+               'directory':str(directory),'cache_key':key,**({'retime':retime} if retime else {})}
     # Passing JSON on stdin avoids exposing paths in shell interpolation.
     limit = max(MATTE_MIN_SECONDS,(end-start)*MATTE_SECONDS_PER_FRAME)
     try:
@@ -156,8 +158,11 @@ def worker(request):
     w,h = request['width'],request['height']; count = request['end']-request['start']
     base = Path(request['directory'])/request['cache_key']; tmp = base.with_suffix('.partial.mov')
     # Decode original RGB48 with Full range; ignore the model's reconstructed RGB.
-    decode = ['ffmpeg','-v','error','-threads','4','-filter_threads','4','-ss',f'{request["start"]*1001/30000:.9f}','-i',request['source'],
-              '-map','0:v:0','-frames:v',str(count),'-vf',f'scale={w}:{h}:in_range=full:out_range=full:in_color_matrix=bt709:flags=accurate_rnd+full_chroma_int',
+    retime = request.get('retime')
+    seek = retime['seconds'] if retime else request['start']*1001/30000
+    speedup = f'setpts=(PTS-STARTPTS)/{retime["speed"]:g},fps=30000/1001,' if retime else ''
+    decode = ['ffmpeg','-v','error','-threads','4','-filter_threads','4','-ss',f'{seek:.9f}','-i',request['source'],
+              '-map','0:v:0','-frames:v',str(count),'-vf',f'{speedup}scale={w}:{h}:in_range=full:out_range=full:in_color_matrix=bt709:flags=accurate_rnd+full_chroma_int',
               '-f','rawvideo','-pix_fmt','rgb48le','-threads','4','-']
     encode = ['ffmpeg','-v','error','-y','-threads','4','-filter_threads','4','-f','rawvideo','-pix_fmt','rgba64le','-s',f'{w}x{h}',
               '-framerate','30000/1001','-i','-','-frames:v',str(count),'-vf',
@@ -248,6 +253,14 @@ def projected(mask, props, width, height):
                       (1/zx,0,mw/2-(mw/2+dx)/zx,0,1/zy,mh/2-(mh/2+dy)/zy),Image.Resampling.BILINEAR))
 
 
+def clip_speed(item):
+    """片段速度（1.2＝120%）；达芬奇 21.1 以前没有 GetSpeed，读不出返回 None。"""
+    try:value=(item.GetSpeed() or {}).get('Percentage')
+    except Exception:return None
+    try:return float(value)/100 if value else None
+    except (TypeError,ValueError):return None
+
+
 def visible_segments(timeline, start, end):
     """Split at every upper-picture boundary, never matte over B-roll or photos."""
     if not timeline.GetIsTrackEnabled('video',1):return []
@@ -263,7 +276,14 @@ def visible_segments(timeline, start, end):
         hits=[i for i in v1 if i.GetClipEnabled() and i.GetStart()<=a and i.GetEnd()>=b]
         if len(hits)!=1 or any(i.GetStart()<b and a<i.GetEnd() for i in upper):continue
         i=hits[0];media=i.GetMediaPoolItem()
-        if not media or not media.GetClipProperty('File Path') or abs(float(media.GetClipProperty('FPS'))-29.97)>.01:continue
+        if not media or not media.GetClipProperty('File Path'):continue
+        fps=float(media.GetClipProperty('FPS'));speed=clip_speed(i)
+        if speed is not None and speed!=1 and fps>=29.97-.01:
+            # 2026-11-27 起口播原片放进达芬奇设 120%：来源起点（原片帧）换成秒，再按倍速往后走
+            seconds=i.GetSourceStartFrame()/fps+(a-i.GetStart())*speed*1001/30000
+            rows.append({'start':a,'end':b,'source_start':round(seconds*30000/1001),'retime':{'seconds':round(seconds,6),'speed':speed},'source':i})
+            continue
+        if abs(fps-29.97)>.01:continue
         # LeftOffset indexes the file; TC-based source starts are not safe file offsets.
         if int(i.GetSourceEndFrame()-i.GetSourceStartFrame())!=int(i.GetDuration()):
             raise ValueError('V1变速片段不能可靠抠像')
@@ -286,7 +306,7 @@ def prepare(io, plan, before, work_dir, preserve_ids=()):
             source=part['source']
             try:transform=geometry(source,io.main)
             except ValueError as exc:reason=str(exc);break
-            asset=generate(source.GetMediaPoolItem().GetClipProperty('File Path'),part['source_start'],part['source_start']+part['end']-part['start'],width,height,work_dir)
+            asset=generate(source.GetMediaPoolItem().GetClipProperty('File Path'),part['source_start'],part['source_start']+part['end']-part['start'],width,height,work_dir,part.get('retime'))
             with np.load(asset['masks']) as data:
                 # Temporal union is conservative: a letter must remain readable through the whole clip.
                 mask=projected(data['alpha'].max(axis=0),transform,width,height)

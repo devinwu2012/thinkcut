@@ -69,6 +69,12 @@ def search_dirs():
     return [Path(x) for x in os.environ.get('PATH', '').split(os.pathsep) if x] + extra
 
 
+def inherited_agent_var(k):
+    """起审片台的是别的 AI 会话时（比如在 Claude Code 里起的）带进来的那个会话的变量：会话号、消息通道口令、入口标记……
+    后台 AI 不该当成那个会话的子会话，也不该拿到它的口令（2026-11-28 实测服务从 Claude Code 里起时这些全传下去了）。CODEX_HOME 留着（Codex 认它找配置）。"""
+    return k == 'CLAUDECODE' or k.startswith(('CLAUDE_CODE_', 'CLAUDE_AGENT_SDK', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'CLAUDE_PREVIEW')) or (k.startswith('CODEX_') and k != 'CODEX_HOME')
+
+
 class Adapter:
     id = name = binary = ''
     login_args = ()
@@ -83,8 +89,11 @@ class Adapter:
         """给 AI 子进程的环境：程序所在文件夹放进 PATH（node 写的命令行要找得到 node）；标明是后台 AI。
         拿不到钥匙（2026-11-26）：钥匙串当作没有、老位置的钥匙文件指到一个空文件夹；豆包识别／合成、蚁小二存草稿由审片台代办（bin/thinkcut_broker.py）。
         broker：代办文件夹（不给＝这个项目“提交 AI”用的那个；对话用自己的，2026-11-27）。"""
-        e = {k: v for k, v in os.environ.items() if k not in ('THINKCUT_SECRETS_DIR', 'THINKCUT_BROKER_PROGRAM')}
+        e = {k: v for k, v in os.environ.items() if k not in ('THINKCUT_SECRETS_DIR', 'THINKCUT_BROKER_PROGRAM') and not inherited_agent_var(k)}
         e['PATH'] = os.pathsep.join([str(exe.parent), e.get('PATH', '/usr/bin:/bin')]); e['THINKCUT_AI_BACKGROUND'] = '1'; e['THINKCUT_NO_KEYCHAIN'] = '1'
+        from . import aitools
+        aitools.env_extra(e)
+        e.setdefault('MCP_TIMEOUT', '120000')        # 达芬奇 MCP 起得慢（Claude 默认等 30 秒；Codex 用配置里的 startup_timeout_sec）                         # 和平时一样找得到 ffmpeg、node、hyperframes、blender（2026-11-28）
         if broker is None and job is not None: broker = broker_dir(job)
         if broker is not None:
             e['THINKCUT_BROKER_DIR'] = str(broker); e['THINKCUT_SECRETS_DIR'] = str(Path(broker) / '没有钥匙')
@@ -104,8 +113,8 @@ class Adapter:
 
     def login_cmd(self, exe): return ' '.join([_q(str(exe)), *self.login_args])
 
-    def command(self, exe, prompt, cwd, session, writable, model='', stream=False):
-        """返回 (命令, 新会话 id 或 None)。session：接着用的会话 id（None＝新开）；model：设置里填的模型（空＝用这个 AI 自己的默认）；
+    def command(self, exe, prompt, cwd, session, writable, model='', stream=False, system='', plugins=()):
+        """返回 (命令, 新会话 id 或 None)。system：放进系统提示的规矩（能放的 AI 才放，用户的话就能以斜杠命令开头，2026-11-27）；plugins：另加载的技能插件文件夹。session：接着用的会话 id（None＝新开）；model：设置里填的模型（空＝用这个 AI 自己的默认）；
         stream：对话框用，回复一个字一个字吐出来（能做到的 AI 才做，2026-11-27）。"""
         raise NotImplementedError
 
@@ -142,24 +151,32 @@ class Claude(Adapter):
     DENY_READ = ['~/Library/Keychains', '/Library/Keychains', '~/.ssh', '~/.yxer', '~/.codex/auth.json']
 
     def sandbox(self, writable):
-        return {'sandbox': {'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,
+        return {'language': '简体中文',                                                    # Claude Code 自己的“回复语言”设置（2026-11-28：只靠提示，接着英文的旧会话时仍回英文）
+                'sandbox': {'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,
                             'filesystem': {'denyRead': self.DENY_READ, 'allowWrite': [str(x) for x in writable],
                                            'denyWrite': [str(PROGRAM), str(PROGRAM.resolve())]}}}      # 程序文件夹不能写：代办在沙盒外跑的就是它
 
-    def command(self, exe, prompt, cwd, session, writable, model='', stream=False):
+    def command(self, exe, prompt, cwd, session, writable, model='', stream=False, system='', plugins=()):
+        """技能和 MCP 两边一样（aitools，2026-11-28）：ThinkCut 技能插件总是带上（提交 AI 以前没带），MCP 只用白名单（--strict-mcp-config）。"""
+        from . import aitools
+        plugins = list(dict.fromkeys([aitools.plugin_dir(), *plugins]))
         new = None
         if not session: new = session = str(uuid.uuid4())
         argv = [str(exe), '-p', prompt, '--output-format', 'stream-json', '--verbose',
                 '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--setting-sources', 'project',
                 '--settings', json.dumps(self.sandbox(writable), ensure_ascii=False),
-                '--allowedTools', *self.ALLOW, '--disallowedTools', *self.DENY,
+                '--allowedTools', *self.ALLOW, *aitools.claude_allow(), '--disallowedTools', *self.DENY, *aitools.claude_deny(),
                 *(['--session-id', session] if new else ['--resume', session]), *(['--model', model] if model else []),
-                *(['--include-partial-messages'] if stream else [])]
+                *(['--include-partial-messages'] if stream else []), *aitools.claude_args(),
+                *(['--append-system-prompt', system] if system else []), *[x for d in plugins for x in ('--plugin-dir', str(d))]]
         return argv, new
 
     def parse(self, ev):
         t = ev.get('type'); out = []
         if ev.get('session_id') and t in ('system', 'result'): out.append(('session', ev['session_id']))
+        if t == 'system' and ev.get('subtype') == 'compact_boundary':          # /compact 压缩了前面的对话（之后它会重放最后留下的那条旧回复，不算新说的）
+            m = ev.get('compact_metadata') or {}; out.append(('compact', f"{(m.get('pre_tokens') or 0) / 1000:.1f}k → {(m.get('post_tokens') or 0) / 1000:.1f}k"))
+            return out
         if t == 'stream_event':                            # --include-partial-messages：正在说的话，一小段一小段来
             e = ev.get('event') or {}; d = e.get('delta') or {}
             if e.get('type') == 'content_block_delta' and d.get('type') == 'text_delta' and d.get('text'): out.append(('delta', d['text']))
@@ -183,9 +200,12 @@ class Codex(Adapter):
         if r.returncode == 0 and 'logged in' in text.lower() and 'not logged' not in text.lower(): return True, ''
         return False, 'Codex 的命令行还没登录：点“登录”，在弹出的终端里登录你的 ChatGPT 账号。'
 
-    def command(self, exe, prompt, cwd, session, writable, model='', stream=False):
+    def command(self, exe, prompt, cwd, session, writable, model='', stream=False, system='', plugins=()):
+        if system: prompt = system + '\n\n用户说：' + prompt          # Codex exec 没有系统提示参数，规矩照旧放在前面（它本来也不认斜杠命令）
         cfg = [*(['-m', model] if model else []), '-c', 'sandbox_mode="workspace-write"', '-c', 'approval_policy="never"', '-c', 'sandbox_workspace_write.network_access=false',
                '-c', 'sandbox_workspace_write.writable_roots=' + json.dumps([str(x) for x in writable], ensure_ascii=False)]
+        from . import aitools
+        cfg += aitools.codex_args()                  # 只带白名单技能和 MCP，关掉插件、连接器、浏览器、操控电脑（2026-11-28）
         if session: return [str(exe), 'exec', 'resume', session, '--json', '--skip-git-repo-check', *cfg, prompt], None
         return [str(exe), 'exec', '--json', '--skip-git-repo-check', '--sandbox', 'workspace-write', '-C', str(cwd), *cfg, prompt], None
 
@@ -395,17 +415,52 @@ RULES = """你是 ThinkCut · 思刻 审片台的后台 AI（{name}）。用户�
 1. 只处理下面清单里的事；逐项处理、逐项用命令回写（--reply／--rewrite／--publish），回写后页面上马上能看到。
 2. 要问用户：用 --reply 编号 --status 问你 --note "问题" --options "A …|B …"（文稿栏是 --reply 稿N --status 问你 …），问完这一件就算处理了，接着做别的，不要等回答。用户在审片台回答后会再提交给你。
 3. 不能替用户确认（可以／选这个／定稿／采纳）；不导出整片；不发布（禁止 yxer publish，上传只存蚁小二草稿，正式发布由用户在蚁小二客户端点）；不读、不打印、不改任何钥匙和密钥（钥匙串、secrets 文件夹）；不用 curl 冒充审片台页面。
-   你这里拿不到钥匙、命令不联网、连不上本机达芬奇：我们自己的程序照常运行就行——豆包识别／合成（transcribe_video.py、doubao_tts.py、doubao_direct_asr.py）、yxer-safe、要连达芬奇的（thinkcut_edit.py 除 workbench 回写以外的命令、edit_project.py、broll.py、fx.py、project.py）、生图（thinkcut_cover.py）、项目里没改过的 出片.py——它们会自动交给审片台代办、把结果给你。不要想办法自己去读钥匙、自己连达芬奇或联网；你自己写的临时脚本连不上这些。代办拒绝了的（比如 出片.py 被改过），--reply 告诉用户原因，接着做别的。
+   你这里拿不到钥匙、命令不联网、连不上本机达芬奇：我们自己的程序照常运行就行——豆包识别／合成（transcribe_video.py、doubao_tts.py、doubao_direct_asr.py）、yxer-safe、要连达芬奇的（thinkcut_edit.py 除 workbench 回写以外的命令、edit_project.py、broll.py、fx.py、project.py）、生图（thinkcut_cover.py）、项目里的 出片.py（HyperFrames 的没改过；Blender 的 场景.py 可以改）——它们会自动交给审片台代办、把结果给你。不要想办法自己去读钥匙、自己连达芬奇或联网；你自己写的临时脚本连不上这些。代办拒绝了的（比如 出片.py 被改过），--reply 告诉用户原因，接着做别的。
 4. 不直接改文案文件 03_成片/*.md：文稿的改写一律用 --rewrite 交建议，用户点“采纳”才写进去。
-5. 先读剪辑技能说明 {skill}/SKILL.md，和 {skill}/references/审片工作台.md 里“每一栏怎么用”“文稿栏”两节；涉及哪一步再读那一步的说明。
+5. 先读剪辑技能说明 {skill}/SKILL.md，和 {skill}/references/审片工作台.md 里“每一栏怎么用”“文稿栏”两节；涉及哪一步再读那一步的说明。{helpers}
 6. 审片台命令：python3 "{script}" workbench "{jobdir}" <参数>（工作目录就是项目文件夹 {cwd}）。临时文件（比如 --rewrite 用的改写 JSON）放 {tmp}，别放在项目文件夹别处。
 7. 全部做完后，用一两句中文大白话说你做了什么、还有什么要用户看（这句话会显示给用户）。运行命令时附的简短说明（description）也用中文，它会显示在“AI 正在做什么”里。
+8. {lang}
+9. {tools}
 """
+
+
+LANG = ('语言：给用户看的文字一律用简体中文——最后的回复、做事过程中说的每一句话、运行命令附的说明（description）、列的待办都是；'
+        '不要用英文（2026-11-28 用户反馈后台 AI 常回英文）。命令、文件名、代码照原样写。')
+
+
+def tools_note(tmp):
+    """后台 AI 常卡住的三件事给现成办法（2026-11-28 查 261114 真记录：沙盒里 pgrep 拿不到进程、带三引号的 python3 - <<EOF 被权限拒、主线没空画面轨时自己写脚本连达芬奇连不上）。"""
+    broll = PROGRAM / 'core' / 'bin' / 'broll.py'
+    return ('这几件事有现成办法，别自己另想：'
+            f'①多行 Python：先用 Write 把脚本写到 {tmp} 里（比如 {tmp}/核对.py），再 python3 -I "那个文件"；不要用 python3 - <<EOF 或很长的 python3 -c（带三引号、括号的会被权限规则直接拒绝）。'
+            f'②查达芬奇开没开、当前工程和时间线、有几条画面轨：python3 "{SCRIPT}" resolve-status（只读，交给审片台代办）；沙盒里 pgrep、ps 看不到进程，别用；也别自己写脚本连达芬奇（沙盒里连不上）。'
+            f'③配 B-roll 时 apply 报“没有叠加层下方的空闲主选轨”（主线只有口播一条画面轨）：python3 "{broll}" add-track --project-dir <B-roll 工程> --timeline <主线>，'
+            '先不加 --apply 看演练，再加 --apply（只加一条空画面轨并保存工程，交给代办），然后重新 apply；它说上面有花字等叠加轨不能加，就照它说的请用户手动插。'
+            + '⑤Blender：AI 这边直接开 Blender 起不来（沙盒挡显卡）。改好 场景.py（布局.json、标签.json）后用 出片.py --冒烟／--样张／--shot，会交给代办在专用沙盒里跑；'
+            '别改 出片.py、worker.py、布局检查.py（改了代办不跑）。截图同理：用 出片.py --样张、thinkcut_edit.py anim-stills／snap（代办），沙盒里直接开 Chrome 起不来。'
+            '⑥写程序文件夹或配置档的都有命令：素材库写索引 library.py add-project／notes，交反馈单 thinkcut_feedback.py submit，导航条出片 navigation.py render，新建 IP thinkcut_config.py new——照常运行，会自动交给代办。'
+            + davinci_note())
+
+
+def davinci_note():
+    """达芬奇 MCP 开着时（2026-11-28 用户定）告诉 AI 怎么用、哪些不用它。"""
+    from . import aitools
+    try: on = aitools._policy().NAME in aitools.allowed_mcp()
+    except Exception: on = False
+    if not on: return ''
+    return ('④达芬奇 MCP（davinci-resolve）开着，经 ThinkCut 护栏：看工程、时间线、轨道、片段、标记、媒体池直接用它（只读的随时可以）；'
+            '改动尽量少、做完说清改了什么——它每改一次时间线会自动多存一条“<名字>_archived_vNN”备份时间线（同一次处理并成一条），别去删。'
+            '设速度、交付口播、配 B-roll、花字音效、建审核线、导出这些一律走 ThinkCut 程序（会交给代办），不用 MCP 做；'
+            '渲染导出、删除、切换工程或项目库、装插件被护栏拦，不要想办法绕；别处正在写达芬奇时写操作会被拒，等一会儿再试或告诉用户。')
+
+
+HELPERS_NOTE = '另外带了 hyperframes、hyperframes-cli 两个技能，只当 HyperFrames 网页写法的参考：和 ThinkCut 的说明、模板冲突时照 ThinkCut 的；不跑 npx、hyperframes init／add／usage／events 这类联网或改模板的命令。'
 
 
 def prompt(job, eid, brief):
     tmp = job.dir / '审片工作台' / 'tmp'; tmp.mkdir(parents=True, exist_ok=True)
-    return RULES.format(name=ENGINES[eid].name, skill=SKILL, script=SCRIPT, jobdir=job.dir, cwd=workdir(job), tmp=tmp) + '\n清单：\n' + brief
+    return RULES.format(name=ENGINES[eid].name, skill=SKILL, script=SCRIPT, jobdir=job.dir, cwd=workdir(job), tmp=tmp, helpers=HELPERS_NOTE, lang=LANG, tools=tools_note(tmp)) + '\n清单：\n' + brief
 
 
 # ---------- 后台处理（审片台服务里一个项目一个） ----------
@@ -497,7 +552,8 @@ class Runner:
         with contextlib.suppress(Exception): self.unsend(c)
 
     def _exec(self, a, exe, text, session, eid):
-        argv, new = a.command(exe, text, workdir(self.job), session, writable_dirs(self.job), model_of(eid))
+        argv, new = a.command(exe, text, workdir(self.job), session, writable_dirs(self.job), model_of(eid),
+                              system=LANG if a.id == 'claude' else '')      # Claude：语言规矩也放进系统提示，管住过程中说的话（Codex 的在上面的规矩里）
         if new: self._record(lambda d: d.setdefault('sessions', {}).__setitem__(eid, {'id': new, 'at': now()}))
         log = self.job.dir / '审片工作台' / 'AI记录' / f'{time.strftime("%Y%m%d-%H%M%S")}-{eid}.jsonl'
         got = {'final': '', 'said': False}

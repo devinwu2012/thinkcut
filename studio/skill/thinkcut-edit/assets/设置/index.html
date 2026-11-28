@@ -1,7 +1,7 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>设置 · ThinkCut</title>
 <!--THINKCUT_TOKENS-->
 <style>
-/* 设置页（2026-11-26 用户定）：首页和审片台都能进（/settings）。三块：AI（用本机已登录的 Claude Code／Codex）、豆包语音 Key、蚁小二 Key。
+/* 设置页（2026-11-26 用户定）：首页和审片台都能进（/settings）。四块：AI（用本机已登录的 Claude Code／Codex）、AI 工具（后台带的技能／MCP／依赖体检，2026-11-28）、豆包语音 Key、蚁小二 Key。
    钥匙只往服务里送、存钥匙串，页面上不回显；服务只回“配好了没有、存在哪”。
    颜色、线、圆角、阴影、字号全部取自界面规格 design/tokens.css（2026-11-26 界面精修），这里不写死数值。样子：系统设置那样的分组卡片。 */
 *{box-sizing:border-box}html,body{margin:0;min-height:100%}
@@ -38,12 +38,19 @@ section>p{margin:0 var(--sp-1)}
 .key::placeholder{color:var(--t4)}
 .key.model{flex:0 0 200px;min-width:0;font-size:var(--fs-12)}
 .msg{font-size:var(--fs-12);min-height:18px;margin:0 var(--sp-1)}.msg:empty{display:none}.msg.bad{color:var(--s-err-t)}.msg.good{color:var(--s-ok-t)}
-@media (max-width:560px){.eng{flex-wrap:wrap}.eng .why{flex-basis:100%}}
+/* AI 工具体检（2026-11-28）：技能、MCP、依赖三小块，每行 名字｜说明｜状态 */
+.sub{padding:var(--sp-2) var(--sp-4) 2px;font-size:var(--fs-12);font-weight:var(--fw-b);color:var(--t2)}.grp .sub:not(:first-child){border-top:var(--hairline);margin-top:2px}
+.tr{display:flex;align-items:center;gap:var(--sp-3);padding:6px var(--sp-4);min-height:34px}
+.tr .nm{width:150px;flex:none;font-weight:var(--fw-b);overflow-wrap:anywhere}.tr .d{flex:1;min-width:0;color:var(--t3);font-size:var(--fs-12)}.tr .st{display:flex;gap:var(--sp-1);flex:none}
+.tr code{font-family:var(--mono,ui-monospace,monospace);font-size:var(--fs-12);user-select:all}
+@media (max-width:560px){.tr{flex-wrap:wrap}.tr .d{flex-basis:100%}.eng{flex-wrap:wrap}.eng .why{flex-basis:100%}}
 </style>
 <header class="toolbar"><button id="back" class="btn ghost">‹ 返回</button><h1>设置</h1><span class="muted small" style="flex:1"></span><button id="refresh" class="btn">重新检测</button></header>
 <main>
 <section><h2>AI</h2><p class="muted small">ThinkCut 在后台直接用你这台 Mac 上已登录的 AI 命令行（用你自己的会员），审片台点“提交 AI”就开始处理，不用另开对话。账号在官方程序里自己登录，ThinkCut 不碰你的密码。选中的是默认 AI，随时可以换（换了以后项目新开一条会话，项目文件照常读）。</p>
 <div id="engines" class="grp"></div><div id="engmsg" class="msg"></div></section>
+<section><h2>AI 工具</h2><p class="muted small">后台的 Claude Code 和 Codex 默认带同一套：ThinkCut 的技能、白名单里的 MCP、剪辑要用的命令行。MCP 不在系统沙盒里、带着你这台 Mac 的全部权限，所以只给剪辑必须用的；要连达芬奇、用钥匙、生图的事由 ThinkCut 替 AI 代办。</p>
+<div id="tools" class="grp"><div class="tr muted small">正在检查…</div></div><div id="toolmsg" class="msg"></div></section>
 <section><h2>豆包语音（识别、合成）</h2><p class="muted small">粘贴豆包语音控制台的 API Key（不是火山方舟的 Key）。只存在这台 Mac 的钥匙串里，不显示、不写进文件和日志、不给 AI。</p>
 <div class="grp"><div class="it"><span class="lb">状态</span><div id="dbst" class="small row"></div></div>
 <div class="it"><span class="lb">API Key</span><input id="dbkey" class="key" type="password" autocomplete="off" placeholder="粘贴 API Key"><button id="dbsave" class="btn primary">保存</button><button id="dbtest" class="btn">测试</button></div></div>
@@ -72,9 +79,24 @@ function render(){if(!S)return;
     if(!j.ok)return msg('engmsg',j.error);msg('engmsg',j.opened?'已经在“终端”里打开登录：按提示用你自己的账号登录，登录完回来这里会自动刷新。':'没能自动打开终端：请打开“终端”，粘贴运行 '+j.cmd,j.opened);poll()});
   const d=S.doubao;$('dbst').innerHTML=d.configured?`<span class="pill p-在线">已配置</span> <span class="muted">存在${esc(d.where)}${d.verified?' · 实测识别通过过':''}</span>`:`<span class="pill p-未装">未配置</span> <span class="muted">${esc(d.error||'识别口播、机器配音要用')}</span>`;
   const y=S.yxer;$('yxst').innerHTML=(y.configured?`<span class="pill p-在线">已配置</span> <span class="muted">存在钥匙串</span>`:`<span class="pill p-未装">未配置</span>`)+(y.installed?'':' <span class="muted">· 还没装蚁小二命令行（yxer），上传要先装</span>')+(y.error?` <span class="muted">· ${esc(y.error)}</span>`:'')}
+const pill=(ok,t,f)=>`<span class="pill ${ok?'p-在线':'p-未装'}">${esc(ok?t:(f||t))}</span>`;
+function renderTools(T){if(!T||!T.ok){$('tools').innerHTML=`<div class="tr muted small">${esc(T&&T.error||'没查成')}</div>`;return}
+  const sk=T.skills.map(s=>`<div class="tr"><span class="nm">${esc(s.name)}</span><span class="d">${esc(s.use)}${s.claude?'':' · 这台 Mac 上没找到它'}</span><span class="st">${pill(s.claude,'Claude','Claude 缺')}${pill(s.codex,'Codex','Codex 缺')}</span></div>`).join('');
+  const off=T.skills_off.filter(x=>x.installed).map(x=>`${esc(x.name)}（${esc(x.why)}）`).join('；');
+  const fix=T.missing_links.length?`<div class="tr"><span class="d">你平时用的技能文件夹里还缺：${esc(T.missing_links.join('、'))}</span>${T.can_fix?'<button id="toolfix" class="btn primary">一键补齐技能链接</button>':''}</div>`:'';
+  const extra=m=>m.tools_off?`<br>不给的工具：${m.tools_off.map(x=>esc(x.name)+'（'+esc(x.why)+'）').join('；')}<br>能用的工具里也拒：${m.actions_off.map(x=>esc(x.why)).join('；')}<br>${m.notes.map(esc).join('；')}`:'';
+  const mc=T.mcp.map(m=>`<div class="tr"><span class="nm">${esc(m.name)}</span><span class="d">能做：${esc(m.does)}${m.why?'<br>'+(m.wanted?'':'不给后台：')+esc(m.why):''}${m.backend?extra(m):''}</span><span class="st">${m.backend?pill(true,'已开'):m.wanted?pill(false,'','没装'):pill(false,'','不给')}</span></div>`).join('');
+  const dp=T.deps.map(d=>`<div class="tr"><span class="nm">${esc(d.name)}</span><span class="d">${esc(d.use)}${d.version?' · '+esc(d.version):''}${d.ok?'':(d.need?'':'（有这类镜头才要）')+'<br>怎么补：<code>'+esc(d.fix)+'</code>'}</span><span class="st">${pill(d.ok,'有',d.need?'缺':'没装')}</span></div>`).join('');
+  const kp={'一样':'p-在线','代办':'p-在线','护栏':'p-在线','安全规矩':'p-未登录'};
+  const cap=(T.capabilities||[]).map(c=>`<div class="tr"><span class="nm">${esc(c.what)}</span><span class="d">本地对话：${esc(c.local)}<br>后台：${esc(c.backend)}<br>依据：${esc(c.checked)}</span><span class="st"><span class="pill ${kp[c.kind]||'p-未装'}">${esc(c.kind)}</span></span></div>`).join('');
+  $('tools').innerHTML=`<div class="sub">本地对话能做 vs 后台能做（“代办”＝同一条命令，审片台替它在沙盒外跑；“安全规矩”是故意不同）</div>${cap}<div class="sub">技能（两个 AI 都加载）</div>${sk}${fix}${off?`<div class="tr"><span class="d">不给后台：${off}</span></div>`:''}
+    <div class="sub">MCP（白名单：${T.mcp_allow.length?esc(T.mcp_allow.join('、')):'空'}；两个 AI 一样）</div>${mc}<div class="sub">命令行和依赖</div>${dp}`;
+  const b=$('toolfix');if(b)b.onclick=async()=>{b.disabled=true;const j=await post('/api/settings/tools/fix');b.disabled=false;
+    if(!j.ok)return msg('toolmsg',j.error);msg('toolmsg',j.linked.length?`补上了 ${j.linked.length} 个链接`+(j.skipped.length?`；没动：${j.skipped.join('；')}`:''):('没有要补的'+(j.skipped.length?`；没动：${j.skipped.join('；')}`:'')),j.linked.length>0);renderTools(j)}}
+async function loadTools(){try{const r=await fetch('/api/settings/tools',{cache:'no-store'});renderTools(await r.json())}catch(e){renderTools({ok:false,error:'连不上 ThinkCut 服务'})}}
 async function load(fresh){S=fresh?await post('/api/settings/refresh'):await get();render()}
 let pollT=0;function poll(){clearInterval(pollT);let n=0;pollT=setInterval(async()=>{n++;await load(true);if(n>24||S.engines.every(e=>!e.installed||e.logged_in))clearInterval(pollT)},5000)}
-$('refresh').onclick=async e=>{e.target.disabled=true;await load(true);e.target.disabled=false};
+$('refresh').onclick=async e=>{e.target.disabled=true;await Promise.all([load(true),loadTools()]);e.target.disabled=false};
 $('dbsave').onclick=async e=>{const k=$('dbkey').value.trim();if(!k)return msg('dbmsg','先粘贴 Key');e.target.disabled=true;const j=await post('/api/settings/doubao',{key:k});e.target.disabled=false;$('dbkey').value='';
   msg('dbmsg',j.ok?`已保存到${j.where==='钥匙串'?'这台 Mac 的钥匙串':'受限文件'}。可以点“测试”实测一次。`:j.error,j.ok);load()};
 $('dbtest').onclick=async e=>{e.target.disabled=true;msg('dbmsg','正在用豆包识别一小段测试音频…',true);const j=await post('/api/settings/doubao/test');e.target.disabled=false;
@@ -82,5 +104,5 @@ $('dbtest').onclick=async e=>{e.target.disabled=true;msg('dbmsg','正在用豆�
 $('yxsave').onclick=async e=>{const k=$('yxkey').value.trim();if(!k)return msg('yxmsg','先粘贴 Key');e.target.disabled=true;const j=await post('/api/settings/yxer',{key:k});e.target.disabled=false;$('yxkey').value='';
   msg('yxmsg',j.ok?'已保存到这台 Mac 的钥匙串。':j.error,j.ok);load()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')$('back').click()});
-load();
+load();loadTools();
 </script>

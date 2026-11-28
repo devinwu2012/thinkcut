@@ -280,14 +280,16 @@ class DVTests(unittest.TestCase):
             def space(s): s.sent += 1
         k, keep = K(), W.KEYS; W.KEYS = k; self.addCleanup(setattr, W, 'KEYS', keep)
         px = W.DVProxy(self.job); px.p, px.conn = Alive(), Conn(); px.LIMIT = dict.fromkeys(px.LIMIT, 0)
+        self.assertIsNone(px.played())
         with self.assertRaisesRegex(W.Oops, '正在播放'): px.status()                 # 达芬奇不回话
         self.assertTrue(px.busy)
+        px.stuck_since -= 2.5; self.assertAlmostEqual(px.played(), 2.5, delta=0.2)    # 播了多少秒：从卡住那次询问发出算（页面按它往前推高亮，2026-11-27 261114）
         with self.assertRaisesRegex(W.Oops, '正在播放'): px.goto(3)                   # 还卡着：不再往子进程塞
         self.assertEqual(len(px.conn.sent), 1)
         self.assertEqual(px.toggle_play(), {'ok': True}); self.assertEqual((k.sent, len(px.conn.sent)), (1, 1))   # 暂停：直接发空格
         self.assertIsNone(resolve._held)
         px.conn.reply = [('ok', {'t': 9.0}), ('ok', {'t': 9.0, 'timeline': 'v'})]   # 达芬奇停了：卡着的那次回来，再问就正常
-        self.assertEqual(px.status(), {'t': 9.0, 'timeline': 'v'}); self.assertFalse(px.busy)
+        self.assertEqual(px.status(), {'t': 9.0, 'timeline': 'v'}); self.assertFalse(px.busy); self.assertIsNone(px.played())
         px.conn.reply = [('err', '达芬奇里没有打开工程')]
         with self.assertRaisesRegex(W.Oops, '没有打开工程'): px.toggle_play()           # 不卡时照常走子进程里的检查
 

@@ -18,7 +18,9 @@ def detect(aroll):
     return {'aroll': str(R.parent), 'source': rt['source'], 'source_size': rt.get('resolution'), 'project': d['project'],
             'main_timeline': d['timeline'], 'frames': int(d['frames']), 'srt': str(srts[-1]), 'fps': '%d/%d' % tuple(rt['fps']),
             # 口播是机器配音占位时（口播剪辑 doubao_tts.py 记在 project_runtime.json）带过来：分镜不排露脸、不放小圆圈、不用修音，审片台标“占位”
-            **({'placeholder': rt['placeholder']} if isinstance(rt.get('placeholder'), dict) else {})}
+            **({'placeholder': rt['placeholder']} if isinstance(rt.get('placeholder'), dict) else {}),
+            # 2026-11-27 起倍速在达芬奇里做：source 是原片，口播声音（1.2 倍速）另放；拼口播画面时按倍速换算
+            **({'aroll_speed': rt['speed'], 'aroll_voice': rt['voice']} if rt.get('voice') else {})}
 
 
 def words(job: Job):
@@ -85,14 +87,29 @@ def shift_crop(cw, ch, cx, cy, sh, dy_src):
     return f'crop={cw}:{h}:{cx}:{max(0, y0)}' + (f',pad={cw}:{ch}:0:{top}:black' if top or bot else '')
 
 
+def aroll_speed(job: Job):
+    """(倍速, 口播声音文件)。job.json 没记（老项目、2026-11-27 前建的）时再看一眼剪口播工程；老项目口播源就是加速版，返回 (1, None)。"""
+    if job.get('aroll_voice'): return float(job['aroll_speed']), job['aroll_voice']
+    try: rt = rj(Path(job['aroll']) / '审核' / 'project_runtime.json')
+    except (OSError, ValueError, KeyError): return 1.0, None
+    return (float(rt['speed']), rt['voice']) if rt.get('voice') and rt.get('source') == job['source'] else (1.0, None)
+
+
 def render(job: Job):
     """按 a-roll 保留段拼出口播，裁成画幅、放大到 4K → 合成/A肉.mov（做小圆圈和检查图用，不进成片）。
     job.json 写了 "人像下移"（审核线里人像整体往下挪，2026-11-21 新10）时，同一遍再出一份 合成/A肉_人像下移<值>.mov，人挡字用它，和审核线同取景。"""
     R = Path(job['aroll']) / '审核'; S = rj(R / 'trial_keep_segments.json')['segments']
     src = job['source']; s = probe(src); sw, sh = int(s['width']), int(s['height'])
     cw, ch, cx, cy = crop_for(sw, sh, job.W, job.H); fps = float(job.fps); dy = shift_of(job.cfg)
-    v = [f"[0:v]trim=start_frame={x['src_in']}:end_frame={x['src_out']},setpts=PTS-STARTPTS[v{i}]" for i, x in enumerate(S)]
-    a = [f"[0:a]atrim=start={x['src_in'] / fps:.6f}:end={x['src_out'] / fps:.6f},asetpts=PTS-STARTPTS[a{i}]" for i, x in enumerate(S)]
+    speed, voice = aroll_speed(job)
+    if voice:      # 原片按 1.2 倍的时间切、加速成 29.97 帧；声音用剪口播那份 1.2 倍速声音，和达芬奇里设 120% 的结果一致
+        # 每段补一帧再截到正好 src_out-src_in 帧：按时间切再转 29.97 会多或少一帧，攒起来口播画面就和时间线错开（实测 53 段多 2 帧）
+        v = [f"[0:v]trim=start={x['src_in'] * speed / fps:.6f}:end={x['src_out'] * speed / fps:.6f},setpts=(PTS-STARTPTS)/{speed:g},fps={job['fps']},"
+             f"tpad=stop_mode=clone:stop=1,trim=end_frame={x['src_out'] - x['src_in']},setpts=PTS-STARTPTS[v{i}]" for i, x in enumerate(S)]
+        a = [f"[1:a]atrim=start={x['src_in'] / fps:.6f}:end={x['src_out'] / fps:.6f},asetpts=PTS-STARTPTS[a{i}]" for i, x in enumerate(S)]
+    else:
+        v = [f"[0:v]trim=start_frame={x['src_in']}:end_frame={x['src_out']},setpts=PTS-STARTPTS[v{i}]" for i, x in enumerate(S)]
+        a = [f"[0:a]atrim=start={x['src_in'] / fps:.6f}:end={x['src_out'] / fps:.6f},asetpts=PTS-STARTPTS[a{i}]" for i, x in enumerate(S)]
     tail = f'scale={job.W}:{job.H}:flags=lanczos,setsar=1'
     if dy:
         g2 = f'[vc]split=2[c0][c1];[c0]crop={cw}:{ch}:{cx}:{cy},{tail}[vo];[c1]{shift_crop(cw, ch, cx, cy, sh, round(dy * ch / job.H))},{tail}[vs]'
@@ -104,7 +121,7 @@ def render(job: Job):
     extra = ['-map', '[vs]'] + enc + ['-an', job.p('合成', shifted_name(dy))] if dy else []      # 只要画面（人挡字的声音用口播原声）
     enc = enc + ['-c:a', 'pcm_s16le', '-ar', '48000']
     say(f'出口播画面 {job.W}×{job.H}（{len(S)} 段）' + (f'，另出人像下移 {dy} 像素的一份（人挡字用）' if dy else '') + '…')
-    run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', src, '-/filter_complex', gf, '-map', '[vo]', '-map', '[ac]'] + enc + [out] + extra)
+    run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', src, *(['-i', voice] if voice else []), '-/filter_complex', gf, '-map', '[vo]', '-map', '[ac]'] + enc + [out] + extra)
     # 2026-11-21 261118 新8：记下这一遍出的文件（大小、修改时间）。同一遍的 A肉 和 A肉_人像下移 写完有先后，人挡字按这个认同一批，不按修改时间判谁旧
     files = [Path(out)] + ([Path(job.p('合成', shifted_name(dy)))] if dy else [])
     wj(job.p('合成', BATCH), dict(批次=time.strftime('%Y-%m-%d %H:%M:%S'), 文件={p.name: [p.stat().st_size, int(p.stat().st_mtime)] for p in files}))

@@ -244,8 +244,18 @@ class FlowSession(FakeSession):
 
 
 class ImportFlowTests(unittest.TestCase):
+    main_format = None
+
     def test_new_main_line_is_built_imported_reopened_and_read_back(self):
         self.run_flow()
+
+    def test_new_main_line_reads_back_the_previous_main_line_format(self):
+        # 2026-11-27 261114 新4：沿用上一版主线的画幅，导入后的主线读回核对（假达芬奇读回 3840×2160）
+        self.main_format = {'from': 'v1_主线_1110-0900_aaaa', 'width': 3840, 'height': 2160, 'scaling': 'scaleToCrop'}
+        self.run_flow()
+        self.main_format = {'from': 'v1_主线_1110-0900_aaaa', 'width': 2160, 'height': 2880, 'scaling': 'scaleToCrop'}
+        with self.assertRaisesRegex(ValueError, '和上一版主线.*2160×2880 不一样'):
+            self.run_flow()
 
     def test_reuse_branch_only_reopens_and_reads_back(self):
         self.run_flow(existing=True)
@@ -278,6 +288,7 @@ class ImportFlowTests(unittest.TestCase):
                  patch.object(importer, 'archive_old_timelines', return_value=0), \
                  patch.object(importer, 'direct_timeline', return_value=None) as direct, \
                  patch.object(importer, 'verify_package'), patch.object(importer, 'CONFIG', {}), \
+                 patch.object(importer, 'match_previous_format', return_value=self.main_format), \
                  patch.object(importer, 'ever_passed', return_value=existing):
                 asyncio.run(importer.import_package(package, manifest, {'segments': SEGMENTS}, 'attempt'))
             direct.assert_called_once_with('project', need_timeline=False)

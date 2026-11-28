@@ -75,8 +75,7 @@ def open_film(d, aroll=None):
         elif (d / '项目.json').is_file(): d = d / '02_制作' / '自动剪辑'
     if (d / 'job.json').is_file():
         job = Job(d)
-        if aroll and job.get('aroll') and Path(job['aroll']).resolve() != Path(aroll).expanduser().resolve():
-            say(f"提醒：这个项目的 job.json 记的剪口播工程是 {job['aroll']}，审片台口播精剪栏用它（不是 {aroll}）")
+        if aroll: choose_aroll(job, Path(aroll).expanduser().resolve())
         return job
     rec = d / '审片工作台' / '口播工程.json'
     if aroll: aroll = Path(aroll).expanduser().resolve()
@@ -94,8 +93,90 @@ def open_film(d, aroll=None):
 def lite(job): return getattr(job, 'lite', False)
 
 
+def choose_aroll(job, aroll):
+    """命令点名的剪口播工程就是口播精剪栏要显示的（2026-11-27 261114 新3：重剪口播后 serve 新工程，以前仍显示 job.json 记的旧工程）。
+    记在 审片工作台/口播工程.json（选定）；job.json 不动（动画、字时间还按它，换口播走 init --force --aroll）。"""
+    rec = home(job) / '口播工程.json'
+    try: old = rj(rec)
+    except (OSError, ValueError): old = {}
+    if old.get('aroll') == str(aroll) and old.get('选定'): return
+    same = job.get('aroll') and Path(job['aroll']).resolve() == aroll
+    rec.parent.mkdir(parents=True, exist_ok=True)
+    wj(rec, {'说明': '审片台口播精剪栏显示哪个剪口播工程（edit_project.py serve / workbench --aroll 点名的，最后一次为准）；动画项目仍按 job.json 的 aroll',
+             'aroll': str(aroll), '选定': True})
+    if not same:
+        say(f"审片台口播精剪栏换成 {aroll.name}；动画项目（job.json）仍用 {Path(job['aroll']).name if job.get('aroll') else '（没有）'}。"
+            f"要让动画、字时间也换成新口播：thinkcut_edit.py init {job.dir} --force --aroll {aroll}")
+
+
 def aroll_of(job):
-    a = job.get('aroll'); return Path(a) if a else None
+    """口播精剪栏用的剪口播工程：命令点名选定过、而且剪好了的优先，否则 job.json 的 aroll。"""
+    if not lite(job):
+        try: rec = rj(home(job) / '口播工程.json')
+        except (OSError, ValueError): rec = {}
+        if rec.get('选定') and koubo.ready(rec.get('aroll')): return Path(rec['aroll'])
+    a = job.get('aroll')
+    if a and not lite(job): a = real_aroll(job, delivered=False) or a        # 占位口播 + 剪好的真口播：显示真口播（2026-11-27 261114 用户反馈）
+    return Path(a) if a else None
+
+
+# ---------- 占位口播 → 真口播（2026-11-27 261114 用户：“他现在都已经有A-roll了，那他这个口播精剪里应该就是这个A-roll的视频啊”） ----------
+def placeholder_aroll(a):
+    """剪口播工程是不是占位口播：工程设置记了 placeholder（机器配音）、原片旁边有 .机器配音.json，
+    或原片文件名带“占位”（初稿模式早期手工做的，如 261114 的 A-roll占位_TTS.mov；机器配音的叫 机器配音占位_口播.mov）。"""
+    try: rt = rj(Path(a) / '审核' / 'project_runtime.json')
+    except (OSError, ValueError): return False
+    if isinstance(rt.get('placeholder'), dict): return True
+    src = Path(rt.get('source') or '')
+    return bool(src.name) and ('占位' in src.stem or src.with_name(src.stem + '.机器配音.json').is_file())
+
+
+def _delivered(a):
+    try: return rj(Path(a) / '审核' / 'latest_delivery.json').get('status') == 'complete'
+    except (OSError, ValueError): return False
+
+
+def real_aroll(job, delivered=True):
+    """job.json 用的是占位口播、项目 02_制作 下又有不是占位的剪口播工程 → 返回它（交付过的优先，再按最近）；否则 None。
+    delivered=True 只认已交付到达芬奇的（init 要读交付记录）；False 剪好就算（口播精剪栏显示用）。"""
+    cur = job.get('aroll')
+    if not cur or not placeholder_aroll(cur): return None
+    root = project_root(job.dir)
+    if not root: return None
+    def when(a):
+        f = a / '审核' / ('latest_delivery.json' if _delivered(a) else 'review_v2_state.json')
+        return (_delivered(a), f.stat().st_mtime)
+    found = [a for a in sorted((root / '02_制作').glob('*_AI剪辑'))
+             if a.resolve() != Path(cur).resolve() and koubo.ready(a) and not placeholder_aroll(a) and (_delivered(a) or not delivered)]
+    return max(found, key=when).resolve() if found else None
+
+
+_switching = threading.Lock()
+
+
+def follow_real(job):
+    """真口播剪好、交付到达芬奇以后，项目自动换过去（不用再手动 init --force --aroll）：跑一遍 thinkcut_edit.py init --force（原 job.json 先备份），
+    再把内存里的 job 换成新的。审片台起服务（首页点开、workbench 命令）和页面每次取数据时都调；别的进程已经换过就只重读。返回 aroll 变了没有。"""
+    if lite(job): return False
+    with _switching:
+        before = job.get('aroll')
+        with contextlib.suppress(OSError, ValueError):
+            if rj(job.dir / 'job.json').get('aroll') != before: job.__init__(job.dir)
+        a = real_aroll(job)
+        if a:
+            old = job.get('aroll')
+            r = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'thinkcut_edit.py'), 'init', str(job.dir), '--force', '--aroll', str(a), '--format', job['format']],
+                               capture_output=True, text=True, stdin=subprocess.DEVNULL, env={**os.environ, 'PYTHONUTF8': '1'})
+            if r.returncode:
+                say(f'项目里有剪好的真口播 {a.name}，但没能自动换过去：' + (r.stderr.strip() or r.stdout.strip())[-400:])
+            else:
+                job.__init__(job.dir)
+                rec = home(job) / '口播工程.json'
+                with contextlib.suppress(OSError, ValueError):
+                    if rj(rec).get('aroll') == old: wj(rec, {**rj(rec), 'aroll': str(a)})
+                say(f'项目里有剪好的真口播，动画项目从占位口播 {Path(old).name} 换成了 {a.name}（等于跑了 init --force --aroll）：\n{r.stdout.strip()}\n'
+                    '动画、卡点、字幕要按新口播重做：words → beats → …（references/初稿模式.md「占位怎么换」）')
+        return job.get('aroll') != before
 
 
 def adopt(job):
@@ -226,6 +307,7 @@ def script(job):
     for f in subs:
         if f.exists(): cuts = sorted(rj(f) or [], key=lambda r: r['start']); break
     tok = rj(words).get('tokens') or [] if words.exists() else []
+    if tok and cuts and f.stat().st_mtime < words.stat().st_mtime: cuts = []     # 字幕表比字时间旧（换口播后还没重出字幕，2026-11-27 261114）：换条处对不上，不拿来补逗号
     if tok:
         starts = sorted({round(r['start'] / fps, 3) for r in cuts}); out, k = [], 0
         for x in tok:
@@ -933,10 +1015,11 @@ def make_handler(job, dv):
                                                    'listening': listening(), 'prog': PROG, 'idle': round(time.time() - activity['t'], 1)})
             if p == '/settings': return self.send(settings.page(SESSION), 'text/html; charset=utf-8', cookie=True)
             if p == '/api/settings': return self.send(settings.info())
+            if p == '/api/settings/tools': return self.send(settings.tools_info())
             if p == '/api/material': return self.send(materials.info(job))       # 备料：正在传、复制的进度（页面传东西时每秒来问）
             if p == '/api/chat': return self.send(talk.state())                   # 对话侧栏：记录、在不在回复
             if p == '/api/data':
-                seen['t'] = time.time(); return self.send(meta())
+                seen['t'] = time.time(); follow_real(job); return self.send(meta())     # 开着审片台时交付了真口播：下一次取数据就换过去
             if p == '/api/wait':                # AI 的 --wait 每 2 秒来问一次：记下“AI 在等”
                 ears['t'] = time.time(); return self.send({'ok': True, 'send': board.load(job).get('send')})
             if p == '/api/draft/diff':          # 文案栏：某一版和前一版比改了哪里
@@ -955,7 +1038,8 @@ def make_handler(job, dv):
             if p == '/api/dv':
                 if lite(job): return self.send({'ok': False, 'lite': True, 'error': '口播阶段：还没建项目文件夹，审核线还没到'})
                 try: return self.send({'ok': True, **call(dv.status)})
-                except Oops as e: return self.send({'ok': False, 'error': str(e)})
+                except Oops as e:      # 播放中（达芬奇不回话）：带上播了多少秒，页面按它往前推高亮（2026-11-27 261114 用户：“播放的时候是错的，时间线没对上”）
+                    return self.send({'ok': False, 'error': str(e), 'played': getattr(dv, 'played', lambda: None)()})
             if p.startswith('/图/') and '/' not in p[3:] and not p[3:].startswith('.'): return self.image(home(job) / '图' / p[3:])
             self.send({'ok': False, 'error': '没有这个地址'}, code=404)
 
@@ -1047,20 +1131,20 @@ class DVProxy:
     LIMIT = {'status': 1.5, 'goto': 4, 'still': 15, 'toggle_play': 8}
 
     def __init__(self, job):
-        self.job, self.p, self.conn, self.busy = job, None, None, False
+        self.job, self.p, self.conn, self.busy, self.stuck_since = job, None, None, False, None
 
     def _start(self):
         import multiprocessing as mp
         ctx = mp.get_context('spawn'); a, b = ctx.Pipe()
-        self.p = ctx.Process(target=_dv_worker, args=(str(self.job.dir), b), daemon=True); self.p.start(); self.conn, self.busy = a, False
+        self.p = ctx.Process(target=_dv_worker, args=(str(self.job.dir), b), daemon=True); self.p.start(); self.conn, self.busy, self.stuck_since = a, False, None
 
     def _call(self, name, *args):
         if self.p is None or not self.p.is_alive(): self._start()
         if self.busy:                                           # 上一次还卡着：回来了就收掉，没回来就还在播
             if not self.conn.poll(0): raise Oops(PLAYING)
-            self.conn.recv(); self.busy = False
-        self.conn.send((name, args))
-        if not self.conn.poll(self.LIMIT[name]): self.busy = True; raise Oops(PLAYING)
+            self.conn.recv(); self.busy = False; self.stuck_since = None
+        sent = time.time(); self.conn.send((name, args))
+        if not self.conn.poll(self.LIMIT[name]): self.busy = True; self.stuck_since = sent; raise Oops(PLAYING)
         kind, val = self.conn.recv()
         if kind == 'err': raise Oops(val)
         return val
@@ -1073,8 +1157,12 @@ class DVProxy:
     def goto(self, t): return self._call('goto', t)
     def still(self, out): return self._call('still', out)
 
+    def played(self):
+        """达芬奇不回话（在播放）多少秒了：从卡住的那次询问发出算起（播放开始后最多 0.5 秒内发出），没在播放是 None。"""
+        return round(time.time() - self.stuck_since, 3) if self.busy and self.stuck_since else None
+
     def toggle_play(self):
-        if self.busy and self.conn.poll(0): self.conn.recv(); self.busy = False
+        if self.busy and self.conn.poll(0): self.conn.recv(); self.busy = False; self.stuck_since = None
         if self.busy:
             with dv_lock(self.job, '审片工作台：暂停'):     # 正在播放（达芬奇不回话）：不问达芬奇，直接发空格暂停
                 KEYS.space()
@@ -1204,6 +1292,7 @@ def same_program(port):
 
 def start(job, port=None, ports=None, fresh=False):
     """fresh：首页用。已在跑的是别的版本程序起的（发版前的老服务、或从已删掉的 worktree 起的）就停掉、用现在的程序重起；数据都在片子文件里，不丢。"""
+    follow_real(job)          # 占位口播的项目有了交付过的真口播：先换过去（在跑的服务下次取数据时重读 job.json）
     info = running(job)
     if info and fresh and not same_program(info['port']):
         other = (ping(info['port']) or {}).get('prog') or {}

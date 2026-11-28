@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""B-roll：实时读取、匹配、演练/写入、局部调整与撤销。"""
+"""B-roll：实时读取、匹配、演练/写入、局部调整与撤销；主线没有空画面轨时 add-track 加一条。"""
 import argparse
 import json
 import os
@@ -29,7 +29,7 @@ class ChineseParser(argparse.ArgumentParser):
 def parser():
     p=ChineseParser(description=__doc__)
     subs=p.add_subparsers(dest='command',required=True,parser_class=ChineseParser)
-    for name in ('status','plan','apply','adjust','undo','at','clean'):
+    for name in ('status','plan','apply','adjust','undo','at','clean','add-track'):
         cmd=subs.add_parser(name)
         cmd.add_argument('--config',default=str(Path(__file__).resolve().parents[2]/'B-roll学习库/broll.json'))
         cmd.add_argument('--timeline');cmd.add_argument('--project-dir');cmd.add_argument('--creator')
@@ -37,7 +37,8 @@ def parser():
             cmd.add_argument('--folder',action='append',default=[]);cmd.add_argument('--descriptions');cmd.add_argument('--supplements')
             cmd.add_argument('--more',action='store_true',help='加入其他项目/素材库的第二层候选')
         if name=='apply':cmd.add_argument('--matches',required=True)
-        if name in ('apply','adjust','undo'):cmd.add_argument('--apply',action='store_true')
+        if name in ('apply','adjust','undo','add-track'):cmd.add_argument('--apply',action='store_true')
+        if name=='add-track':cmd.add_argument('--name',default='B-roll',help='新轨名字（默认 B-roll）')
         if name=='adjust':
             cmd.add_argument('--spot',required=True,action='append')
             group=cmd.add_mutually_exclusive_group(required=True)
@@ -72,6 +73,8 @@ def main(argv=None, preflight=service.preflight, session_type=service.Session):
         cfg.update(service.read_json(args.config,{}))
         cfg['selected_timeline']=args.timeline
         io,env=preflight(cfg,args.timeline)
+        if args.command=='add-track':      # 主线没有空画面轨时加一条（2026-11-28；不加 --apply 只演练）
+            print(json.dumps(service.add_track(io,args.apply,args.name),ensure_ascii=False,indent=2));return 0
         active=io.p.GetCurrentTimeline()
         tc=active.GetCurrentTimecode() if args.command=='at' and args.playhead else getattr(args,'timecode',None)
         # Review line mapping requires a registered main-line ledger. Use explicit

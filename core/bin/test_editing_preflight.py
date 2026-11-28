@@ -55,13 +55,32 @@ class PreflightTests(unittest.TestCase):
                 paid.assert_not_called()
 
     def test_init_delayed_audio_stops_before_paid_transcription(self):
+        # 只有已经是加速版的文件（--speed 1、29.97 帧，不另做声音）才会因为声音晚开始而停；见下一条
         with tempfile.TemporaryDirectory() as tmp:
             video=Path(tmp)/'video.mov';video.write_bytes(b'fixture');project=Path(tmp)/'new'
             edits=[{'movie_duration':162240,'media_time':-1},{'movie_duration':69876380,'media_time':0}]
             info={'movie_timescale':240000,'tracks':[{'handler':'vide','fps':{'num':30000,'den':1001},'constant_presentation_duration':True},{'handler':'soun','timescale':48000,'edits':edits}]}
-            with patch.object(sys,'argv',['edit_project','init','--project-dir',str(project),'--video',str(video)]),patch.object(edit_project,'probe',return_value=info),patch.object(edit_project.subprocess,'run') as paid:
+            with patch.object(sys,'argv',['edit_project','init','--project-dir',str(project),'--video',str(video)]),patch.object(edit_project,'probe',return_value=info), \
+                 patch.object(edit_project,'machine_voice',return_value=Path(tmp)/'占位.机器配音.json'),patch.object(edit_project.subprocess,'run') as paid:
                 with self.assertRaises(SystemExit):edit_project.main()
                 paid.assert_not_called();self.assertFalse(project.exists())
+
+    def test_make_voice_pads_late_audio_then_speeds_it_up(self):
+        """2026-11-27：倍速项目只把声音做成 1.2 倍速；先补齐到从 0 开始（手机原片声音常晚开始），画面不碰；同一原片再跑复用。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            video=Path(tmp)/'原片.mov';video.write_bytes(b'fixture');folder=Path(tmp)/'项目_AI剪辑'
+            def fake(cmd,**_):
+                Path(cmd[-1]).write_bytes(b'RIFF');return subprocess.CompletedProcess(cmd,0,'','')
+            with patch.object(edit_project.subprocess,'run',side_effect=fake) as ff,contextlib.redirect_stdout(__import__('io').StringIO()):
+                voice=edit_project.make_voice(video,folder,1.2)
+                again=edit_project.make_voice(video,folder,1.2)
+            cmd=ff.call_args_list[0].args[0]
+            self.assertEqual(ff.call_count,1);self.assertEqual(voice,again);self.assertEqual(voice.name,'口播声音_1.2倍速.wav')
+            self.assertIn('-vn',cmd);self.assertEqual(cmd[cmd.index('-af')+1],'aresample=async=1:first_pts=0,atempo=1.2')
+            self.assertNotIn('afftdn',' '.join(cmd))      # 人声处理不在这一步做了（剪完在达芬奇里修音）
+            with patch.object(edit_project.subprocess,'run',side_effect=fake) as ff,contextlib.redirect_stdout(__import__('io').StringIO()):
+                self.assertEqual(edit_project.make_voice(video,folder,1).name,'口播声音.wav')      # 用户说这条不加速：--speed 1
+            self.assertNotIn('atempo',' '.join(ff.call_args_list[0].args[0]))
 
     def fake_init(self,tmp,standard):
         """离线跑一次 init：识别那一步换成假的（不调付费接口），识别结果预先放好。"""
@@ -71,10 +90,14 @@ class PreflightTests(unittest.TestCase):
         (project/'转写').mkdir(parents=True)
         (project/'转写/transcription_manifest.json').write_text(json.dumps({'audio_stream':0}))
         (project/'转写/doubao_turbo.json').write_text(json.dumps({'result':{'utterances':[{'text':'你好','start_time':0,'end_time':500}]}},ensure_ascii=False))
-        info={'tracks':[{'handler':'vide','fps':{'num':30000,'den':1001},'constant_presentation_duration':True,'sample_count':300,'display_size':[1920,1080]},{'handler':'soun'}]}
+        info={'tracks':[{'handler':'vide','timescale':600,'stts_runs':[[290,20],[10,21]],'sample_count':300,'display_size':[1920,1080]},{'handler':'soun'}]}
+        voice=project/'口播声音_1.2倍速.wav'
+        def make_voice(*_):
+            voice.write_bytes(b'RIFF');return voice
         def run():
             with patch.object(sys,'argv',['edit_project','init','--project-dir',str(project),'--video',str(video)]),patch.object(edit_project,'probe',return_value=info), \
-                 patch.object(edit_project,'alignment_runtime',return_value={'alignment_dependencies_ready':True}),patch.object(edit_project,'run_self') as paid:
+                 patch.object(edit_project,'alignment_runtime',return_value={'alignment_dependencies_ready':True}),patch.object(edit_project,'run_self') as paid, \
+                 patch.object(edit_project,'make_voice',side_effect=make_voice),patch.object(edit_project,'duration_seconds',side_effect=lambda p:8.0 if p==voice else 9.6):
                 edit_project.main()
             return paid
         return root,project/'审核',run
@@ -108,6 +131,28 @@ class PreflightTests(unittest.TestCase):
             root,run,init=self.fake_init(tmp,standard=True);init()
             config=json.loads((run/'project_runtime.json').read_text())
             self.assertEqual((config['project'],config['existing_project_only']),(root.name,True))
+            # 2026-11-27：原片（30 帧可变帧率也行）不重压；识别、剪辑用 1.2 倍速声音，帧数是加速后的（8 秒 → 239 帧，留 2 帧余量）
+            self.assertEqual((config['source'],config['speed'],Path(config['voice']).name,config['source_fps'],config['source_frames'],config['audio_edit_offset_ms']),
+                             (str((root/'01_原始素材/A roll/口播.mov').resolve()),1.2,'口播声音_1.2倍速.wav',[30,1],int(8.0*30000/1001)-2,0))
+            self.assertEqual(set(config['video_identity']),{'size','mtime_ns'})
+
+    def test_old_speed_voice_output_needs_explicit_speed_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video=Path(tmp)/'口播_1.2倍速_人声处理.mov';video.write_bytes(b'fixture')
+            info={'tracks':[{'handler':'vide','fps':{'num':30000,'den':1001},'constant_presentation_duration':True},{'handler':'soun'}]}
+            with patch.object(sys,'argv',['edit_project','init','--project-dir',str(Path(tmp)/'new'),'--video',str(video)]),patch.object(edit_project,'probe',return_value=info), \
+                 patch.object(edit_project.subprocess,'run') as paid,contextlib.redirect_stderr(__import__('io').StringIO()) as err:
+                with self.assertRaises(SystemExit):edit_project.main()
+            paid.assert_not_called();self.assertIn('--speed 1',err.getvalue())
+
+    def test_original_below_29_97_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video=Path(tmp)/'原片.mov';video.write_bytes(b'fixture')
+            info={'tracks':[{'handler':'vide','fps':{'num':25,'den':1}},{'handler':'soun'}]}
+            with patch.object(sys,'argv',['edit_project','init','--project-dir',str(Path(tmp)/'new'),'--video',str(video)]),patch.object(edit_project,'probe',return_value=info), \
+                 patch.object(edit_project.subprocess,'run') as paid,contextlib.redirect_stderr(__import__('io').StringIO()) as err:
+                with self.assertRaises(SystemExit):edit_project.main()
+            paid.assert_not_called();self.assertIn('低于 29.97',err.getvalue())
 
     def test_retry_uncertain_reaches_paid_transcription_only_when_asked(self):
         import argparse

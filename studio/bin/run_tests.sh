@@ -277,6 +277,9 @@ check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '水电反馈单�
 # 2026-11-21《别墅装灯前》：达芬奇写入锁、审核线零碎、口播降噪修音、音效卡关键词、没看过的样张、给用户看的 MD（剪辑工具助手加）
 r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_tools_1121'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600)
 check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '别墅装灯反馈单剪辑工具测试（thinkcut/test_tools_1121.py）' + r.stdout.strip().replace('\n', '') + ('' if r.returncode == 0 else '：' + r.stderr[-_t(800):]))
+# 2026-11-27《261114 千万的房子》新流程口播反馈单：剪口播交付后一条命令修音、分段响度补齐、口播精剪栏跟着点名的剪口播工程
+r = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'thinkcut.test_newflow_1127'], cwd=str(SK / 'scripts'), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600)
+check(r.returncode == 0 and 'OK' in r.stderr.splitlines()[-1], '261114 新流程口播反馈单测试（thinkcut/test_newflow_1127.py）' + ('' if r.returncode == 0 else '：' + r.stderr[-_t(800):]))
 # 2026-11-12《水电阶段》动画与包装系统：包装系统组件、标签排版、布局检查、渲染前硬拦、尺寸拦截、总装（动画与包装系统会话加）
 r = subprocess.run([sys.executable, '-B', str(root / 'bin' / 'test_anim_packaging.py')], capture_output=True, text=True, stdin=subprocess.DEVNULL)
 check(r.returncode == 0, '水电反馈单动画与包装系统测试（bin/test_anim_packaging.py）' + ('' if r.returncode == 0 else '：' + (r.stdout + r.stderr)[-_t(800):]))

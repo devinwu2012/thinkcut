@@ -221,10 +221,14 @@ class TranscribeRecoveryTests(unittest.TestCase):
         self.assertTrue((self.work / "doubao_turbo.json").exists())
         self.assertFalse((self.work / "transcription_manifest.json").exists())
 
-    def test_audio_only_file_is_not_accepted_as_video(self):
+    def test_audio_only_file_is_accepted_but_silent_video_is_not(self):
+        # 2026-11-27 起剪口播送识别的是只有声音的 1.2 倍速声音文件（倍速在达芬奇里做）
         stderr = "Duration: 00:00:01.00, start: 0.000000\nStream #0:0: Audio: pcm_s16le"
         with patch.object(app.subprocess, "run", return_value=CompletedProcess([], 1, "", stderr)):
-            with self.assertRaisesRegex(ValueError, "视频和音频流"):
+            self.assertEqual(app.probe_duration(self.video, "ffmpeg"), (1.0, 1))
+        stderr = "Duration: 00:00:01.00, start: 0.000000\nStream #0:0: Video: h264"
+        with patch.object(app.subprocess, "run", return_value=CompletedProcess([], 1, "", stderr)):
+            with self.assertRaisesRegex(ValueError, "没有声音"):
                 app.probe_duration(self.video, "ffmpeg")
 
     def test_multitrack_video_requires_explicit_selection(self):

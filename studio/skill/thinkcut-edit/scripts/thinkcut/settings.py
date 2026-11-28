@@ -15,7 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import design, engine
+from . import aitools, design, engine
 
 PAGE = engine.SKILL / 'assets' / '设置' / 'index.html'
 YX_SERVICE, YX_ACCOUNT = 'cn.thinkcut.yixiaoer.cli', 'api-key'
@@ -139,7 +139,17 @@ def set_col_order(q):
     return {'order': o}
 
 
-POST = {'/api/settings/engine': set_engine, '/api/settings/colorder': set_col_order, '/api/settings/model': set_model, '/api/settings/login': do_login, '/api/settings/refresh': lambda q: info(True),
+def tools_info():
+    """“AI 工具”体检（2026-11-28）：每个 AI 能用的技能、MCP、依赖。"""
+    return {'ok': True, **aitools.report()}
+
+
+def fix_tools(q=None):
+    """一键补：把白名单技能链接进 ~/.claude/skills 和 ~/.codex/skills（只建链接，不覆盖）。依赖要装软件，只给命令、不替你装。"""
+    return {**aitools.fix_links(), **aitools.report()}
+
+
+POST = {'/api/settings/tools/fix': fix_tools, '/api/settings/engine': set_engine, '/api/settings/colorder': set_col_order, '/api/settings/model': set_model, '/api/settings/login': do_login, '/api/settings/refresh': lambda q: info(True),
         '/api/settings/doubao': save_doubao, '/api/settings/doubao/test': test_doubao, '/api/settings/yxer': save_yxer}
 
 

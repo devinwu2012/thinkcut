@@ -43,7 +43,16 @@ SCRIPTS = {
     'thinkcut_cover.py': COVER,
     # 挪进回收站（2026-11-27 对话框：不永久删，回收站在项目文件夹以外，AI 自己写不了）
     'thinkcut_trash.py': 'bin/thinkcut_trash.py',
+    # 2026-11-28 对照“本地对话能做的后台也要能做”：写程序文件夹或用户配置档的、沙盒里跑不了的（只读的照常在 AI 那边跑，见 LOCAL_SUBS）
+    'library.py': 'core/bin/library.py',                 # 素材库索引（程序文件夹 素材库/索引）
+    'navigation.py': 'chapters/scripts/navigation.py',   # 导航条出片（Codex 沙盒里 swift 跑不了）、存样式预设（chapters/配置）
+    'thinkcut_config.py': 'bin/thinkcut_config.py',      # 新建、删除、迁移 IP 配置档（用户配置档在项目以外）
+    'thinkcut_feedback.py': 'bin/thinkcut_feedback.py',  # 交反馈单（internal/经验/待审）
 }
+# 这几个程序里只读、只写项目的子命令留在 AI 那边跑（不用等代办）：程序名 → (要代办的子命令, 全局选项里带值的)
+CODA = {'library.py': ({'build', 'add-project', 'describe', 'notes-template', 'notes'}, {'--index', '--root'}),
+        'navigation.py': ({'render', 'preset-save'}, set()),
+        'thinkcut_config.py': ({'new', 'remove', 'migrate'}, set())}
 TEMPLATES = {'出片.py': ('studio/skill/thinkcut-edit/assets/hyperframes_template', 'studio/skill/thinkcut-edit/assets/blender_template')}
 WAIT_TAKEN = float(os.environ.get('THINKCUT_BROKER_TAKE') or 30)      # 这么久审片台还没接单：多半审片台没在跑
 LIMIT = 8 * 3600
@@ -58,8 +67,20 @@ def active():
     return background() and bool(os.environ.get(ENV_DIR))
 
 
+def _sub(argv, valued=()):
+    skip = False
+    for a in argv:
+        if skip: skip = False; continue
+        if a in valued: skip = True; continue
+        if not a.startswith('-'): return a
+    return ''
+
+
 def local_ok(name, argv):
-    """不用代办、就在 AI 那边跑的：审片台 workbench 的回写、发布、读清单（只读写项目里的文件）。"""
+    """不用代办、就在 AI 那边跑的：审片台 workbench 的回写、发布、读清单（只读写项目里的文件）；CODA 里那几个程序要代办的子命令以外的。"""
+    if name in CODA:
+        subs, valued = CODA[name]
+        return _sub(argv, valued) not in subs
     return name == 'thinkcut_edit.py' and argv[:1] == ['workbench'] and any(a in argv for a in _WB_LOCAL)
 
 
@@ -106,26 +127,51 @@ def _inside(p, roots):
 def _sha(f): return hashlib.sha256(Path(f).read_bytes()).hexdigest()
 
 
-def _template_copy(path, roots, program):
-    """项目里复制的 出片.py：在项目里，且它和同一文件夹里与模板同名的 .py 都和程序里的某一套模板一字不差，才代跑（AI 改过的不代跑）。"""
+BLENDER = 'studio/skill/thinkcut-edit/assets/blender_template'
+BLENDER_FIXED = ('出片.py', 'worker.py', '布局检查.py')      # Blender 工程里程序自己的文件：要和模板一字不差；场景.py、布局.json、标签.json 是 AI 写的
+
+
+def _template_copy(path, roots, program, info=None):
+    """项目里复制的 出片.py 能不能代跑。
+    HyperFrames 工程：它和同一文件夹里与模板同名的 .py 都和模板一字不差（AI 写的是 镜头/*.html，在浏览器里跑）。
+    Blender 工程（2026-11-28）：出片.py、worker.py、布局检查.py 和模板一字不差就代跑，AI 改过的 场景.py 也跑——场景.py 是 AI 写的 Python、
+    在 Blender 里跑，所以整个放进专用沙盒（seatbelt()：能用显卡渲染，不联网、读不到钥匙、只能写项目和临时目录），info['sandbox'] 记上。
+    以前 AI 改过 场景.py 就不代跑，后台做不了 Blender 镜头（AI 自己的沙盒挡显卡，Blender 起不来，实测）。"""
     f = Path(path).resolve()
     if not _inside(f, roots) or f.name != '出片.py' or not f.is_file(): raise ValueError(f'出片.py 不在项目文件夹里：{f}')
     for t in TEMPLATES['出片.py']:
         tdir = program / t
-        if (tdir / '出片.py').is_file() and all(_sha(x) == _sha(f.parent / x.name) for x in tdir.glob('*.py') if (f.parent / x.name).is_file()) \
-                and _sha(tdir / '出片.py') == _sha(f):
+        if not (tdir / '出片.py').is_file(): continue
+        if t == BLENDER:
+            if all((f.parent / n).is_file() and _sha(tdir / n) == _sha(f.parent / n) for n in BLENDER_FIXED):
+                if info is not None: info['sandbox'] = True
+                return f
+        elif all(_sha(x) == _sha(f.parent / x.name) for x in tdir.glob('*.py') if (f.parent / x.name).is_file()) and _sha(tdir / '出片.py') == _sha(f):
             return f
-    raise ValueError('项目里的 出片.py（或它旁边的 .py）和程序里的模板不一样（改过，或是旧版模板）：不代跑。请用户在对话里让 AI 跑，或先用新模板重建')
+    raise ValueError('项目里的 出片.py（或它旁边程序自己的 .py）和程序里的模板不一样（改过，或是旧版模板）：不代跑。请用户在对话里让 AI 跑，或先用新模板重建')
 
 
-def check(req, roots, policy=None):
+def seatbelt(roots, home=None):
+    """代办跑 AI 写的代码（Blender 的 场景.py）时套的 macOS 沙盒：显卡、字体照常（allow default），不联网（本机 unix 套接字除外），
+    读不到钥匙串（文件和钥匙串服务都挡）、~/.ssh、~/.yxer、Codex 登录凭据，只能写项目文件夹和临时目录。2026-11-28 实测 Blender EEVEE 渲染正常。"""
+    h = str(home or Path.home())
+    q = lambda x: '"' + str(x).replace('\\', '\\\\').replace('"', '\\"') + '"'
+    deny_read = ' '.join(f'(subpath {q(x)})' for x in (h + '/Library/Keychains', '/Library/Keychains', h + '/.ssh', h + '/.yxer'))
+    write = ' '.join(f'(subpath {q(Path(r).resolve())})' for r in roots)
+    return ('(version 1)(allow default)(deny network*)(allow network* (local unix))'
+            f'(deny file-read* {deny_read} (literal {q(h + "/.codex/auth.json")}))'
+            '(deny mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.securityd.xpc") (global-name "com.apple.security.keychaind"))'
+            f'(deny file-write*)(allow file-write* {write} (subpath "/private/var/folders") (subpath "/private/tmp") (subpath "/dev"))')
+
+
+def check(req, roots, policy=None, info=None):
     """单子合不合规矩：白名单程序、工作目录和参数里的路径都在允许的文件夹里。返回 (程序, 工作目录) 或报 ValueError。
     policy(单子)：这个代办文件夹另加的限制（对话框的代办不跑导出、上传，2026-11-27），不合就报 ValueError。"""
     name = str(req.get('script') or '')
     if policy: policy(req)
     program = Path(os.environ.get('THINKCUT_BROKER_PROGRAM') or PROGRAM)       # 测试用替身程序目录
     roots = [Path(r).resolve() for r in roots]
-    if name in TEMPLATES: prog = _template_copy(req.get('path') or '', roots, program)
+    if name in TEMPLATES: prog = _template_copy(req.get('path') or '', roots, program, info)
     elif name in SCRIPTS: prog = program / SCRIPTS[name]
     else: raise ValueError(f'{name} 不在代办名单里')
     cwd = Path(str(req.get('cwd') or '')).resolve()
@@ -159,10 +205,12 @@ _lock = threading.Lock()
 def _run_one(q, rid, req, roots, log, policy=None):
     taken = q / f'run-{rid}.json'
     try:
-        prog, cwd = check(req, roots, policy)
+        info = {}; prog, cwd = check(req, roots, policy, info)
         env = {k: v for k, v in os.environ.items() if k not in (BACKGROUND, ENV_DIR, 'THINKCUT_BROKER_PROGRAM')}
-        if log: log(f"代办 {req.get('script')} {' '.join(req.get('argv', [])[:2])}")
-        p = subprocess.Popen([sys.executable, str(prog), *req.get('argv', [])], cwd=str(cwd), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        if log: log(f"代办 {req.get('script')} {' '.join(req.get('argv', [])[:2])}" + ('（专用沙盒）' if info.get('sandbox') else ''))
+        cmd = [sys.executable, str(prog), *req.get('argv', [])]
+        if info.get('sandbox'): cmd = ['/usr/bin/sandbox-exec', '-p', seatbelt(roots), *cmd]
+        p = subprocess.Popen(cmd, cwd=str(cwd), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              stdin=subprocess.DEVNULL, text=True, encoding='utf-8', errors='replace', start_new_session=True)
         with _lock: _procs.setdefault(str(q), set()).add(p)
         try: so, se = p.communicate(timeout=LIMIT); code = p.returncode
@@ -219,6 +267,6 @@ def chat_policy(req):
 def home_policy(req):
     """首页的对话框：只代办建项目、整理、存档这些（project.py，除了上传）和挪进回收站；要剪辑、做封面先“接到”那个项目，用项目的对话。"""
     name = str(req.get('script') or '')
-    if name not in ('project.py', 'thinkcut_trash.py'):
+    if name not in ('project.py', 'thinkcut_trash.py', 'thinkcut_config.py', 'library.py'):
         raise ValueError(f'首页对话只代办 project.py（开项、整理、存档）和挪进回收站；{name} 要在项目里做：先进那个项目，在审片台的对话里说')
     chat_policy(req)

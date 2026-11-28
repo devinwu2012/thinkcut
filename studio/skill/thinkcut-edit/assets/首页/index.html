@@ -57,7 +57,14 @@ select.field{-webkit-appearance:none;appearance:none;padding-right:28px}
 /* 程序名（2026-11-25 用户：“这里应该有应用名字 thinkcut 思刻”）：像 Mac 应用标题，IP 菜单在它右边，中间细分隔；窄窗口只留 ThinkCut */
 .appname{display:flex;align-items:baseline;gap:6px;font-size:var(--fs-15);font-weight:var(--fw-b);letter-spacing:-.01em;flex:none;color:var(--t1)}.appname .cn{font-size:var(--fs-12);font-weight:var(--fw-r);color:var(--t3)}
 .tsep{width:var(--hair-w);height:16px;background:var(--hair2);flex:none}
-@media (max-width:720px){.appname .cn{display:none}}@media (max-width:520px){.appname,.tsep{display:none}}
+/* 顶栏让位（规矩见 design/README.md 第 15 条）：按顶栏自己的宽度（对话侧栏打开时跟着变窄）判断。
+   先让：合计数 → AI 状态收成小圆点 → “思刻”两个字 → “对话”只留图标、“设置”收成图标 → IP 名截短 → 程序名。看板/列表、新建项目、对话一直在。 */
+.toolbar{container:tb/inline-size}
+@container tb (max-width:1000px){.toolbar #sum{display:none}}
+@container tb (max-width:860px){.toolbar #aiword{display:none}.toolbar .aisum{padding:0 7px}.appname .cn{display:none}}
+@container tb (max-width:720px){.toolbar{gap:var(--sp-2)}.toolbar .ipsum{max-width:140px}#setbtn .sl{display:none}}
+@container tb (max-width:560px){.appname,.tsep{display:none}.toolbar .ipsum{max-width:96px}#newbtn .nl{display:none}}
+@container tb (max-width:720px){#tcChatBtn .tc-l,#tcChatBtn kbd{display:none}}
 html.cutdesk-app .toolbar{padding-left:92px}   /* 在 Mac 外壳里：左边给窗口三颗灯留够空（C2 用户嫌太近）；拖窗口外壳来做 */
 .sum{font-size:var(--fs-12);color:var(--t3);overflow:hidden;text-overflow:ellipsis;min-width:0;display:flex;gap:var(--sp-1)}
 .sum b{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 var(--sp-2);border-radius:var(--r-s);font-weight:var(--fw-b)}.sum b::before{content:"";width:6px;height:6px;border-radius:var(--r-pill);background:currentColor}
@@ -129,10 +136,10 @@ main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
 <header class="toolbar">
 <span class="appname" aria-label="ThinkCut 思刻">ThinkCut<span class="cn">思刻</span></span><span class="tsep" aria-hidden="true"></span><details id="ippop" class="pop ovl"><summary class="ipsum" title="切换 IP：每个 IP 有自己的项目文件夹"><span id="ipname">…</span><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="pop-body ipmenu" id="ipbody" role="menu"></div></details><span id="sum" class="sum"></span><span class="grow"></span>
 <div class="seg" role="group" aria-label="看法"><button class="tbtn" id="v-board" aria-pressed="true">看板</button><button class="tbtn" id="v-list" aria-pressed="false">列表</button></div>
-<details id="aipop" class="pop ovl"><summary class="aisum" title="当前用哪个 AI、它的状态：点开看详情"><i id="aidot" class="dot"></i><span id="aiword">AI …</span></summary><div class="pop-body" id="aibody" style="width:440px"></div></details><button class="tbtn" id="setbtn" title="设置：选 AI、登录、豆包语音、蚁小二">设置</button>
+<details id="aipop" class="pop ovl"><summary class="aisum" title="当前用哪个 AI、它的状态：点开看详情"><i id="aidot" class="dot"></i><span id="aiword">AI …</span></summary><div class="pop-body" id="aibody" style="width:440px"></div></details><button class="tbtn" id="setbtn" title="设置：选 AI、登录、豆包语音、蚁小二" aria-label="设置"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.75v1.5M8 12.75v1.5M14.25 8h-1.5M3.25 8h-1.5M12.42 3.58l-1.06 1.06M4.64 11.36l-1.06 1.06M12.42 12.42l-1.06-1.06M4.64 4.64 3.58 3.58"/></svg><span class="sl">设置</span></button>
 <details id="helppop" class="pop ovl"><summary class="tbtn icon" aria-label="首页怎么用" title="首页怎么用"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.4 1.55c-.5.25-.8.6-.8 1.15v.3"/><circle cx="8" cy="11.3" r=".6" fill="currentColor" stroke="none"/></svg></summary><div class="pop-body help" style="width:360px">
 <h3>首页怎么用</h3><p><b>打开项目：</b>双击卡片（列表里双击一行），在本窗口打开。</p><p id="backhint"><b>回到首页：</b>在项目里点左上角“全部项目”，或按 <kbd>⌘W</kbd>。</p><p><b>一次一个：</b>一次只打开一个项目（达芬奇一次只打开一个工程）。</p><p style="margin:0"><b>右键卡片：</b>打开、在访达中显示、重命名、移到“已完成”、移到回收站。</p></div></details>
-<button id="tcChatBtn" type="button" title="跟 AI 说一句（⌘K）" aria-label="对话（⌘K）" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3h9c.83 0 1.5.67 1.5 1.5V10c0 .83-.67 1.5-1.5 1.5H8l-3 2.5v-2.5H3.5C2.67 11.5 2 10.83 2 10V4.5C2 3.67 2.67 3 3.5 3z"/></svg>对话<kbd>⌘K</kbd></button><details id="newpop" class="pop ovl"><summary class="tbtn primary" id="newbtn">＋ 新建项目</summary><div class="pop-body">
+<button id="tcChatBtn" type="button" title="跟 AI 说一句（⌘K）" aria-label="对话（⌘K）" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3h9c.83 0 1.5.67 1.5 1.5V10c0 .83-.67 1.5-1.5 1.5H8l-3 2.5v-2.5H3.5C2.67 11.5 2 10.83 2 10V4.5C2 3.67 2.67 3 3.5 3z"/></svg><span class="tc-l">对话</span><kbd>⌘K</kbd></button><details id="newpop" class="pop ovl"><summary class="tbtn primary" id="newbtn" title="新建项目" aria-label="新建项目">＋<span class="nl"> 新建项目</span></summary><div class="pop-body">
 <h3>新项目的题目</h3><span class="muted">可暂不填写，先命名为“未命名”，之后可右键“重命名…”</span><input id="newtitle" class="field" maxlength="60" placeholder="比如：卫生间防水到底刷多高">
 <div class="row"><span class="muted grow">程序直接建立项目文件夹，并进入该项目的文稿栏开始撰稿；无需 AI 在线。</span><button id="newgo" class="tbtn primary">建立并开始撰稿</button></div></div></details>
 </header>
@@ -218,7 +225,7 @@ $('v-board').onclick=()=>setView('board');$('v-list').onclick=()=>setView('list'
 // —— AI 在不在等（3 秒问一次） ——
 async function ai(){const a=await get('/api/ai').catch(()=>null);if(!a||!a.films){$('aidot').className='dot';$('aiword').textContent='AI …';return}const was=JSON.stringify([AI.all,AI.films]);AI=a;
   const n=a.films.length,e=a.engine||{},up=e.state==='在线';$('aidot').className='dot '+(AIDOT[e.state]||(a.all||n?'on':'off'));
-  $('aiword').textContent=e.name?`${e.name} · ${e.state}`:a.all?'AI 在线':n?`AI 在线 · ${n} 个项目`:'AI 离线';
+  $('aiword').textContent=e.name?`${e.name} · ${e.state}`:a.all?'AI 在线':n?`AI 在线 · ${n} 个项目`:'AI 离线';$('aiword').parentNode.title=$('aiword').textContent+'：点开看详情、换 AI';
   if(!$('aipop').open)aiPick();
   if(JSON.stringify([a.all,a.films])!==was)draw()}
 // —— 点右上角 AI 状态：直接列出这台 Mac 上的 AI，点一下就换（2026-11-26 用户：“我一点就能自动切换到那个 AI”）；更多设置在设置页 ——

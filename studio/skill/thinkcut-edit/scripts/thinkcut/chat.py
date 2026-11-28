@@ -31,7 +31,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import engine
+from . import engine, slash
 
 FILE = '对话.json'
 KEEP = 300                       # 记录最多留多少条
@@ -131,6 +131,7 @@ class Chat:
         f = self.focus(); other = bool(self.runner and self.runner.busy())
         pd = self.material_project() if self.kind == 'project' else None
         return {'ok': True, 'kind': self.kind, 'busy': self.busy(), 'other': other, 'messages': d['messages'][-120:], 'project': Path(pd).name if pd else '',
+                'commands': slash.commands(eid),
                 'focus': {'path': str(f), 'name': f.name} if f else None,
                 'engine': {'id': eid, 'name': st['name'], 'state': '处理中' if self.busy() or other else st['state'], 'why': st['why'], 'online': st['logged_in']}}
 
@@ -161,10 +162,14 @@ class Chat:
         text = str(text or '').strip(); files = self.check_files(files)
         if not text and not files: raise Oops('先写一句话')
         if len(text) > 8000: raise Oops('一次说的太长了（超过 8000 字）：分几次说，或者把长文放进文件里告诉 AI 在哪')
+        c = slash.classify(text, engine.chosen()) if text else {'kind': 'text'}
+        if c['kind'] == 'app': return self.app_command(c, text)          # /stop、/clear 这些 ThinkCut 自己做（AI 正在回复时也能用）
         with self.lock:
             if self.busy(): raise Oops('AI 还在回上一句：等它说完，或者先点“停止”')
             if self.runner and self.runner.busy(): raise Oops('AI 正在处理你在栏目里提交的意见（同一条会话）：等它做完再说，或先在右下角点“停止”')
             me = self.add(role='me', text=text, **({'files': files} if files else {}))
+            if c['kind'] == 'deny':
+                self.add(role='note', text=c['say'], slash=True, actions=[{'label': '看能用的命令', 'send': '/help'}]); return {'denied': True, 'id': me['id']}
             g = gate(text) if text else []
             if g:
                 act = [{'label': label, 'col': col} for _, _, col, label in g if col]
@@ -174,13 +179,46 @@ class Chat:
                 self.add(role='err', text=st['why'] or f'{st["name"]} 现在用不了', actions=[{'label': '打开设置', 'go': 'settings'}], retry=me['id'])
                 return {'id': me['id'], 'offline': True}
             self.stopping = False
+            if c.get('note'): self.add(role='note', text=c['note'], slash=True)
             ai = self.add(role='ai', text='', live='', steps=[], state='回复中', engine=eid, name=st['name'])
-            self.thread = threading.Thread(target=self._run, args=(ai['id'], text, files, eid), daemon=True); self.thread.start()
+            self.thread = threading.Thread(target=self._run, args=(ai['id'], c.get('send') or text, files, eid), daemon=True); self.thread.start()
         return {'id': me['id'], 'reply': ai['id']}
+
+    def app_command(self, c, text):
+        """ThinkCut 自己做的斜杠命令：/stop /clear /model /help /settings。"""
+        name, arg = c['name'], c['arg']; eid = engine.chosen(); st = engine.engine_status(eid)
+        if name == 'stop':
+            was = self.busy()
+            if was: self.stop()
+            self.add(role='me', text=text); self.add(role='note', text='停下了。' if was else '现在 AI 没在回复，不用停。'); return {'app': name}
+        if name == 'clear':
+            if self.busy(): raise Oops('AI 正在回复：先 /stop 再 /clear')
+            self.clear()
+            for e in engine.ENGINES: self.sessions.drop(e)
+            self.add(role='note', text='对话清空了。下一句 AI 新开一条会话（不记得前面说过的）' + ('；“提交 AI”也从新会话开始。' if self.kind == 'project' else '。'))
+            return {'app': name}
+        self.add(role='me', text=text)
+        if name == 'help':
+            self.add(role='note', text=slash.help_text(eid, st['name'])); return {'app': name}
+        if name == 'settings':
+            self.add(role='note', text='在设置里选 AI、填模型、配豆包和蚁小二。', actions=[{'label': '打开设置', 'go': 'settings'}]); return {'app': name}
+        # model
+        if not arg:
+            m = engine.model_of(eid)
+            self.add(role='note', text=f'现在用 **{st["name"]}**，模型：**{m or "它自己的默认"}**（右上角／设置里选的，对话一直用它，你不换它就不换）。换模型：/model 模型名（/model 默认 恢复）；换 AI 到设置里。',
+                     actions=[{'label': '打开设置', 'go': 'settings'}]); return {'app': name}
+        want = '' if arg in ('默认', '恢复默认') else arg
+        try: engine.set_model(eid, want)
+        except ValueError as e:
+            self.add(role='note', text=f'没换：{e}'); return {'app': name}
+        self.add(role='note', text=f'以后 {st["name"]} 用模型 **{want or "它自己的默认"}**（设置页里也改了；“提交 AI”也用它）。模型名你的账号用不了时，AI 会报错，再换一个。')
+        return {'app': name}
 
     def stop(self):
         """用户点“停止”：结束 AI 进程（连同它起的子进程）和对话代办起的程序。"""
-        self.stopping = True; p = self.proc
+        self.stopping = True; t0 = time.time()
+        while self.busy() and self.proc is None and time.time() - t0 < 5: time.sleep(0.05)      # 刚发出去、AI 还没起来：等它起来再停
+        p = self.proc
         with contextlib.suppress(Exception):
             import sys
             sys.path.insert(0, str(engine.PROGRAM / 'bin')); import thinkcut_broker
@@ -202,14 +240,18 @@ class Chat:
     def prompt(self, eid, text, files, cont=False):
         a = engine.ENGINES[eid]; skill = engine.SKILL; prog = engine.PROGRAM
         edit = engine.SCRIPT; proj = prog / 'projects' / 'bin' / 'project.py'; trash = prog / 'bin' / 'thinkcut_trash.py'
+        tmp = (self.file.parent if self.kind == 'project' else self.workdir()) / 'tmp'      # 在工作目录里面：Claude 的 Write 只放行工作目录（2026-11-28）
+        with contextlib.suppress(OSError): tmp.mkdir(parents=True, exist_ok=True)
         common = f"""规矩（必须照做）：
-1. 先读要用的技能说明：项目（开项、整理素材、存档） {prog}/projects/skills/thinkcut-project/SKILL.md，剪辑 {skill}/SKILL.md。
+1. 先读要用的技能说明：项目（开项、整理素材、存档） {prog}/projects/skills/thinkcut-project/SKILL.md，剪辑 {skill}/SKILL.md。{engine.HELPERS_NOTE}
 2. 加素材：用户说了文件在哪，python3 "{edit}" workbench "<项目文件夹>" --add-material "路径1" "路径2"（复制进 01_原始素材，同名不覆盖、半截不留），再按 thinkcut-project 的规矩整理（分 A roll／B roll／音乐、改规范名字、登记素材清单、materials-check）。用户拖进来的文件程序已经放进 01_原始素材，下面会列出来。
 3. 只认用户在页面上亲手点的：整片导出、上传／发布（蚁小二）、定稿、确认（可以／选这个／采纳）。用户在对话里要求这些，你不做，告诉他去哪一栏点哪个按钮。
 4. 不永久删除任何东西（不用 rm）：要挪走就 python3 "{trash}" 路径，挪进回收站。不读、不打印、不改钥匙和密钥。命令不联网；豆包识别／合成、要连达芬奇的、生图、project.py 这些我们自己的程序照常运行，会自动交给审片台代办。
 5. 要用户选：回复最后单独一行写“选项：A 的说法｜B 的说法｜C 的说法”（每项是用户点了就会回你的那句话，写成大白话）。
 6. 一条命令只做一件事：不要用 cd、&&、;、| 把几条拼在一起（工作目录已经是对的；拼起来的命令会被权限规则拒绝），路径写完整。
-7. 用中文大白话、简短，先说结果；运行命令时附的 description 也用中文（会显示在过程要点里）。临时文件放 {tempfile.gettempdir()}。"""
+7. 用中文大白话、简短，先说结果；运行命令时附的 description 也用中文（会显示在过程要点里）。临时文件放 {tmp}。
+8. {engine.LANG}
+9. {engine.tools_note(tmp)}"""
         if self.kind == 'project':
             from . import board
             pd = board.project_dir(self.job) or self.job.dir
@@ -226,15 +268,13 @@ class Chat:
 首页现在看的是 IP「{ip or '默认'}」，项目在 {here or roots}。
 开项：python3 "{proj}" init "6 位编号 题目"{where}（编号用今天的日期 {time.strftime('%y%m%d')}，撞号程序自动顺延；建好文件夹和达芬奇库；它会交给审片台代办跑，打印出项目文件夹）。存档、整理检查也用 python3 "{proj}" <命令> "<项目文件夹>"。
 要动哪个项目，先说清楚是哪个（拿不准就用“选项：”让用户挑）。某一个项目里面的事（加素材、整理素材、文稿、口播精剪、动画、审片、封面、发布）不在首页做，免得几个项目混在一段对话里：开项以后、或认准是哪个项目以后，在回复最后单独一行写“转到项目：<项目文件夹完整路径>”，程序会把用户这句话带进那个项目自己的对话，用户点“进入项目”就在那边接着做。"""
-        lines = [head, common, '']
-        if cont: lines.append(text)
-        else:
-            lines.append('用户说：' + (text or '（没写字，只放了文件）'))
-            if files:
-                pd = self.material_project()
-                lines.append(f'用户拖进来的文件，程序已经放进项目「{Path(pd).name}」：')
-                lines += [f'  {pd}/{x["path"]}（{x["size"] / 1024 / 1024:.1f} MB）' for x in files]
-        return '\n'.join(lines)
+        system = head + '\n' + common + '\n用户的话可能以斜杠命令开头（如 /goal、/thinkcut:thinkcut-project）：那是用户要用这个命令，照命令做，规矩照旧。'
+        lines = [text or '（没写字，只放了文件）']
+        if files:
+            pd = self.material_project()
+            lines.append(f'（ThinkCut：用户拖进来的文件，程序已经放进项目「{Path(pd).name}」：）')
+            lines += [f'  {pd}/{x["path"]}（{x["size"] / 1024 / 1024:.1f} MB）' for x in files]
+        return system, '\n'.join(lines)
 
     def _run(self, mid, text, files, eid, cont=False):
         try:
@@ -306,10 +346,11 @@ class Chat:
         self.update(mid, f); self.alive()
 
     def _exec(self, a, exe, text, session, eid, mid):
-        argv, new = a.command(exe, text, self.workdir(), session, self.writable(), engine.model_of(eid), stream=True)
+        system, msg = text
+        argv, new = a.command(exe, msg, self.workdir(), session, self.writable(), engine.model_of(eid), stream=True, system=system)
         if new: self.sessions.put(eid, new)
         log = self.file.parent / 'AI记录' / f'{time.strftime("%Y%m%d-%H%M%S")}-对话-{eid}.jsonl'
-        got = {'final': '', 't': 0.0, 'live': ''}
+        got = {'final': '', 't': 0.0, 'live': '', 'compact': ''}
 
         def flush(force=False):
             if force or time.time() - got['t'] > 0.25:
@@ -317,6 +358,11 @@ class Chat:
 
         def on(kind, val):
             if kind == 'session': self.sessions.put(eid, val)
+            elif kind == 'compact':
+                got['compact'] = val; self._step(mid, f'压缩了前面的对话：{val}')
+                got['final'] = f'压缩好了：前面的对话从 {val.replace(" → ", " 压到 ")}，要点 AI 还记着，接着说就行。'
+                self.update(mid, lambda m: m.update(text=got['final'], live=''))
+            elif got['compact'] and kind in ('say', 'delta', 'final'): pass        # 压缩后重放的旧回复，不当新的
             elif kind == 'delta': got['live'] += val; flush()
             elif kind == 'say':
                 got['final'] = val; got['live'] = ''
@@ -328,7 +374,11 @@ class Chat:
                 self._step(mid, val)
             elif kind == 'final': got['final'] = val
         self.workdir().mkdir(parents=True, exist_ok=True); self.broker.mkdir(parents=True, exist_ok=True)
-        code, err, tail = engine.run_once(a, argv, self.workdir(), a.env(exe, self.job, self.broker), log, on, lambda p: setattr(self, 'proc', p))
+        def keep(p):
+            self.proc = p
+            if self.stopping: engine.kill(p)          # 起来之前用户已经点了停止
+        self.proc = None
+        code, err, tail = engine.run_once(a, argv, self.workdir(), a.env(exe, self.job, self.broker), log, on, keep)
         if code is None: return '出错', engine.humane(eid, err), ''
         if self.stopping: return '已停止', '', got['final']
         if code != 0 or err: return '出错', engine.humane(eid, err or '\n'.join(tail), code), got['final']
@@ -397,3 +447,9 @@ def for_home(roots, open_job, alive=lambda: None, current=lambda: (None, None)):
 def broker_roots_home(c):
     """首页对话的代办收哪些路径：工作区、临时目录、各个放项目的文件夹（开项、存档要写到那里；代办只跑 project.py 和挪进回收站）。"""
     return [c.workdir(), Path(tempfile.gettempdir()), *[Path(r) for r in c.roots()]]
+
+
+def skills_plugin():
+    """ThinkCut 技能插件文件夹（2026-11-28 起挪到 aitools.plugin_dir，Claude 后台每次都带上；这里留个名字给老调用）。"""
+    from . import aitools
+    return aitools.plugin_dir()

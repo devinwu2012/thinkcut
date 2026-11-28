@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from review_build import active_map, effective_cuts, fragment_problem, proofread_problem
 
-from project_runtime import ROOT, RUN, PROJECT, SOURCE_ID, NAME, CONFIG
+from project_runtime import ROOT, RUN, PROJECT, SOURCE_ID, NAME, CONFIG, SPEED
 from source_guard import verify_source
 INPUT_NAMES = ['review_v2_state.json', 'review_v2.json', 'character_alignment.json', 'sentence_units.json', 'glossary.txt']
 BUILD_INPUTS = ['src/project_runtime.py', 'src/source_guard.py', 'src/timing.py', 'src/tight_cut.py', 'src/review_build.py',
@@ -181,6 +181,8 @@ def _prepare_locked():
     if (stat.st_size, stat.st_mtime_ns) != (baseline['source_size'], baseline['source_mtime_ns']):
         raise ValueError('Original source has changed; recheck media before delivery')
     source_info = {'path': str(source), 'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns, 'media_pool_item_id': SOURCE_ID}
+    if CONFIG.get('voice'):      # 2026-11-27 起倍速在达芬奇里做：放片段时按这个速度换算原片帧、设速度（老项目不写，交付包身份不变）
+        source_info['speed'] = SPEED
     state, review, aligned = (json.loads(snapshot[name]) for name in INPUT_NAMES[:3])
     semantic = effective_cuts(review['cards'], state)
     missing = [t['id'] for t in aligned['tokens'] if not t['ready'] and

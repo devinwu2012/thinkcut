@@ -215,10 +215,13 @@ class LiteTests(Base):
         self.assertEqual(W.load(full)['markers'][0]['text'], '口播阶段记的'); self.assertEqual(W.board.load(full)['edits'][0]['id'], '改1')
         self.assertEqual(W.aroll_of(full), a)
 
-    def test_job_aroll_wins_over_the_command(self):
+    def test_command_named_aroll_is_shown_and_job_json_is_kept(self):
+        # 2026-11-27 261114 反馈单 新3（改了以前“job.json 的 aroll 说了算”）：命令点名的剪口播工程口播精剪栏显示它；job.json 不动
         a = standard(self.tmp / '项目'); b = aroll_project(self.tmp / '项目' / '02_制作', '另一条_AI剪辑')
         d = self.tmp / '项目' / '02_制作' / '自动剪辑'; d.mkdir(); wj(d / 'job.json', {'fps': '30000/1001', 'format': '3:4', 'aroll': str(a)})
-        self.assertEqual(W.aroll_of(W.open_film(d, b)), a)
+        self.assertEqual(W.aroll_of(W.open_film(d, b)), b.resolve())
+        self.assertEqual(rj(d / 'job.json')['aroll'], str(a))
+        self.assertEqual(W.aroll_of(W.open_film(d)), b.resolve())         # 之后不点名也还是它
 
     def test_non_standard_aroll_keeps_data_inside_and_moves_it_after_init_elsewhere(self):
         a = aroll_project(self.tmp / '随便放'); job = W.open_film(a)

@@ -783,6 +783,7 @@ def main():
             write(config, {"default_preset": args.name})
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin")); import thinkcut_broker; thinkcut_broker.hook(__file__)      # noqa: E402  后台 AI：出片、存预设交给审片台代办（2026-11-28）
     try:
         main()
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError, ImportError) as exc:

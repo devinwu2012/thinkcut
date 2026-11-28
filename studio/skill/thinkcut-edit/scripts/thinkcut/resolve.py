@@ -24,6 +24,41 @@ def connect():
     return r
 
 
+def running(pgrep='pgrep'):
+    """达芬奇开着没有（看进程；后台 AI 的沙盒里 pgrep 拿不到进程列表，所以这条命令走代办，2026-11-28）。"""
+    import subprocess
+    try: r = subprocess.run([pgrep, '-f', 'DaVinci Resolve.app/Contents/MacOS/Resolve'], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError): return None
+    return r.returncode == 0 if r.returncode in (0, 1) else None
+
+
+def live_status(resolve=None, is_running=running):
+    """只读看一眼达芬奇（2026-11-28：后台 AI 想知道达芬奇开没开、开的哪个工程哪条时间线、有几条画面轨，以前用 pgrep、自己写脚本连，沙盒里都不通）：
+    开没开、数据库、工程、当前时间线、每条画面轨（第几条、名字、开没开、锁没锁、几个片段）、音频轨数。不写任何东西，不拿写入锁。"""
+    out = {'达芬奇开着': is_running()}
+    if out['达芬奇开着'] is False and resolve is None:
+        out['说明'] = '达芬奇没开：要用它的步骤先请用户打开达芬奇'; return out
+    if resolve is None:
+        os.environ.setdefault('RESOLVE_SCRIPT_LIB', LIB)
+        if API + '/Modules' not in sys.path: sys.path.insert(0, API + '/Modules')
+        try:
+            import DaVinciResolveScript as d
+            resolve = d.scriptapp('Resolve')
+        except ImportError: resolve = None
+        if resolve is None:
+            out['说明'] = '连不上达芬奇脚本接口：达芬奇还在启动，或 偏好设置 → 系统 → 常规 的“外部脚本使用”不是“本地”'; return out
+    pm = resolve.GetProjectManager(); db = pm.GetCurrentDatabase() or {}; p = pm.GetCurrentProject()
+    out['数据库'] = db.get('DbName') or db.get('DbType') or ''
+    if not p: out['说明'] = '达芬奇开着，但没有打开工程'; return out
+    out['工程'] = p.GetName(); tl = p.GetCurrentTimeline()
+    if not tl: out['说明'] = '工程开着，但没有当前时间线'; return out
+    out['当前时间线'] = tl.GetName()
+    out['画面轨'] = [{'第几条': i, '名字': tl.GetTrackName('video', i), '开着': bool(tl.GetIsTrackEnabled('video', i)), '锁着': bool(tl.GetIsTrackLocked('video', i)),
+                   '片段数': len(tl.GetItemListInTrack('video', i) or [])} for i in range(1, int(tl.GetTrackCount('video') or 0) + 1)]
+    out['音频轨数'] = int(tl.GetTrackCount('audio') or 0)
+    return out
+
+
 # ---------- 达芬奇写入锁（2026-11-21 新17：两个会话同时重建审核线、渲小样，达芬奇卡死在“渲染中”，只能强制结束） ----------
 # 本机固定一个文件，和 口播剪辑 的 B-roll/花字写入是同一把（engine/broll/live/workspace.py write_lock），跟片子无关。
 # 用 fcntl.flock 加独占锁：进程退出（做完、崩溃、被杀）系统自动放锁，所以持锁进程不在了锁就自动失效，不用手删。

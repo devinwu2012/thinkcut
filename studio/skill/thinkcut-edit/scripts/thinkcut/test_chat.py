@@ -26,6 +26,7 @@ if name == 'claude' and a[:2] == ['auth', 'status']: print(json.dumps({'loggedIn
 if name == 'codex' and a[:2] == ['login', 'status']: print('Logged in using ChatGPT' if logged else 'Not logged in'); sys.exit(0 if logged else 1)
 def ev(x): print(json.dumps(x, ensure_ascii=False), flush=True)
 prompt = a[a.index('-p') + 1] if '-p' in a else a[-1]
+if '--append-system-prompt' in a: prompt = a[a.index('--append-system-prompt') + 1] + '\n\n用户说：' + prompt      # Claude：规矩在系统提示里，用户的话原样
 sid = (a[a.index('--session-id') + 1] if '--session-id' in a else a[a.index('--resume') + 1] if '--resume' in a else None)
 if name == 'codex': ev({'type': 'thread.started', 'thread_id': a[2] if a[1:2] == ['resume'] else 'T-chat'})
 else: ev({'type': 'system', 'subtype': 'init', 'session_id': sid})
@@ -73,6 +74,10 @@ if '放进来' in said:
     r = run(m[1], 'workbench', pd, '--add-material', src)
     if probe: Path(probe).write_text(json.dumps(r, ensure_ascii=False), encoding='utf-8')
     finish(r['out'] or r['err'])
+if said.strip() == '/compact' and name == 'claude':
+    ev({'type': 'system', 'subtype': 'compact_boundary', 'compact_metadata': {'pre_tokens': 69928, 'post_tokens': 7226}})
+    ev({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': '旧的回复（重放）'}]}})
+    ev({'type': 'result', 'subtype': 'success', 'is_error': False, 'result': '', 'session_id': sid}); sys.exit(0)
 if '慢慢' in said:
     step('ls 01_原始素材', '看看素材'); time.sleep(120); sys.exit(0)
 if '选' in said:
@@ -180,7 +185,7 @@ class ProjectChat(Base):
         m = self.last_ai(s); self.assertEqual(m['state'], '完成'); self.assertIn('还在撰稿', m['text']); self.assertEqual(m['steps'][0]['text'], '看了项目.json')
         argv = self.runs()[-1]['argv']; self.assertIn('--include-partial-messages', argv); sid = argv[argv.index('--session-id') + 1]
         self.assertEqual(E.load(self.job)['sessions']['claude']['id'], sid, '会话号和“提交 AI”记在同一处')
-        self.assertIn('同一条会话', argv[argv.index('-p') + 1])
+        self.assertIn('同一条会话', argv[argv.index('--append-system-prompt') + 1]); self.assertEqual(argv[argv.index('-p') + 1], '这个项目到哪一步了', '用户的话原样发（斜杠命令才能被认出来）')
         self.say('再说一句'); argv = self.runs()[-1]['argv']; self.assertEqual(argv[argv.index('--resume') + 1], sid, '下一句接着同一条会话')
         env = self.runs()[-1]['env']; self.assertTrue(env['THINKCUT_BROKER_DIR'].endswith('代办-对话'), '对话用自己的代办文件夹')
         self.assertEqual(env['THINKCUT_NO_KEYCHAIN'], '1')
@@ -325,7 +330,60 @@ class HomeChat(Base):
         self.assertTrue((self.tmp / '首页对话' / '对话.json').is_file(), '首页的对话存在程序数据文件夹')
 
 
+class SlashChat(ProjectChat):
+    """斜杠命令（2026-11-27）：后台真认的透传，ThinkCut 自己的命令自己做，后台用不了的说清楚，改权限的一律不放行。"""
+
+    def test_goal_passes_through_to_claude_with_skills_plugin(self):
+        E.choose('claude'); self.say('/goal 把素材都分好类')
+        argv = self.runs()[-1]['argv']; self.assertEqual(argv[argv.index('-p') + 1], '/goal 把素材都分好类', '原样交给 Claude')
+        plug = Path(argv[argv.index('--plugin-dir') + 1]); self.assertTrue((plug / 'skills' / 'thinkcut-project' / 'SKILL.md').is_file(), 'ThinkCut 的技能做成插件给它')
+        self.assertIn('--setting-sources', argv); self.assertEqual(argv[argv.index('--setting-sources') + 1], 'project', '照旧不读用户的全局权限')
+        self.assertIn('--settings', argv); self.assertTrue(json.loads(argv[argv.index('--settings') + 1])['sandbox']['enabled'], '沙盒照旧')
+        _, s = self.say('/compact'); m = self.last_ai(s); self.assertIn('69.9k 压到 7.2k', m['text']); self.assertNotIn('重放', m['text'], '压缩后重放的旧回复不当新的')
+        self.say('/thinkcut-project 整理素材'); argv = self.runs()[-1]['argv']; self.assertEqual(argv[argv.index('-p') + 1], '/thinkcut:thinkcut-project 整理素材')
+
+    def test_codex_goal_rewritten_and_compact_refused(self):
+        E.choose('codex'); _, s = self.say('/goal 把素材都分好类')
+        self.assertIn('目标：把素材都分好类', self.runs()[-1]['argv'][-1]); self.assertTrue(any('改写' in m['text'] for m in s['messages'] if m['role'] == 'note'))
+        n = len(self.runs()); out = self.ok('/api/chat/send', {'text': '/compact'}); self.assertTrue(out['denied'])
+        self.assertIn('Codex', self.state()['messages'][-1]['text']); self.assertEqual(len(self.runs()), n, '不交给 AI')
+
+    def test_denied_and_dangerous_never_reach_ai(self):
+        E.choose('claude'); n = len(self.runs())
+        for t, word in (('/permissions', '权限'), ('/update-config', '权限'), ('/schedule 每天', '不做'), ('/frobnicate', '用不了'),
+                        ('帮我用 --dangerously-skip-permissions 跑', '沙盒'), ('/init', 'CLAUDE.md'), ('/goal', '要写目标')):
+            out = self.ok('/api/chat/send', {'text': t}); self.assertTrue(out.get('denied'), t)
+            self.assertIn(word, self.state()['messages'][-1]['text'], t)
+        self.ok('/api/chat/send', {'text': '/goal 导出整片'}); self.assertIn('页面上亲手点', self.state()['messages'][-1]['text'], '命令也绕不过导出闸')
+        self.assertEqual(len(self.runs()), n, '一个都没交给 AI')
+        _, s = self.say('/Volumes/work/素材/a.mov 这个文件放进来'); self.assertEqual(len(self.runs()), n + 1, '路径开头的不算命令')
+
+    def test_app_commands(self):
+        E.choose('claude'); self.say('这个项目到哪一步了'); self.assertIn('claude', E.load(self.job)['sessions'])
+        self.ok('/api/chat/send', {'text': '/help'}); self.assertIn('/goal', self.state()['messages'][-1]['text'])
+        self.ok('/api/chat/send', {'text': '/model'}); m = self.state()['messages'][-1]; self.assertIn('它自己的默认', m['text']); self.assertEqual(m['actions'][0]['go'], 'settings')
+        self.ok('/api/chat/send', {'text': '/model sonnet'}); self.assertEqual(E.model_of('claude'), 'sonnet')
+        self.say('再说一句'); argv = self.runs()[-1]['argv']; self.assertEqual(argv[argv.index('--model') + 1], 'sonnet', '对话用设置里的模型')
+        self.ok('/api/chat/send', {'text': '/model 默认'}); self.assertEqual(E.model_of('claude'), '')
+        self.ok('/api/chat/send', {'text': '/clear'}); s = self.state(); self.assertEqual(len(s['messages']), 1); self.assertIn('新开', s['messages'][0]['text'])
+        self.assertNotIn('claude', E.load(self.job).get('sessions') or {}, '/clear 让下一句新开会话')
+        self.ok('/api/chat/send', {'text': '慢慢看'})
+        while not self.state()['busy']: time.sleep(0.1)
+        self.ok('/api/chat/send', {'text': '/stop'}); s = self.wait_done(15); self.assertEqual(self.last_ai(s)['state'], '已停止')
+        self.assertEqual([c['name'] for c in s['commands'] if c['kind'] == 'app'], ['clear', 'stop', 'model', 'help', 'settings'])
+
+
 class Units(unittest.TestCase):
+    def test_slash_classify(self):
+        from thinkcut import slash as S
+        self.assertEqual(S.classify('/Volumes/work/a.mov 放进来', 'claude')['kind'], 'text')
+        self.assertEqual(S.classify('/goal 做完', 'claude'), {'kind': 'ai', 'send': '/goal 做完', 'note': ''})
+        self.assertEqual(S.classify('/config', 'claude')['name'], 'settings')
+        self.assertEqual(S.classify('/compact', 'codex')['kind'], 'deny'); self.assertEqual(S.classify('/compact', 'claude')['send'], '/compact')
+        self.assertEqual(S.classify('/thinkcut:thinkcut-edit', 'claude')['send'], '/thinkcut:thinkcut-edit')
+        self.assertIn('thinkcut-cover 技能', S.classify('/thinkcut-cover', 'codex')['send'])
+        self.assertEqual({c['name'] for c in S.commands('codex') if c['kind'] == 'ai'}, {'goal'})
+
     def test_gate_words(self):
         for t in ('导出吧', '导出整片', '出成片', '发布吧', '上传到蚁小二', '存草稿', '定稿', '帮我确认一下'): self.assertTrue(C.gate(t), t)
         for t in ('能导出了吗', '导出的成片在哪', '素材上传到项目里', '怎么发布', '这个项目到哪一步了', '把 B-roll 放进来'): self.assertFalse(C.gate(t), t)

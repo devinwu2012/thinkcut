@@ -18,7 +18,7 @@ from review_build import active_map, build_full
 import paragraph_editor
 from local_repetitions import refresh as refresh_repetitions
 
-from project_runtime import NAME, CONFIG, TOTAL
+from project_runtime import NAME, CONFIG, TOTAL, SPEED
 from web_delivery import DeliveryJob
 from source_guard import verify_source,SourceChanged
 from prepare_mvp_delivery import exclusive_lock, delivering
@@ -34,12 +34,22 @@ class FfmpegMissing(RuntimeError):
     """这台 Mac 找不到 ffmpeg，预览片段转不出来。"""
 
 
+def preview_inputs(index,source):
+    """第 index 段预览（加速后的时间，每段 360 帧）的 ffmpeg 输入和滤镜。老项目口播源就是加速版，直接切；
+    倍速在达芬奇里做的项目（2026-11-27 起）：画面从原片按 1.2 倍时间切、加速成 29.97 帧，声音用加速声音文件同一段，和剪口播读的声音一致。"""
+    start=index*PART_SECONDS;length=min(PART_SECONDS,TOTAL/(30000/1001)-start)
+    if not CONFIG.get('voice'):
+        return ['-ss',str(start),'-i',str(source),'-t',str(length),'-map','0:v:0','-map',f"0:a:{CONFIG.get('audio_stream',0)}",'-vf','scale=960:-2']
+    return ['-ss',f'{start*SPEED:.6f}','-i',str(source),'-ss',f'{start:.6f}','-i',str(CONFIG['voice']),'-t',f'{length:.6f}',
+            '-map','0:v:0','-map','1:a:0','-vf',f'setpts=(PTS-STARTPTS)/{SPEED:g},fps=30000/1001,scale=960:-2']
+
+
 def preview_part(index):
     verify_source(CONFIG,RUN)
     if not CONFIG or not 0<=index<math.ceil(TOTAL/360):raise ValueError('Invalid preview segment')
     source=__import__('pathlib').Path(CONFIG['source'])
     before=source.stat();cache=RUN/'preview_parts';cache.mkdir(exist_ok=True)
-    identity=hashlib.sha256(json.dumps([str(source),before.st_size,before.st_mtime_ns,before.st_ctime_ns]).encode()).hexdigest()[:12]
+    identity=hashlib.sha256(json.dumps([str(source),before.st_size,before.st_mtime_ns,before.st_ctime_ns]+([CONFIG['voice'],SPEED] if CONFIG.get('voice') else [])).encode()).hexdigest()[:12]
     path=cache/f'{identity}_{index}.mp4'
     with LOCK:guard=PART_LOCKS.setdefault(index,threading.Lock())
     with guard:
@@ -48,9 +58,7 @@ def preview_part(index):
             ffmpeg=shutil.which('ffmpeg')
             if not ffmpeg:raise FfmpegMissing('这台 Mac 找不到 ffmpeg（没装，或不在 PATH 里），预览画面出不来。请让 AI 运行 bash bin/setup_mac.sh 装好后重开审片台。')
             try:
-                process=subprocess.run([ffmpeg,'-hide_banner','-loglevel','error','-nostdin','-y',
-                    '-ss',str(index*PART_SECONDS),'-i',str(source),'-t',str(min(PART_SECONDS,TOTAL/(30000/1001)-index*PART_SECONDS)),
-                    '-map','0:v:0','-map',f"0:a:{CONFIG.get('audio_stream',0)}",'-vf','scale=960:-2',
+                process=subprocess.run([ffmpeg,'-hide_banner','-loglevel','error','-nostdin','-y',*preview_inputs(index,source),
                     '-c:v','h264_videotoolbox','-b:v','2000k','-c:a','aac','-b:a','128k','-movflags','+faststart',str(temporary)],
                     capture_output=True,text=True,timeout=120)
                 after=source.stat()
@@ -249,7 +257,7 @@ class Handler(BaseHTTPRequestHandler):
                     s=paragraph_editor.change(previous,body,m)
                     refresh_repetitions(s,m)
                     import pause_refine   # 删句、恢复之后按新的删句重算接缝（2026-11-13，Q060）
-                    s=pause_refine.after_edit(RUN,m['cards'],previous,s,paragraph_editor.alignment(),TOTAL,CONFIG.get('source'))
+                    s=pause_refine.after_edit(RUN,m['cards'],previous,s,paragraph_editor.alignment(),TOTAL,CONFIG.get('voice') or CONFIG.get('source'))
                     s['saved_at']=datetime.now(timezone.utc).isoformat()
                     result=paragraph_editor.payload(m,s)
                     if not result['segments']:raise ValueError('不能删除全部口播文字；此次未修改。')

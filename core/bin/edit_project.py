@@ -11,6 +11,7 @@ import time
 import subprocess
 import sys
 from datetime import datetime
+from fractions import Fraction
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -19,7 +20,7 @@ ENGINE=ROOT/'engine'
 sys.path.insert(0,str(ENGINE/'src'))
 from probe_media import probe
 from editing_preflight import alignment_runtime
-from source_guard import verify_source,single_audio,replace_source,SourceChanged,standard_project_root
+from source_guard import verify_source,single_audio,replace_source,SourceChanged,standard_project_root,video_identity
 
 @contextmanager
 def delivery_lock(run):
@@ -174,6 +175,15 @@ def serve(run,env,args):
     if code:raise SystemExit(f'审片台没有打开（退出码 {code}）；剪口播后台已在 {info["url"]} 运行。')
 
 
+def polish(folder,amount):
+    """剪口播交付后整条修音（2026-11-27 用户：“口播都已经剪好了，再整个调一遍人声”；261114 反馈单 新1）：
+    交给 thinkcut-edit 的 aroll-polish，在主线副本「<主线>_修音」上做达芬奇人声隔离＋修音＋分段响度补齐，主线不动。"""
+    entry=thinkcut_skill()/'scripts'/'thinkcut_edit.py'
+    if not entry.is_file():raise SystemExit(f'找不到 thinkcut-edit（{entry}）：设环境变量 THINKCUT_SKILL 指到它')
+    code=subprocess.run([sys.executable,str(entry),'aroll-polish',str(folder),'--amount',str(amount)],stdin=subprocess.DEVNULL).returncode
+    if code:raise SystemExit(f'修音没做完（退出码 {code}），看上面的提示')
+
+
 def stop(run,force=False):
     info=service_info(run)
     if not info:
@@ -203,6 +213,7 @@ def self_command(action,folder,args,*extra):
     command=[sys.executable,str(Path(__file__).resolve()),action,'--project-dir',str(folder),*map(str,extra)]
     if args.align_python and action in ('init','align'):command+=['--align-python',str(args.align_python)]
     if action=='init' and getattr(args,'retry_uncertain',False):command+=['--retry-uncertain']
+    if action=='init' and getattr(args,'speed',None) is not None:command+=['--speed',f'{args.speed:g}']
     return command
 
 
@@ -222,6 +233,56 @@ def machine_voice(video):
     try:record=json.loads(path.read_text(encoding='utf-8'))
     except (OSError,ValueError):return None
     return path if isinstance(record,dict) and record.get('占位') and isinstance(record.get('asr'),dict) else None
+
+
+SPEED=1.2       # 口播默认 1.2 倍速（2026-11-01 用户定）；2026-11-27 起在达芬奇里设，不重压视频
+
+
+def ffprobe_json(path,*entries):
+    out=subprocess.run(['ffprobe','-v','error','-show_entries',','.join(entries),'-of','json',str(path)],capture_output=True,text=True)
+    if out.returncode:raise SystemExit(f'读不出 {Path(path).name} 的信息：'+out.stderr.strip()[-300:])
+    return json.loads(out.stdout)
+
+
+def nominal_rate(track):
+    """原片标称帧率（达芬奇按它认片段帧号）：恒定帧率就是它；iPhone 可变帧率取最常见的帧间隔（标称 30）。"""
+    if track.get('fps'):return Fraction(track['fps']['num'],track['fps']['den'])
+    runs=track.get('stts_runs') or []
+    if not runs or not track.get('timescale'):raise SystemExit('读不出原片的帧率')
+    total={}
+    for count,delta in runs:total[delta]=total.get(delta,0)+count
+    return Fraction(track['timescale'],max(total,key=total.get))
+
+
+def duration_seconds(path):
+    return float(ffprobe_json(path,'format=duration')['format']['duration'])
+
+
+def make_voice(video,folder,speed,audio_stream=0):
+    """只把原片的声音做成 speed 倍速（2026-11-27 用户：“不需要重新压一遍视频……把语音单独导出来”）：
+    先把声音补齐到和画面一样从 0 开始（手机原片音轨常晚几十到几百毫秒），再 atempo 变速，存 PCM wav。
+    不做降噪、增益这些人声处理：人声剪完在达芬奇里整条修音（voice-polish）。同一个原片、同一个倍速再跑直接复用。"""
+    voice=folder/(f'口播声音_{speed:g}倍速.wav' if speed!=1 else '口播声音.wav')
+    record=voice.with_suffix('.json');stat=video.stat()
+    want={'原片':str(video),'大小':stat.st_size,'修改时间':stat.st_mtime_ns,'倍速':speed,'音轨':audio_stream}
+    try:
+        if voice.is_file() and json.loads(record.read_text(encoding='utf-8'))==want:return voice
+    except (OSError,ValueError):pass
+    if voice.exists():raise SystemExit(f'{voice} 已存在，但不是这个原片、这个倍速做的：确认不用了挪进回收站再跑，或换个项目文件夹')
+    ffmpeg=shutil.which('ffmpeg') or 'ffmpeg'
+    folder.mkdir(parents=True,exist_ok=True)
+    temporary=voice.with_name(f'.{voice.stem}.{os.getpid()}.partial.wav')
+    chain='aresample=async=1:first_pts=0'+(f',atempo={speed:g}' if speed!=1 else '')
+    started=time.monotonic()
+    try:
+        r=subprocess.run([ffmpeg,'-hide_banner','-loglevel','error','-nostdin','-y','-i',str(video),'-vn','-map',f'0:a:{audio_stream}',
+                          '-af',chain,'-c:a','pcm_s16le','-ar','48000','-ac','1',str(temporary)],capture_output=True,text=True)
+        if r.returncode:raise SystemExit('做倍速声音失败：'+r.stderr.strip()[-400:])
+        os.replace(temporary,voice)
+    finally:temporary.unlink(missing_ok=True)
+    atomic_text(record,json.dumps(want,ensure_ascii=False,indent=1))
+    print(f'口播声音 {speed:g} 倍速 → {voice.name}（{time.monotonic()-started:.1f} 秒；画面不重压，放进达芬奇时设 {speed*100:g}% 速度）')
+    return voice
 
 
 INIT_FILES=('sentence_units.json','sentence_boundaries.json','project_runtime.json')
@@ -480,13 +541,15 @@ def default_project_dir(video):
 
 def main():
     parser=argparse.ArgumentParser(description='新片：初始化、声学对齐、生成审核、文案对照、打开审片台口播剪辑栏、MCP 交付；不渲染')
-    parser.add_argument('action',choices=['prepare','finish','init','align','review','script','proofread','refine','corrections','serve','stop','status','deliver','clean','replace-source','reopen'])
+    parser.add_argument('action',choices=['prepare','finish','init','align','review','script','proofread','refine','corrections','serve','stop','status','deliver','clean','replace-source','reopen','polish'])
     parser.add_argument('--project-dir',type=Path,help='项目目录；新项目不填时按素材项目结构选择，其他动作必填')
     parser.add_argument('--video',type=Path,help='prepare/init：原片；replace-source：同帧数的新口播')
     parser.add_argument('--old',type=Path,help='replace-source：换源前的旧口播文件（给了就逐帧抽查画面）')
     parser.add_argument('--audio-stream',type=int)
+    parser.add_argument('--speed',type=float,help='prepare/init：口播倍速，默认 1.2（在达芬奇里设，不重压视频）；用户说这条不加速时 --speed 1')
     parser.add_argument('--retry-uncertain',action='store_true',help='prepare/init：上次识别请求没有完整结果（可能已计费）时，用户核对过豆包用量、同意重试才加')
     parser.add_argument('--align-python',type=Path)
+    parser.add_argument('--amount',type=int,default=70,help='polish：人声隔离强度（默认 70）')
     parser.add_argument('--port',type=int,help='serve：指定端口；不填则自动找空闲端口')
     parser.add_argument('--no-open',action='store_true',help='serve：不自动在浏览器打开审片台')
     parser.add_argument('--backend',action='store_true',help='serve：只起剪口播后台（审片台按需调用，不打开审片台）')
@@ -512,10 +575,22 @@ def main():
         if not args.video:parser.error('初始化需要 --video')
         video=args.video.expanduser().resolve(strict=True)
         info=probe(video);track=next(t for t in info['tracks'] if t['handler']=='vide')
-        if track.get('fps')!={'num':30000,'den':1001} or not track.get('constant_presentation_duration'):
-            parser.error('本版剪切引擎只支持恒定 30000/1001 fps；不强行套用其他帧率')
         # 三个文件都在才算已初始化；上次写到一半就断了（没有审核状态）时放行，下面整套重写补齐
         if initialized(run) or (run/'review_v2_state.json').exists():parser.error('项目已初始化；不要覆盖审核状态')
+        # 2026-11-27 起：原片不重压，只把声音做成 1.2 倍速送识别、剪辑；放进达芬奇时用原片、设 120% 速度。机器配音占位还是老办法（本来就是 29.97、不加速）
+        legacy=bool(machine_voice(video))
+        speed=None if legacy else (SPEED if args.speed is None else args.speed)
+        if speed is not None and not 0.5<=speed<=4:parser.error('--speed 要在 0.5 到 4 之间')
+        if speed is not None and args.speed is None and video.stem.endswith('_人声处理'):
+            parser.error(f'{video.name} 看着是旧的 speed_voice.py 做过的加速版。现在不用先转码：直接给 01_原始素材 里的原片；'
+                         '确实要用这个已经加速过的文件，加 --speed 1（不再加速）')
+        if speed is None:
+            if track.get('fps')!={'num':30000,'den':1001} or not track.get('constant_presentation_duration'):
+                parser.error('本版剪切引擎只支持恒定 30000/1001 fps；不强行套用其他帧率')
+        else:
+            rate=nominal_rate(track)
+            if rate<Fraction(30000,1001):
+                parser.error(f'原片 {float(rate):g} 帧/秒，低于 29.97：达芬奇里放不准片段长度。这条先用 python3 bin/speed_voice.py <原片> 转成 29.97 帧，再拿转好的文件加 --speed 1 剪')
         single_audio(info,args.audio_stream or 0)
         # Video edit lists normally skip one frame of B-frame delay; an audio start offset (phone AAC priming) is rarer.
         audio=next(t for t in info['tracks'] if t['handler']=='soun')
@@ -523,22 +598,29 @@ def main():
         offset_ms=round(sum(e['media_time'] for e in edits if e['media_time']>0)/audio.get('timescale',1)*1000,1) if edits else 0
         # An empty edit delays the whole audio track: transcription times start at the first sample,
         # Resolve plays it later, so every cut lands early and swallows words (2026-10-23).
+        # 倍速项目的声音文件已经补齐到从 0 开始（make_voice），达芬奇放原片也按这段空白往后放（2026-11-27 试验田实测对得上），不用拦。
         empty_ms=round(sum(e['movie_duration'] for e in edits if e['media_time']==-1)/info.get('movie_timescale',1)*1000,1)
-        if empty_ms>1001/30:
+        if speed is None and empty_ms>1001/30:
             parser.error(f'原片声音比画面晚 {empty_ms} 毫秒才开始（音轨开头有空白编辑）。直接剪会让识别时间和达芬奇画面错位，刀口全部偏早、吞字。'
                          '请先重新转码，把这段空白补成静音、让声音和画面都从 0 开始（如 ffmpeg 音频加 aresample=async=1:first_pts=0），再用新文件建项目')
-        if any(e['media_time']==-1 for e in edits) or offset_ms>1001/30:
+        if speed is None and (any(e['media_time']==-1 for e in edits) or offset_ms>1001/30):
             print(f'提示：原片音频带起始偏移（约 {offset_ms} 毫秒或空白开头）。剪完请在达芬奇里听一下口型和声音是否对齐。')
         alignment=alignment_runtime(args.align_python)
         if not alignment['alignment_dependencies_ready']:parser.error(alignment['alignment_error'])
         run.mkdir(parents=True,exist_ok=True,mode=0o700)
-        run_self(transcribe_command(video,folder,args))  # transcription prints its own Chinese errors
+        voice=None if speed is None else make_voice(video,folder,speed,args.audio_stream or 0)
+        run_self(transcribe_command(voice,folder,argparse.Namespace(**{**vars(args),'audio_stream':None})) if voice else transcribe_command(video,folder,args))  # transcription prints its own Chinese errors
         manifest=json.loads((folder/'转写/transcription_manifest.json').read_text())
         response=json.loads((folder/'转写/doubao_turbo.json').read_text())
         name=main_line_name(folder)
         config={'name':name,'source':str(video),'source_frames':track['sample_count'],'fps':[30000,1001],'resolution':track['display_size'],'audio_edit_offset_ms':offset_ms,
                 'audio_stream':manifest['audio_stream'],'media_pool_item_id':None,
                 **resolve_project(folder,video,name),'sections':[{'start':0,'title':'口播全文'}]}
+        if voice:
+            # 剪口播的帧都是加速后的帧（成片时间线上的帧），留 2 帧余量，最后一段换算回原片不超出原片结尾
+            frames=int(min(duration_seconds(voice),duration_seconds(video)/speed)*30000/1001)-2
+            config.update({'source_frames':frames,'audio_edit_offset_ms':0,'voice':str(voice),'speed':speed,
+                           'video_identity':video_identity(video),'source_fps':[rate.numerator,rate.denominator]})
         if machine_voice(video):      # 记下“这是机器配音占位”：后面的分镜不排露脸镜头，审片台标出来；换真口播时是新建一个剪口播工程
             config['placeholder']={'kind':'机器配音','record':str(machine_voice(video)),'note':'没有口播录像，豆包语音合成照定稿文案念的占位配音；用户录了真口播后换掉'}
         units=[{'id':i,'text':x['text'],'context_text':x['text'],'start_ms':x['start_time'],'end_ms':x['end_time'],'project_generic':True} for i,x in enumerate(response['result']['utterances'])]
@@ -569,6 +651,7 @@ def main():
     elif args.action=='stop':stop(run,args.force)
     elif args.action=='clean':clean(run,args.yes)
     elif args.action=='reopen':reopen(folder,run)
+    elif args.action=='polish':polish(folder,args.amount)
     elif args.action=='replace-source':
         if not args.video:parser.error('replace-source 需要 --video <新口播>')
         replace_source_command(run,args.video.expanduser().resolve(strict=True),args.old.expanduser().resolve(strict=True) if args.old else None)

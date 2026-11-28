@@ -390,8 +390,19 @@ section h2 .sq{font-size:var(--fs-12);font-weight:var(--fw-r);color:var(--s-todo
 .colhead .ch-main .mainbtn,.colhead .ch-main .undo{display:none}.tb-main .why{display:none}
 .tcjump{position:static;width:auto;flex-direction:row;align-items:center;gap:8px;padding:2px 0 6px}
 .tcjump .ch-main{flex-direction:row}
-@media (max-width:1100px){.topbar #aiword,.topbar #dvword,.tb-title h1{display:none}.tb-title{flex-basis:120px}#cols button{padding:0 8px}.totals{display:none}}
-@media (max-width:900px){#cols .cs{display:none}}
+/* 顶栏让位（2026-11-27 用户：“文稿、口播精剪这个切换肯定要能保啊……Claude和达芬奇在线可以浓缩成一个图标”；规矩见 design/README.md 第 15 条）。
+   按顶栏自己的宽度（＝主区宽度，对话侧栏打开时跟着变窄）判断，不看窗口宽：容器查询，不用脚本、开合侧栏不跳。
+   让位顺序（先让的在前）：合计数 → 状态收成小圆点 → 栏目里的件数、项目名下面那行 → “对话”只留图标、主按钮变窄 → 项目名截短到只剩“全部项目”图标 → 栏目横向滚动（当前栏始终滚进可见处）。
+   栏目切换、主按钮、对话、帮助“?”一直在。 */
+.topbar{container:tb/inline-size}
+#cols{flex:0 0 auto}
+.tb-title{flex:0 1 180px;min-width:0}
+@container tb (max-width:1360px){.topbar .totals{display:none}}
+@container tb (max-width:1180px){.topbar #aiword,.topbar #dvword{display:none}.topbar .dvsum{padding:0 7px}.tb-title h1{display:none}}
+@container tb (max-width:1000px){#cols .cs{display:none}#cols button{padding:0 8px}}
+@container tb (max-width:860px){#tcChatBtn .tc-l,#tcChatBtn kbd{display:none}.topbar{gap:8px}.tb-main .mainbtn{min-width:0;padding:0 12px}.topbar .listenb{padding:0 6px}}
+@container tb (max-width:720px){.tb-title{flex:0 1 auto;max-width:96px}}
+@container tb (max-width:600px){.tb-title{display:none}#cols{flex:0 1 auto;min-width:0;scroll-snap-type:x proximity;-webkit-mask-image:linear-gradient(to right,transparent,var(--t1) 14px,var(--t1) calc(100% - 14px),transparent);mask-image:linear-gradient(to right,transparent,var(--t1) 14px,var(--t1) calc(100% - 14px),transparent)}#cols button{scroll-snap-align:start}}
 
 /* 方向 C：动画、封面、口播试听的卡片占满窗口宽，几个选项等分一排，图和视频跟着变大（封面墙“全部摆开”不受影响） */
 .pane[data-col="动画"] .items,.pane[data-col="封面"] .items,.pane[data-col="口播试听"] .items{max-width:none}
@@ -523,7 +534,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 <li><b>封面：</b>点“全部摆开”把所有方向、所有版本摆成一面墙，滑杆调大小；点图看大图，← → 换图，“选来对比”选两张并排看；每张图下能直接提意见。</li>
 <li><b>导航条文字</b>即审片栏全文里每一章的标题：直接点标题改，自动保存；改过、AI 还没做进导航条的标题旁有“改过”记号；栏头“导航条预览”按你改的字画在达芬奇当前这一帧上。</li>
 <li><b>发布：</b>简介、标签直接改，自动保存进 项目.json（标签 8–10 个、数字只用口播里说过的，不合要求会写原因、先存成草稿）。</li>
-<li>写的字都自动保存，不用点保存。</li></ul></div></details><button id="tcChatBtn" type="button" title="跟 AI 说一句（⌘K）" aria-label="对话（⌘K）" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3h9c.83 0 1.5.67 1.5 1.5V10c0 .83-.67 1.5-1.5 1.5H8l-3 2.5v-2.5H3.5C2.67 11.5 2 10.83 2 10V4.5C2 3.67 2.67 3 3.5 3z"/></svg>对话<kbd>⌘K</kbd></button><div class="ch-main tb-main" id="tbmain"></div></header>
+<li>写的字都自动保存，不用点保存。</li></ul></div></details><button id="tcChatBtn" type="button" title="跟 AI 说一句（⌘K）" aria-label="对话（⌘K）" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3h9c.83 0 1.5.67 1.5 1.5V10c0 .83-.67 1.5-1.5 1.5H8l-3 2.5v-2.5H3.5C2.67 11.5 2 10.83 2 10V4.5C2 3.67 2.67 3 3.5 3z"/></svg><span class="tc-l">对话</span><kbd>⌘K</kbd></button><div class="ch-main tb-main" id="tbmain"></div></header>
 <div id="netbar" class="netbar" role="status" hidden></div>
 <div class="shell"><div class="panes">
 <div class="pane" data-col="写稿"><div class="colhead"><div class="ch-name"><h2>文稿</h2><span class="ch-sum" data-sum="写稿"></span></div>
@@ -757,13 +768,14 @@ window.addEventListener('message',e=>{if(e.source!==window.parent||e.data?.cutde
 setInterval(()=>{if(!PAUSED)load().catch(()=>{})},3000);
 document.addEventListener('focusout',()=>setTimeout(()=>{if(stale&&!typing())load(true)},700));
 // —— 达芬奇：每 0.5 秒读一次停在哪（顶栏一个状态灯，点开看详情；出错写在审核线栏里） ——
-let busy=false;
-function dvShow(kind,word,note,err){$('dvdot').className='dvdot '+kind;$('dvword').textContent=word;$('dvnote').textContent=note;$('dvnote').className=err?'err':'';
+let busy=false,PB=null;   // PB：达芬奇在播放时，开始播放那一刻的位置（达芬奇播放时不报位置，按服务给的“播了多少秒”往前推；暂停后按达芬奇实际位置校准）
+function dvShow(kind,word,note,err){$('dvdot').className='dvdot '+kind;$('dvword').textContent=word;$('dvword').parentNode.title=word+'：点开看详情';$('dvnote').textContent=note;$('dvnote').className=err?'err':'';
   document.querySelectorAll('[data-dverr]').forEach(e=>{e.textContent=err?'达芬奇已断开 ▸':'';e.title=err?'达芬奇：'+note:'';e.hidden=!err})}
 async function tick(){if(busy||D?.lite||PAUSED)return;busy=true;try{const s=await api('/api/dv');
     if(!s.ok){const pl=s.error.startsWith('达芬奇正在播放');   // 播放时达芬奇不回话：不算出错
-      if(pl)dvShow('play','达芬奇在播放','达芬奇正在播放：播放时达芬奇不报位置，这里先不跟；按空格暂停后马上跟上',false);else dvShow('err','达芬奇已断开',s.error,true);return}
-    T=s.t;$('clock').textContent=mmss(s.t);playing();drawNav();phMove();
+      if(pl&&s.played!=null){if(!PB)PB={t0:T};T=Math.min(fullDur()||Infinity,PB.t0+s.played);$('clock').textContent=mmss(T);playing();drawNav();phMove()}
+      if(pl)dvShow('play','达芬奇在播放','达芬奇正在播放：播放时达芬奇不报位置，这里按播放时间往前推（可能差半秒）；暂停后按达芬奇的实际位置校准',false);else dvShow('err','达芬奇已断开',s.error,true);return}
+    PB=null;T=s.t;$('clock').textContent=mmss(s.t);playing();drawNav();phMove();
     let note=`已接上达芬奇：${s.timeline}（${mmss(s.t)} / ${mmss(s.dur)}）。在达芬奇里按空格播放；这里点字、点意见卡、点时间条，达芬奇跟着跳`,err=false;
     if(s.rendering){note=`${s.timeline} 正在渲染，暂时不能跳转和截图：等渲染完`;err=true}
     else if(s.page==='deliver')note+='（在交付页，截图时会自动切回剪辑页）';
@@ -925,9 +937,13 @@ const LISTEN='口播试听';   // 页面上并进别的栏的（命令、数据�
 let cur=null,BD=null,asking={},saveT={};
 const LABEL={'写稿':'文稿','文案':'口播精剪','口播试听':'要你听','审核线':'审片','导航文字':'导航条文字','上传文案':'发布'};   // 2026-11-24 用户定：上传文案改叫“发布”   // 页面上的叫法（2026-11-22 用户定）；命令、数据里的栏目名不变
 const OWN=['导航文字','上传文案'];  // 字是用户自己写的：主按钮叫“定稿”
+// 栏目放不下改成横向滚动时：当前栏始终滚到看得见的地方（顶栏变窄、换栏、开合对话侧栏都跟着）
+function colSeen(){const b=document.querySelector('#cols button.on'),n=$('cols');if(!b||!n||n.scrollWidth<=n.clientWidth+1)return;
+  const l=b.offsetLeft-n.offsetLeft,r=l+b.offsetWidth;if(l<n.scrollLeft)n.scrollLeft=l-4;else if(r>n.scrollLeft+n.clientWidth)n.scrollLeft=r-n.clientWidth+4}
+addEventListener('resize',()=>colSeen());
 function setCol(c,quiet){c=MERGE[c]||c;if(!c||!document.querySelector(`.pane[data-col="${c}"]`))return;if(c!==cur)flushSaves();if(cur==='文案'&&c!=='文案')leaveKoubo();cur=c;
   document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.dataset.col===c));
-  document.querySelectorAll('#cols button').forEach(b=>b.classList.toggle('on',b.dataset.col===c));tbMain();
+  document.querySelectorAll('#cols button').forEach(b=>b.classList.toggle('on',b.dataset.col===c));tbMain();colSeen();
   if(!quiet)history.replaceState(null,'','#'+encodeURIComponent(c));
   document.querySelectorAll('.pane.on textarea.ed:not(.big)').forEach(fit);
   if(c==='审核线'&&D){handles();lastClause='';playing(true)}
@@ -970,7 +986,7 @@ if(!EMB&&/AppleWebKit/.test(navigator.userAgent)&&!/Safari\//.test(navigator.use
 const AIDOT={'在线':'ok','处理中':'ai','未装':'off','未登录':'off','出错':'err'};
 function setUrl(){return '/settings?back='+encodeURIComponent(location.pathname+location.search+location.hash)}
 function aiShow(){$('goHome').hidden=!(EMB||HOMEQ||D?.home);const a=D?.ai||{},c=D?.wait_cmd||{},st=a.state||'未装';
-  $('aidot').className='dvdot '+(AIDOT[st]||'off');$('aiword').textContent=`${a.name||'AI'} · ${st==='在线'&&a.waiter?'在线（对话）':st}`;
+  $('aidot').className='dvdot '+(AIDOT[st]||'off');$('aiword').textContent=`${a.name||'AI'} · ${st==='在线'&&a.waiter?'在线（对话）':st}`;$('aiword').parentNode.title=$('aiword').textContent+'：点开看详情、换 AI';
   aiAct();if(!$('aipop').open)aiPick()}
 // 点右上角 AI 状态：直接列出这台 Mac 上的 AI，点一下就换（2026-11-26 用户：“我一点就能自动切换到那个 AI”）；模型、豆包、蚁小二在设置页
 async function aiPick(){const r=await api('/api/settings').catch(()=>null),box=$('aibody');if(!box)return;const a=D?.ai||{};

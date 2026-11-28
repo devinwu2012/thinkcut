@@ -231,6 +231,13 @@ def build_model(snapshot, ledger=None, profile=None, fx_record=None):
             raise ValueError('V1 源入点缺失，无法对齐')
         rate = i['broll_extra'].get('source_rate', 1)
         raw_end = i.get('source_end')
+        speed = i.get('speed') or 1
+        clip_fps = float(i.get('media_fps') or tl['fps'])
+        if speed != 1 or abs(clip_fps-float(tl['fps'])) > .01:
+            # 2026-11-27 起口播原片（常是 30 帧）放进达芬奇设 120%：源帧换成“加速后、29.97 帧”的帧号，和时间线一比一，
+            # 重剪以后同一句话还是同一个号，B-roll 对得回去
+            to_tl = lambda f: round(f/clip_fps/speed*float(tl['fps']))
+            s, raw_end = to_tl(s), None if raw_end is None else to_tl(raw_end)
         if rate != 1 or (raw_end is not None and abs(raw_end-s-i['duration']) > 1):
             raise ValueError('V1 变速或源区间不线性，无法可靠对齐')
         mapping.append({'start': i['start'], 'end': i['end'], 'source': source_identity(i),

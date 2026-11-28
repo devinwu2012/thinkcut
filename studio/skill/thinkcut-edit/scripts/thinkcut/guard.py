@@ -92,9 +92,9 @@ def voice(job: Job, measure_floor=None):
         src = '原口播（没做降噪修音）'
     bad = []
     if lufs is not None and abs(float(lufs) - VOICE_LUFS) > VOICE_TOL:
-        bad.append(f'{src} 响度 {lufs} LUFS，偏离 {VOICE_LUFS} 超过 {VOICE_TOL:g}：回剪口播查人声处理（应在约 {VOICE_LUFS} LUFS）')
+        bad.append(f'{src} 响度 {lufs} LUFS，偏离 {VOICE_LUFS} 超过 {VOICE_TOL:g}：' + ('审核线建好后跑 voice-polish 整条修音（2026-11-27 起剪口播不再先处理人声）' if not vp else '重跑 voice-polish'))
     if floor is not None and float(floor) > FLOOR_MAX:
-        bad.append(f'{src} 底噪 {floor} dB，高于 {FLOOR_MAX:g} dB：' + ('review 建好审核线后跑 voice-polish 降噪修音，再跑 check' if not vp else '加大人声隔离重跑 voice-polish --amount 80'))
+        bad.append(f'{src} 底噪 {floor} dB，高于 {FLOOR_MAX:g} dB：' + ('review 建好审核线后跑 voice-polish 降噪修音，再跑 check' if not vp else V.floor_hint(vp.get('gain_db'), vp.get('amount'))))
     if bad and (job.get('placeholder') or {}).get('kind') == '机器配音':      # 机器配音占位：合成的声音不按真口播的响度、底噪标准拦（试验田实测 -17.6 LUFS、底噪 -44 dB），只照实说；换成真口播后照常查
         return [], f'{src}：响度 {lufs} LUFS，底噪 {floor} dB（机器配音占位，不按真口播的标准拦；换成真口播后要修音、再查）'
     return bad, f'{src}：响度 {lufs} LUFS，底噪 {floor} dB（要 {VOICE_LUFS}±{VOICE_TOL:g} LUFS、≤ {FLOOR_MAX:g} dB）'

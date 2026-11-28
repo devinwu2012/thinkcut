@@ -25,6 +25,10 @@ EDGE_CAP = 4        # frames a word edge may extend into the pause
 PAUSE_KEEP = 4      # between sentences / beside a deletion
 INTRA_MAX = 4       # silence inside a sentence longer than this is shortened
 INTRA_KEEP = 3
+# 2026-11-27 261114 反馈单 新5：两个保留的字之间最后留下的帧（字尾保护＋停顿＋字头保护）最多 7 帧（0.23 秒）；
+# 以前字尾、字头各能保护 4 帧再加 4 帧停顿，最多 12 帧，成片上 ≥0.27 秒的停顿 check 不过、要人工补剪。超了先保字尾 3、字头 2，再给停顿
+MAX_KEPT = 7
+TAIL_FIRST, HEAD_FIRST = 3, 2
 VERSION = 'pause-refine-v2'
 # 方法 C 的人声概率阈值（试验田《气口对比》2026-11-22：261118 上和只看音量一帧不差，《261110 水电》残留 >=0.27 秒停顿 11→1）
 VAD_MIN = 0.5
@@ -86,6 +90,14 @@ def refine_state(cards, state, aligned, total, levels, th=None, vad=None):
         while k < EDGE_CAP and loud(a - k - 1): k += 1
         return a - k
 
+    def fit(b1, a2, tail_n, head_n, keep_n):
+        """两字之间留 left（前字之后）、right（后字之前）帧，合起来不超过 MAX_KEPT。返回 (left, right)。"""
+        t, h = min(tail_n, TAIL_FIRST), min(head_n, HEAD_FIRST)
+        k = min(keep_n, max(0, MAX_KEPT - t - h))
+        more = MAX_KEPT - t - h - k
+        t2 = min(tail_n - t, more); t += t2; h += min(head_n - h, more - t2)
+        return t + k // 2, h + (k - k // 2)
+
     cuts, rows = [], []
     for ((_, b1), t1), ((a2, _), t2) in zip(words, words[1:]):
         if a2 <= b1: continue
@@ -101,16 +113,22 @@ def refine_state(cards, state, aligned, total, levels, th=None, vad=None):
             before, after = max(0, p - x), max(0, y - q)
             total_pause = before + after; keep_n = min(total_pause, PAUSE_KEEP)
             k2 = min(after, keep_n - (keep_n + 1) // 2); k1 = min(before, keep_n - k2); k2 = min(after, keep_n - k1)
-            cuts += [c for c in ([x + k1, c0], [c1, y - k2]) if c[1] > c[0]]
-            rows.append({'接口': '删除重录两侧', '前后原话': t1['text'] + '｜' + t2['text'], '原停顿帧': total_pause, '保留帧': k1 + k2})
+            left, right = (x - b1) + k1, (a2 - y) + k2
+            if left + right > MAX_KEPT: left, right = fit(b1, a2, x - b1, a2 - y, k1 + k2)
+            cuts += [c for c in ([b1 + left, max(c0, b1 + left)], [min(c1, a2 - right), a2 - right]) if c[1] > c[0]]
+            rows.append({'接口': '删除重录两侧', '前后原话': t1['text'] + '｜' + t2['text'], '原停顿帧': total_pause, '保留帧': left + right})
             continue
         pause = y - x; between = t1['unit_id'] != t2['unit_id']
         limit, keep_n = (PAUSE_KEEP, PAUSE_KEEP) if between else (INTRA_MAX, INTRA_KEEP)
-        if pause > limit:
-            cut = [x + keep_n // 2, y - (keep_n - keep_n // 2)]
+        cut = [x + keep_n // 2, y - (keep_n - keep_n // 2)] if pause > limit else None
+        kept = (a2 - b1) - (cut[1] - cut[0] if cut else 0)
+        if kept > MAX_KEPT:
+            left, right = fit(b1, a2, x - b1, a2 - y, min(keep_n, pause))
+            cut = [b1 + left, a2 - right]
+        if cut and cut[1] > cut[0]:
             cuts.append(cut)
             rows.append({'接口': '句间' if between else '句内', '前后原话': t1['text'] + '｜' + t2['text'],
-                         '原停顿帧': pause, '保留帧': keep_n, '删除源帧': cut})
+                         '原停顿帧': pause, '保留帧': (a2 - b1) - (cut[1] - cut[0]), '删除源帧': cut})
     base['resolve_frame_cuts'] = [{'source_frames': c, 'reason': AUTO_REASON} for c in sorted(cuts)]
     base['pause_refine'] = {'version': VERSION, 'threshold_db': round(th, 1), 'cuts': len(cuts)}
     if vad is not None: base['pause_refine']['vad_min'] = VAD_MIN   # 记下用了语音检测：之后重算接缝也得用同一份人声概率
@@ -118,6 +136,40 @@ def refine_state(cards, state, aligned, total, levels, th=None, vad=None):
 
 
 AUTO_REASON = '按实际音量收短停顿'
+PHRASE_END = set('，。？！、；：,.?!;:…—”’）) ')
+
+
+def snap_quiet_words(cards, state, aligned, total, levels, vad=None, texts=None):
+    """轻声字尾（“拆了”的“了”）对齐时间整段落在静音里：贴到前一个字的尾音上（2026-11-27 261114 反馈单 新5）。
+    条件：是一个短句的最后一个字（后面是标点或句尾；texts＝{句编号: 原文}，没给就不限）；同一句里紧挨着前一个保留的字；这个字的帧一帧有声的都没有，和前一个字之间也全是静音（真念出来的“了”其实压在前一个字的尾音里）。
+    贴法：从前一个字的结尾到它的有声尾巴（最多 EDGE_CAP 帧，至少 1 帧）。不贴的话这段静音里夹着一个“字”，收停顿收不掉，
+    人工补剪又会被“删掉整个字”拦下，成片留下 ≥0.27 秒停顿。返回 (新的对齐结果, 贴了哪些字)；不改原对象。"""
+    from review_build import active_map
+    from tight_cut import word_frame_span
+    base = copy.deepcopy(state); base.pop('resolve_frame_cuts', None)
+    keep = set(active_map(cards, base, aligned, total)['retained_token_ids'])
+    words = sorted(((word_frame_span(t['start_ms'], t['end_ms'], total)[:2], t) for t in aligned['tokens'] if t['id'] in keep),
+                   key=lambda w: w[0][0])
+    th = threshold(levels, [span for span, _ in words])
+    loud = lambda f: 0 <= f < total and levels[f] > th and (vad is None or vad[f] >= VAD_MIN)
+    moved, out = [], copy.deepcopy(aligned)
+    index = {t['id']: t for t in out['tokens']}
+    for ((a0, b0), t0), ((a1, b1), t1) in zip(words, words[1:]):
+        if t0['unit_id'] != t1['unit_id'] or a1 < b0:
+            continue
+        end = b0
+        while end - b0 < EDGE_CAP and loud(end): end += 1      # 前一个字的有声尾巴
+        if a1 < end or any(loud(f) for f in range(end, b1)):
+            continue      # 字本来就贴在尾音里，或尾巴之后到这个字结束有声音（真念在那儿）：不动
+        text = (texts or {}).get(t1['unit_id'])
+        if text is not None and t1.get('char_end') is not None and t1['char_end'] < len(text) and text[t1['char_end']] not in PHRASE_END:
+            continue      # 句中的字（“一个”的“一”）对齐偏了不贴：真声音可能就在后面，贴过去会把它当停顿剪掉
+        end = max(end, b0 + 1)
+        row = index[t1['id']]
+        before = [row['start_ms'], row['end_ms']]
+        row['start_ms'], row['end_ms'] = round(b0 * 1001 / 30, 3), round(end * 1001 / 30, 3)
+        moved.append({'字': t1['text'], '编号': t1['id'], '前一个字': t0['text'], '原时间毫秒': before, '贴到毫秒': [row['start_ms'], row['end_ms']]})
+    return out, moved
 
 
 LEVELS_NAME = '气口音量.json'
@@ -250,29 +302,35 @@ def should_refine(state, force=False):
 
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--force', action='store_true'); args = parser.parse_args()
-    from project_runtime import RUN, TOTAL, CONFIG
+    from project_runtime import RUN, TOTAL, CONFIG, VOICE
     import review_build, review_v2_server
     previous = json.loads((RUN / 'review_v2_state.json').read_text())
     if not should_refine(previous, args.force):
         print('停顿已按实际音量精修过，跳过（要重算加 --force）。'); return
     manifest = json.loads((RUN / 'review_v2.json').read_text())
     aligned = json.loads((RUN / 'character_alignment.json').read_text())
-    levels = load_levels(RUN, CONFIG['source'], TOTAL)
+    levels = load_levels(RUN, VOICE, TOTAL)
     if levels is None:
-        levels = [round(x, 1) for x in frame_levels(CONFIG['source'], TOTAL, CONFIG.get('audio_stream', 0))]
-        save_levels(RUN, levels, CONFIG['source'])
+        levels = [round(x, 1) for x in frame_levels(VOICE, TOTAL, CONFIG.get('audio_stream', 0))]
+        save_levels(RUN, levels, VOICE)
     stream = CONFIG.get('audio_stream', 0)
     if previous.get('pause_refine') and not args.force:      # 精修过、之后网页改过删句：只改受影响的接缝
         vad = None
         if previous['pause_refine'].get('vad_min') is not None:   # 精修时用了语音检测，重算接缝也得用；只用音量会和原来的裁剪对不上
-            vad, why = vad_probs(RUN, CONFIG['source'], TOTAL, stream)
+            vad, why = vad_probs(RUN, VOICE, TOTAL, stream)
             if vad is None:
                 print(f'提醒：这次没用上语音检测（{why}）。这条精修时用了语音检测，只按音量重算会和原来的裁剪对不上，接缝没改；修好对齐环境后再运行 refine。'); return
         current, delta = recompute(manifest['cards'], without_web_edits(previous), previous, aligned, TOTAL, levels, vad)
         review_v2_server.persist_state(previous, current); review_build.build_full(manifest, current)
         print(f'按网页里现在的删句改了接缝：去掉 {len(delta["去掉"])} 处旧裁剪、新加 {len(delta["新加"])} 处；其余裁剪（含 {len(manual_cuts(current))} 处人工裁剪）没动。'); return
-    vad = vad_or_warn(RUN, CONFIG['source'], TOTAL, stream)
+    vad = vad_or_warn(RUN, VOICE, TOTAL, stream)
+    texts = {u['id']: u['text'] for u in json.loads((RUN / 'sentence_units.json').read_text())}
+    aligned, moved = snap_quiet_words(manifest['cards'], previous, aligned, TOTAL, levels, vad, texts)
+    if moved:      # 字时间改在 character_alignment.json（对齐原样在 alignment_qwen_full.json，reopen 会换回）；字幕跟着贴过去
+        path = RUN / 'character_alignment.json'; tmp = path.with_name('.' + path.name + '.partial')
+        tmp.write_text(json.dumps(aligned, ensure_ascii=False, indent=1)); tmp.replace(path)
     current, rows = refine_state(manifest['cards'], previous, aligned, TOTAL, levels, vad=vad)
+    rows = [{'接口': '轻声字贴回前字尾音', **m} for m in moved] + rows
     review_v2_server.persist_state(previous, current)
     review_build.build_full(manifest, current)
     (RUN / '气口精修.json').write_text(json.dumps({
@@ -282,7 +340,8 @@ def main():
               f'句间与删除重录接口最多留 {PAUSE_KEEP} 帧，句内静音超过 {INTRA_MAX} 帧收到 {INTRA_KEEP} 帧。',
         '听审': '待听', 'rows': rows}, ensure_ascii=False, indent=1))
     kept = len(manual_cuts(current))
-    print(f'停顿精修：收短 {current["pause_refine"]["cuts"]} 处（按实际音量保护字头字尾）' + (f'；另有 {kept} 处人工裁剪原样保留。' if kept else '。'))
+    print(f'停顿精修：收短 {current["pause_refine"]["cuts"]} 处（按实际音量保护字头字尾）' + (f'；另有 {kept} 处人工裁剪原样保留。' if kept else '。')
+          + (f'对齐时间整段落在静音里的轻声字 {len(moved)} 个（' + '、'.join(m['前一个字'] + m['字'] for m in moved[:8]) + '）贴回了前一个字的尾音。' if moved else ''))
 
 
 if __name__ == '__main__':

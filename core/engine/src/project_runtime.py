@@ -13,6 +13,10 @@ NAME = CONFIG.get('name', 'TEST')
 TOTAL = CONFIG.get('source_frames', 18645)
 PROJECT = CONFIG.get('project', '_mcp_TEST')
 SOURCE_ID = CONFIG.get('media_pool_item_id')
+# 2026-11-27 起倍速在达芬奇里做：SPEED 是放进达芬奇时设的速度，VOICE 是剪口播读声音用的 1.2 倍速声音文件（时间＝成片时间）；老项目 1 和口播源本身
+from speed_map import speed_of, voice_of
+SPEED = speed_of(CONFIG)
+VOICE = voice_of(CONFIG)
 if CONFIG and (CONFIG.get('fps') != [30000,1001] or type(TOTAL) is not int or TOTAL <= 0):
     raise ValueError('This editing engine currently requires constant 30000/1001 fps input')
 if not NAME or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-' for c in NAME):

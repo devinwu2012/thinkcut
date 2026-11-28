@@ -3,7 +3,7 @@
 在达芬奇里搭好审核时间线，审完导出 4K。Claude 和 Codex 用同一套命令。完整流程见 ../references/动画成片.md（入口路由在 ../SKILL.md）。
 
 用法：python3 thinkcut_edit.py <命令> <片子目录> [参数]     （python3 thinkcut_edit.py -h 看全部命令）"""
-import argparse, os, shutil, sys, time
+import argparse, json, os, shutil, sys, time
 from pathlib import Path
 
 if os.environ.get('PYTHONUTF8') != '1':          # 达芬奇脚本模块会把 locale 改成 C，中文输出要 UTF-8 模式
@@ -64,6 +64,11 @@ def cmd_init(a):
         note = (f"\n原 job.json 已备份：{bak}\n带过来的设置：{'、'.join(kept) or '没有'}"
                 + (f"\n没带过来（要重新确认或重新生成，原值在备份里）：{'、'.join(lost)}" if lost else ''))
     wj(jf, job)
+    words_f = d / '口播字时间.json'
+    if note and old.get('aroll') != job['aroll'] and words_f.exists():
+        # 换了口播：字时间跟着重算，不然审片栏跟播放的字还按旧口播的时间走（2026-11-27 261114：换成真口播后达芬奇放 v4，审片栏高亮的是占位口播的字，差到十几秒）
+        wbak = d / f"口播字时间.备份_{time.strftime('%Y%m%d-%H%M%S')}.json"; shutil.copy2(words_f, wbak)
+        aroll.words(Job(d)); note += f'\n换了口播，口播字时间.json 已按新口播重算（旧的备份：{wbak.name}）'
     spec = d / '分镜规格.json'
     if not spec.exists():
         wj(spec, {'说明': '卡点 [词, 从第几秒之后找, 偏移秒, 取词尾?]；镜头 a/b 写卡点名或秒；写法见 references/分镜规格.md',
@@ -92,6 +97,7 @@ def main():
     p.add_argument('--what', required=True, help='发生了什么（用户原话）'); p.add_argument('--how', required=True, help='当时怎么处理')
     p = c('assume', '全片层面的假设（画幅、没做动画的原因等）：记进 job.json，显示在审片栏栏头下方；不带文字只列出'); p.add_argument('text', nargs='?'); p.add_argument('--clear', action='store_true', help='清空')
     c('doctor', '检查环境（项目文件夹可省）', dir=False).add_argument('dir', nargs='?')
+    c('resolve-status', '只读看一眼达芬奇：开没开、哪个工程、当前时间线、每条画面轨（名字、片段数、锁没锁）。后台 AI 用它代替 pgrep 和自己写脚本连达芬奇（会交给审片台代办）', dir=False)
     c('status', '这个项目做到哪一步、哪些要重跑、下一步跑什么（换会话或换机器接着做时先看）')
     c('nav-target', '出导航条时章节导航（程序目录下的 chapters）该用的画布、条高、帧率和覆盖区间')
     p = c('nav-draft', '写出章节导航 project.json 初稿（导航/project.json）：画布、条高、帧率、覆盖区间、字幕指纹自动填，章节用 --chapter 给')
@@ -152,6 +158,8 @@ def main():
     p = c('export-peak', '只重跑导出后的“量响度和真峰值、超了就限幅”这一步（export 导完但量不出来时用）'); p.add_argument('--file', required=True, help='已导出的成片')
     p = c('voice-polish', '口播降噪修音：审核线上达芬奇人声隔离渲纯口播 → ffmpeg 修音 → 放“口播（隔离修音）”轨、关音频 1；以后 review/export 都按它')
     p.add_argument('--name', help='时间线（默认审核线）'); p.add_argument('--amount', type=int, default=70, help='人声隔离强度（默认 70）')
+    p = c('aroll-polish', '剪口播交付后直接修音（2026-11-27 261114 新1）：不要动画项目，在主线副本「<主线>_修音」上做 voice-polish（主线不动）；dir 写剪口播工程（<片名>_AI剪辑）')
+    p.add_argument('--amount', type=int, default=70, help='人声隔离强度（默认 70）')
     p = c('workbench', '审片台：起本机网页（8 个栏目：写稿＝页面上的“文稿”、文案＝页面上的“口播精剪”、口播试听＝“配音试听”、动画、审核线＝“审片”、导航文字（并入审片）、封面、上传文案＝“发布”），打印网址；已在跑就复用。还没 init 时也能开（项目文件夹写项目文件夹：只有文案栏；剪完口播多一个口播精剪栏）。发布一项给用户看、读结果、回复也用它。说明见 references/审片工作台.md')
     p.add_argument('--round', type=int, help='换到第几轮（每轮新审核线建好后写）'); p.add_argument('--port', type=int, help='指定端口（默认从 8765 起找空的）')
     p.add_argument('--aroll', help='口播阶段（还没 job.json）用：剪口播工程目录；有 job.json 时以它的 aroll 为准。项目文件夹也可以直接写剪口播工程或项目根')
@@ -192,10 +200,14 @@ def main():
         from thinkcut import resolve; return resolve.diff(a.a, a.b)
     if a.cmd == 'doctor':
         from thinkcut import doctor; sys.exit(0 if doctor.run(Job(a.dir) if a.dir else None) else 1)
+    if a.cmd == 'resolve-status':
+        from thinkcut import resolve; print(json.dumps(resolve.live_status(), ensure_ascii=False, indent=1)); return
     if a.cmd == 'home':
         from thinkcut import home; return home.cli(a)
     if a.cmd == 'workbench':            # 口播阶段（还没 job.json）也能开，只有“口播剪辑”栏（2026-11-22 用户定）
         from thinkcut import workbench; return workbench.cli(workbench.open_film(a.dir, a.aroll), a)
+    if a.cmd == 'aroll-polish':
+        from thinkcut import voice; return voice.aroll_cmd(a.dir, a.amount)
     job = Job(a.dir)
     if getattr(a, 'force_over', False):           # subs/subs-track/pip/anim-assemble/anim-render/nav 的 --force：当前审核线引用着也覆盖（2026-11-22 新3）
         from thinkcut.common import allow_overwrite; allow_overwrite()

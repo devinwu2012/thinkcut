@@ -62,6 +62,7 @@ def read_timeline(timeline, ancestors=()):
                        'media_path': media.GetClipProperty('File Path') if media else None,
                        'media_type': media.GetClipProperty('Type') if media else None,
                        'media_fps': media.GetClipProperty('FPS') if media else None,
+                       'speed': clip_speed(item),
                        'props': item.GetProperty() or {}, 'texts': []}
                 if kind=='audio' and track==1:
                     try:offset=item.GetLeftOffset(True)
@@ -97,6 +98,14 @@ def read_timeline(timeline, ancestors=()):
                         row['nested'] = read_timeline(nested, ancestors+(uid,))
                 result['items'].append(row)
     return safe(result)
+
+
+def clip_speed(item):
+    """片段速度（1.2＝120%；2026-11-27 起口播原片在达芬奇里设 120%）。没设过、读不出（21.1 以前、假达芬奇）是 None。"""
+    try:value=(item.GetSpeed() or {}).get('Percentage')
+    except Exception:return None
+    try:return None if value in (None, 100, 100.0) else float(value)/100
+    except (TypeError,ValueError):return None
 
 
 def snapshot(resolve, project, timeline):

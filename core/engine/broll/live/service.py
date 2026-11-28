@@ -477,3 +477,33 @@ def main_for_review(io, config, project_dir=None):
     from engine.fx.connect import find_timeline
     book,work=found[0]
     return Adapter(io.r,io.p,find_timeline(io.p,book['timeline'])),str(work_project_dir(work))
+
+
+TRACK_SKIP = re.compile('花字|人物抠像|备选|音效')       # 和 timeline.select_main_track 不放 B-roll 的轨一样
+
+
+def add_track(io, apply=False, name='B-roll', lock_path=None):
+    """主线没有能放 B-roll 的画面轨时，加一条空画面轨（2026-11-28：261114 新主线只有 V1，apply 全部报“没有叠加层下方的空闲主选轨”，
+    后台 AI 只好自己写脚本连达芬奇、沙盒里连不上）。plan/apply 自己照旧不建轨，这一步由 AI 明着跑、默认只演练。
+    只加轨、不动任何片段；已有能放的画面轨就不加；上面有花字、人物抠像这类叠加轨时也不加（脚本接口只能加在最上面，会压住它们），请用户手动插。"""
+    from .workspace import write_lock
+    model = build_model(io.snapshot())
+    video = sorted((t for t in model['tracks'] if t['type'] == 'video'), key=lambda t: t['index'])
+    free = [t for t in video if t['role'] == 'picture' and t['index'] > 1 and not t.get('locked') and not TRACK_SKIP.search(t['name'] or '')]
+    base = {'时间线': io.main_name, '画面轨': [f"V{t['index']} {t['name']}" for t in video]}
+    if free:
+        return {**base, '加轨': False, '原因': f"已有能放 B-roll 的画面轨 V{free[0]['index']}（{free[0]['name']}），不用加；apply 会在上面挑空的区间"}
+    over = [t for t in video if t['role'] == 'overlay']
+    if over:
+        return {**base, '加轨': False, '原因': f"上面有叠加轨 V{over[0]['index']}（{over[0]['name']}）：脚本只能把新轨加在最上面，会压住它；"
+                                              f"请用户在达芬奇里在 V{over[0]['index']} 下面插一条空画面轨，再重新 apply"}
+    new = len(video) + 1; plan = {**base, '加在': f'V{new}', '名字': name}
+    if not apply:
+        return {**plan, '加轨': False, '演练': True, '下一步': '没问题就加 --apply 真加（只加一条空轨、保存工程，不动片段）'}
+    with write_lock(lock_path):
+        io.activate(io.main)
+        if not io.write(io.main.AddTrack, 'video'): raise RuntimeError('加画面轨失败')
+        if int(io.main.GetTrackCount('video') or 0) != new: raise RuntimeError('加轨后读回轨数不符，停止')
+        io.write(io.main.SetTrackName, 'video', new, name)
+        if not io.write(io.pm.SaveProject): raise RuntimeError('保存工程失败')
+    return {**plan, '加轨': True}

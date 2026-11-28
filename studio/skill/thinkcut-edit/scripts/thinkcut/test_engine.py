@@ -405,6 +405,192 @@ class KeyTests(Base):
         self.assertNotIn(K, json.dumps(self.data(), ensure_ascii=False))
 
 
+class AiTools(Base):
+    """后台 AI 带的技能、MCP、依赖（2026-11-28 用户：“对话栏没有装 mcp 和各种必须的依赖和应用，包括必须的 skill，所以他干活总是错的……claude 和 codex 都装上，也默认都装”）。
+    假的 HOME：Codex 配了达芬奇、chrome-devtools、操控电脑三个 MCP，装了一堆不相干的技能；旧名 old-edit 和 thinkcut-edit 指同一份。"""
+
+    def setUp(self):
+        super().setUp()
+        from thinkcut import aitools as A
+        self.A = A; h = self.home = self.tmp / 'home'; os.environ['HOME'] = str(h)
+        cx = h / '.codex'; (cx / 'skills').mkdir(parents=True)
+        (cx / 'config.toml').write_text('model = "x"\n[mcp_servers.davinci-resolve]\ncommand = "python"\n[mcp_servers.davinci-resolve.env]\nA = "1"\n'
+                                        '[mcp_servers.chrome-devtools]\ncommand = "npx"\n[mcp_servers.computer-use]\ncommand = "x"\nenabled = false\n', encoding='utf-8')
+        for root, n in ((cx / 'skills', 'hyperframes'), (cx / 'skills', 'media-use'), (cx / 'skills' / '.system', 'imagegen'), (h / '.agents' / 'skills', 'lark-doc'),
+                        (cx / 'skills' / '@org', 'yixiaoer-cli')):
+            (root / n).mkdir(parents=True); (root / n / 'SKILL.md').write_text(f'---\nname: {n}\n---\n', encoding='utf-8')
+        edit = E.PROGRAM / 'studio' / 'skill' / 'thinkcut-edit'
+        (cx / 'skills' / 'thinkcut-edit').symlink_to(edit); (cx / 'skills' / 'old-edit').symlink_to(edit)
+        (h / '.claude.json').write_text(json.dumps({'mcpServers': {'chrome-devtools': {'command': 'npx'}}}), encoding='utf-8')
+
+    def submit_as(self, eid):
+        E.choose(eid); nid = self.note(); self.do(['--reply', nid, '--note', '收到']); self.submit(); self.assertEqual(self.run_rec()['state'], '完成')
+        return self.runs()[-1]
+
+    def test_claude_submit_loads_skills_and_only_whitelisted_mcp(self):
+        argv = self.submit_as('claude')['argv']
+        self.assertEqual(argv[argv.index('--setting-sources') + 1], 'project')          # 不为技能放开用户的全部设置
+        plug = Path(argv[argv.index('--plugin-dir') + 1]) / 'skills'                      # “提交 AI”以前一个 ThinkCut 技能都没有
+        for n in ('thinkcut-edit', 'thinkcut-project', 'thinkcut-cover', 'thinkcut-upload', 'thinkcut-feedback', 'hyperframes'):
+            self.assertTrue((plug / n / 'SKILL.md').is_file(), n)
+        self.assertFalse((plug / 'media-use').exists())
+        self.assertIn('--strict-mcp-config', argv)                                          # claude.ai 连接器、你自己配的 MCP 都不进来
+        servers = json.loads(argv[argv.index('--mcp-config') + 1])['mcpServers']                   # 白名单只有达芬奇（2026-11-28 用户定开），经护栏起
+        self.assertEqual(list(servers), ['davinci-resolve']); self.assertIn('davinci_mcp_guard.py', servers['davinci-resolve']['args'][0])
+        self.assertNotIn('env', servers['davinci-resolve'])                                  # 用户配置里的环境变量不放进命令行，护栏运行时自己读
+        allow = argv[argv.index('--allowedTools') + 1: argv.index('--disallowedTools')]; deny = argv[argv.index('--disallowedTools') + 1: argv.index('--session-id')]
+        self.assertIn('mcp__davinci-resolve', allow)
+        for t in ('render', 'render_presets', 'project_manager', 'project_manager_database', 'resolve_control', 'timeline_versioning', 'script_plugin'):
+            self.assertIn(f'mcp__davinci-resolve__{t}', deny)
+        self.assertIn('hyperframes', argv[argv.index('-p') + 1])                             # 提示里说清辅助技能只当参考
+
+    def test_codex_only_whitelisted_skills_and_mcp(self):
+        for n in range(2):                                                                     # 新开会话、接着上次的会话都一样
+            argv = self.submit_as('codex')['argv']
+            if n: self.assertEqual(argv[:2], ['exec', 'resume'])
+            cs = [argv[i + 1] for i, x in enumerate(argv) if x == '-c']
+            for f in ('plugins', 'apps', 'browser_use', 'computer_use', 'memories', 'image_generation'): self.assertIn(f'features.{f}=false', cs)
+            for m in ('chrome-devtools', 'computer-use'): self.assertIn(f'mcp_servers.{m}.enabled=false', cs)
+            self.assertIn('mcp_servers.davinci-resolve.enabled=true', cs); self.assertNotIn('mcp_servers.davinci-resolve.enabled=false', cs)
+            self.assertIn('mcp_servers.davinci-resolve.default_tools_approval_mode="approve"', cs)
+            self.assertTrue(any(c.startswith('mcp_servers.davinci-resolve.args=') and 'davinci_mcp_guard.py' in c for c in cs))
+            off = json.loads(next(c for c in cs if c.startswith('mcp_servers.davinci-resolve.disabled_tools='))[len('mcp_servers.davinci-resolve.disabled_tools='):])
+            self.assertTrue({'render', 'project_manager', 'resolve_control', 'timeline_versioning'} <= set(off), off)
+            self.assertFalse(any('.env.enabled' in c or 'mcp_servers.davinci-resolve.env' in c for c in cs))     # 子表不当成一个 MCP
+            sk = next(c for c in cs if c.startswith('skills.config='))
+            off = [x for x in json.loads('[' + sk[len('skills.config=['):-1].replace('{path=', '{"path":').replace(',enabled=false}', ',"enabled":false}') + ']')]
+            paths = [x['path'] for x in off]
+            for n2 in ('media-use', 'imagegen', 'lark-doc', 'yixiaoer-cli'): self.assertTrue(any(f'/{n2}/SKILL.md' in p for p in paths), n2)
+            for n2 in ('thinkcut-edit', 'old-edit', 'hyperframes'): self.assertFalse(any(f'/{n2}/SKILL.md' in p for p in paths), n2)   # 旧名和新名指同一份，不能连带关掉
+
+    def test_env_finds_tools_like_user_shell(self):
+        os.environ['PATH'] = '/usr/bin:/bin'                                                 # 从程序坞打开时 PATH 很短
+        env = self.submit_as('codex')['env']; path = env['PATH'].split(os.pathsep)
+        for d in ('/opt/homebrew/bin', str(self.home / '.local/bin'), str(self.home / '.local/node-system/bin')): self.assertIn(d, path)
+        self.assertEqual(env['PYTHONUTF8'], '1'); self.assertEqual(env['HYPERFRAMES_NO_TELEMETRY'], '1'); self.assertEqual(env['THINKCUT_NO_KEYCHAIN'], '1')
+
+    def test_whitelist_is_one_list_for_both(self):
+        A = self.A
+        for n in ('computer-use', 'chrome-devtools', 'node_repl', 'cua_repl', 'codex_apps'): self.assertNotIn(n, A.allowed_mcp())   # 危险的默认不给
+        self.assertIn('davinci-resolve', A.allowed_mcp())                                   # 2026-11-28 用户定开达芬奇 MCP
+        self.assertTrue(all(n in A.MCP_KNOWN for n in ('computer-use', 'chrome-devtools', 'davinci-resolve')))                              # 不给的都写了理由
+        demo = {'does': '演示', 'command': '/bin/echo', 'args': ['hi'], 'env': {'K': 'v'}}
+        old = A.MCP_ALLOW
+        try:
+            A.MCP_ALLOW = {'chrome-devtools': demo}                                            # 假设白名单里加一个：两边都带上
+            cl = json.loads(A.claude_args()[2])['mcpServers']; self.assertEqual(cl['chrome-devtools']['command'], '/bin/echo')
+            cs = A.codex_args(); self.assertIn('mcp_servers.chrome-devtools.enabled=true', cs); self.assertNotIn('mcp_servers.chrome-devtools.enabled=false', cs)
+            self.assertIn('mcp_servers.chrome-devtools.command="/bin/echo"', cs); self.assertIn('mcp_servers.davinci-resolve.enabled=true', cs)
+        finally: A.MCP_ALLOW = old
+
+    def test_settings_tools_report_and_fix(self):
+        t = self.req('/api/settings/tools', None, page=False)[1]; self.assertTrue(t['ok'])
+        sk = {x['name']: x for x in t['skills']}
+        self.assertTrue(sk['thinkcut-edit']['claude'] and sk['thinkcut-edit']['codex']); self.assertFalse(sk['thinkcut-project']['codex'])
+        self.assertIn('hyperframes', t['missing_links'])                                       # Codex 那边有、Claude 那边没链
+        mc = {m['name']: m for m in t['mcp']}; self.assertTrue(set(mc) >= {'davinci-resolve', 'chrome-devtools'})
+        self.assertEqual([n for n, m in mc.items() if m['backend']], ['davinci-resolve'])          # 只有达芬奇开着
+        self.assertTrue(all(m['why'] for n, m in mc.items() if n != 'davinci-resolve'))
+        dv = mc['davinci-resolve']; self.assertTrue(any(x['name'] == 'render' for x in dv['tools_off'])); self.assertTrue(dv['actions_off'] and dv['notes'])
+        self.assertTrue(any(d['name'].startswith('ffmpeg') for d in t['deps']))
+        self.assertEqual(self.req('/api/settings/tools/fix', {}, page=False)[0], 403)          # 一键补只收设置页的
+        (self.home / '.claude' / 'skills' / 'thinkcut-cover').mkdir(parents=True)              # 已有同名文件夹：不动
+        out = self.ok('/api/settings/tools/fix', {})
+        self.assertTrue((self.home / '.claude' / 'skills' / 'hyperframes' / 'SKILL.md').is_file(), out)
+        self.assertTrue(any('thinkcut-cover' in x for x in out['skipped']), out); self.assertFalse((self.home / '.claude' / 'skills' / 'thinkcut-cover').is_symlink())
+
+
+class BackendHelp(Base):
+    """2026-11-28 架构审查：后台 AI 一律中文；261114 真记录里卡住的三处（pgrep、带三引号的 heredoc、没空画面轨）给现成办法。"""
+
+    def submit_as(self, eid):
+        E.choose(eid); nid = self.note(); self.do(['--reply', nid, '--note', '收到']); self.submit(); self.assertEqual(self.run_rec()['state'], '完成')
+        return self.runs()[-1]['argv']
+
+    def check_tools(self, text):
+        for k in ('简体中文', 'resolve-status', 'add-track', 'python3 - <<EOF', 'Write'): self.assertIn(k, text, k)
+
+    def test_claude_submit_chinese_in_system_prompt_and_tool_hints(self):
+        argv = self.submit_as('claude')
+        self.assertIn('简体中文', argv[argv.index('--append-system-prompt') + 1])               # 系统提示里也有：管住过程中说的话
+        self.assertEqual(json.loads(argv[argv.index('--settings') + 1])['language'], '简体中文')      # Claude Code 自己的回复语言设置：接着英文旧会话也回中文（实测）
+        self.check_tools(argv[argv.index('-p') + 1])
+
+    def test_env_drops_parent_agent_session_vars(self):
+        os.environ.update(CLAUDECODE='1', CLAUDE_CODE_SESSION_ID='别人的会话', CLAUDE_CODE_MESSAGING_TOKEN='口令', CLAUDE_CODE_ENTRYPOINT='claude-desktop',
+                          CODEX_THREAD_ID='t', CODEX_HOME=str(self.tmp / 'cx'))                     # 审片台是在另一个 AI 会话里起的
+        E.choose('claude'); nid = self.note(); self.do(['--reply', nid, '--note', '收到']); self.submit(); env = self.runs()[-1]['env']
+        self.assertFalse([k for k in env if k.startswith('CLAUDE') or k == 'CODEX_THREAD_ID'], [k for k in env if k.startswith(('CLAUDE', 'CODEX'))])
+        self.assertEqual(env['CODEX_HOME'], str(self.tmp / 'cx'))
+
+    def test_codex_submit_has_same_rules(self):
+        self.check_tools(self.submit_as('codex')[-1])
+
+    def test_chat_prompt_has_same_rules(self):
+        from thinkcut import chat
+        c = chat.for_project(self.job)
+        for eid in ('claude', 'codex'):
+            system, _ = c.prompt(eid, '你好', []); self.check_tools(system)
+            self.assertNotIn(tempfile.gettempdir() + '。', system)                           # 临时文件放项目里（Claude 的 Write 只放行工作目录）
+        self.assertTrue((self.job.dir / '审片工作台' / 'tmp').is_dir())
+
+    def test_resolve_status_read_only(self):
+        from thinkcut import resolve as R
+        class TL:
+            def GetName(s): return 'v4_主线'
+            def GetTrackCount(s, k): return {'video': 1, 'audio': 2}[k]
+            def GetTrackName(s, k, i): return '视频 1'
+            def GetIsTrackEnabled(s, k, i): return True
+            def GetIsTrackLocked(s, k, i): return False
+            def GetItemListInTrack(s, k, i): return [1, 2, 3]
+            def __getattr__(s, n): raise AssertionError('不该调用写操作：' + n)
+        class P:
+            def GetName(s): return '261114 示例'
+            def GetCurrentTimeline(s): return TL()
+        class PM:
+            def GetCurrentDatabase(s): return {'DbName': '库'}
+            def GetCurrentProject(s): return P()
+        class RV:
+            def GetProjectManager(s): return PM()
+        out = R.live_status(RV(), is_running=lambda: True)
+        self.assertEqual(out['工程'], '261114 示例'); self.assertEqual(out['当前时间线'], 'v4_主线'); self.assertEqual(out['音频轨数'], 2)
+        self.assertEqual(out['画面轨'], [{'第几条': 1, '名字': '视频 1', '开着': True, '锁着': False, '片段数': 3}])
+        self.assertIn('没开', R.live_status(is_running=lambda: False)['说明'])
+        sys.path.insert(0, str(E.PROGRAM / 'bin')); import thinkcut_broker as BK                  # 走代办（AI 沙盒里连不上达芬奇、看不到进程）
+        self.assertFalse(BK.local_ok('thinkcut_edit.py', ['resolve-status'])); self.assertIn('broll.py', BK.SCRIPTS)
+
+
+class Capabilities(unittest.TestCase):
+    """本地对话能做 vs 后台能做（2026-11-28）：表里说“代办”的程序都真在代办名单里，要代办的子命令真会被交出去；差别只剩“安全规矩”。"""
+    def test_table_matches_broker(self):
+        from thinkcut import aitools as A
+        sys.path.insert(0, str(E.PROGRAM / 'bin')); import thinkcut_broker as BK
+        rows = A.capabilities(); self.assertTrue(len(rows) >= 25)
+        self.assertEqual({r['kind'] for r in rows} - {'一样', '代办', '护栏', '安全规矩'}, set())
+        import re as _re
+        for r in rows:
+            if r['kind'] != '代办': continue
+            for name in set(_re.findall(r'[A-Za-z0-9_]+\.py|出片\.py', r['local'] + ' ' + r['backend'])):          # 场景.py 是 AI 改的工程文件，不是命令
+                self.assertTrue(name in BK.SCRIPTS or name in BK.TEMPLATES, f"{r['what']}：{name} 不在代办名单里")
+        for name, argv, local in (('library.py', ['find', 'x'], True), ('library.py', ['--index', '/p/i', 'add-project', '/p'], False), ('library.py', ['notes', '/p'], False),
+                                  ('navigation.py', ['validate', 'a'], True), ('navigation.py', ['render', 'a'], False), ('navigation.py', ['preset-save'], False),
+                                  ('thinkcut_config.py', ['rules'], True), ('thinkcut_config.py', ['new', 'x'], False), ('thinkcut_feedback.py', ['submit', 'f'], False),
+                                  ('thinkcut_edit.py', ['workbench', 'd', '--list'], True), ('thinkcut_edit.py', ['resolve-status'], False)):
+            self.assertEqual(BK.local_ok(name, argv), local, (name, argv))
+        t = A.report(); self.assertEqual(len(t['capabilities']), len(rows))
+
+    def test_feedback_submit(self):
+        sys.path.insert(0, str(E.PROGRAM / 'bin')); import thinkcut_feedback as F
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d); prog = d / '程序'; (prog / 'internal').mkdir(parents=True)
+            src = d / '2026-11-28_示例_反馈单_小王.md'; src.write_text('# 反馈单：示例（2026-11-28）\n', encoding='utf-8')
+            a = F.submit(src, prog); b = F.submit(src, prog)
+            self.assertEqual(a.parent, prog / 'internal' / '经验' / '待审'); self.assertNotEqual(a, b)          # 不覆盖同名的
+            bad = d / '随便.md'; bad.write_text('# 反馈单：x\n', encoding='utf-8')
+            with self.assertRaises(SystemExit): F.submit(bad, prog)
+            shutil.rmtree(prog / 'internal'); self.assertIsNone(F.submit(src, prog))                        # 公开版：留在项目里
+
+
 class AppLaunched(unittest.TestCase):
     """2026-11-26 用户在 Mac 程序的设置页看到 Claude Code、Codex 都“未装”：程序起的服务带着 THINKCUT_NO_OPEN，以前被当成测试、一个 AI 都不找。"""
     def test_no_open_is_not_a_test_marker(self):

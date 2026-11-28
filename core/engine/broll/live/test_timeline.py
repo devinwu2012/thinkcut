@@ -34,6 +34,20 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(len(m['picture_occupied']),5)
         self.assertFalse(m['snapshot']['broll_extra']['track_enabled_trusted'])
 
+    def test_v1_original_at_120_percent_maps_by_sped_up_frames(self):
+        """2026-11-27 起口播原片（30 帧）放进达芬奇设 120%：来源区间比片段长 1.2 倍，不再当成“变速不能对齐”；
+        重剪以后同一句话落在新位置，B-roll 的锚点跟得上。"""
+        def model(source_start):
+            s = snapshot(length=600, step=600)
+            for row in s['items']:
+                if row['track'] == 1 and row['type'] in ('video', 'audio'):
+                    row.update(source_start=source_start, source_end=source_start+round(600*1.2*30/29.97), speed=1.2, media_fps='30.0')
+            return t.build_model(s)
+        before, after = model(3000), model(3360)      # 重剪：同一条原片，片段从晚 12 秒（360 个原片帧）的地方开始
+        self.assertEqual(before['v1_map'][0]['source_start'], 2498)
+        sources = t.record_to_source(before, 300, 360)
+        self.assertEqual(t.source_to_record(after, sources), [[1, 61]])      # 原片晚 12 秒＝加速后 10 秒（约 300 帧）：原来第 300 帧那句话，重剪后在第 1 帧
+
     def test_no_unknown_ownership(self):
         s = snapshot(); s['items'].append(item('未知',0,100)); s['items'][-1]['media_path']=None
         with self.assertRaisesRegex(ValueError,'无法归属'): t.build_model(s)

@@ -28,7 +28,12 @@ def map_a1_words(timeline, transcripts, start=None, end=None):
         if data is None:
             return None  # Missing timings must use subtitles, never assert that the word was absent.
         from .merge import linear
-        if not linear(clip):
+        # 2026-11-27 起口播原片（常是 30 帧）在达芬奇里设 120%：识别结果是 1.2 倍速声音上的时间，正好是时间线上的帧；
+        # 左偏移（source_offset）也是按时间线帧算的，直接对得上，不用管来源区间是不是一比一
+        retimed = clip.get('speed') or (clip.get('media_fps') and abs(float(clip['media_fps'])-fps) > .01)
+        if retimed and clip.get('source_offset') is None:
+            raise ValueError('变速A1读不到左偏移，不能可靠映射逐字时间')
+        if not retimed and not linear(clip):
             raise ValueError('变速A1不能可靠映射逐字时间')
         if not any(u.get('words') for u in data['result']['utterances']):
             return None

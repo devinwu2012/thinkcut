@@ -67,7 +67,7 @@ description: 反馈（每个 IP 的项目，以及这套剪辑能力本身）：
 
 ## 4. 交给架构审查
 
-1. **写反馈单**：`$AI/internal/经验/待审/YYYY-MM-DD_<片名或主题>_反馈单_<反馈人>.md`（反馈人用项目所属 IP 配置的 `反馈人`：`python3 "$AI/bin/thinkcut_config.py" show --key 反馈人 --project <项目根>`，不用问用户，2026-11-01 用户定）。格式：
+1. **写反馈单**：先写在项目里 `<项目>/02_制作/反馈单/YYYY-MM-DD_<片名或主题>_反馈单_<反馈人>.md`，再交：`python3 "$AI/bin/thinkcut_feedback.py" submit <那个文件>`（放进 `$AI/internal/经验/待审/`，不覆盖同名的；后台 AI 在沙盒里写不了程序文件夹，这条命令自动交给审片台代办，2026-11-28）。反馈人用项目所属 IP 配置的 `反馈人`：`python3 "$AI/bin/thinkcut_config.py" show --key 反馈人 --project <项目根>`，不用问用户，2026-11-01 用户定）。格式：
 
    ```markdown
    # 反馈单：<项目名或主题>（YYYY-MM-DD）

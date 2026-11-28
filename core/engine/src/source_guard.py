@@ -37,12 +37,19 @@ def single_audio(info, audio_stream=0):
         raise ValueError('完整剪辑当前只支持单音轨视频；多音轨请先准备选定音轨的素材。独立转写仍可选轨。')
 
 
+def video_identity(path):
+    stat = Path(path).stat()
+    return {'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns}
+
+
 def verify_source(config, run, *, sampled=False, audio=False):
+    """转写记录对的是剪口播读声音的文件（老项目是口播源；2026-11-27 起倍速在达芬奇里做的项目是 1.2 倍速声音文件）。
+    倍速项目另查原片（放进达芬奇的那个文件）的大小、修改时间和建项时一样。返回原片的路径、大小、修改时间（交付基线用）。"""
     if not config:  # unit tests without a project; real projects always have a config
         return None
     run = Path(run)
     record = json.loads((run.parent / '转写/source_manifest.json').read_text())
-    source = Path(config['source']).resolve(strict=True)
+    source = Path(config.get('voice') or config['source']).resolve(strict=True)
     before = source.stat()
     current = {'path': str(source), 'size': before.st_size,
                'mtime_ns': before.st_mtime_ns, 'ctime_ns': before.st_ctime_ns}
@@ -50,19 +57,24 @@ def verify_source(config, run, *, sampled=False, audio=False):
         raise SourceChanged('原片已改变或不匹配原始转写；已停止本次操作，请使用独立新项目。')
     if sampled and (not record.get('fingerprint') or fingerprint(source) != record['fingerprint']):
         raise SourceChanged('原片抽样指纹与转写不匹配；已停止本次操作。')
+    video, video_size, video_mtime = source, record['size'], record['mtime_ns']
+    if config.get('voice'):
+        video = Path(config['source']).resolve(strict=True)
+        if video_identity(video) != config.get('video_identity'):
+            raise SourceChanged(f'原片 {video.name} 在建项之后改过（大小或修改时间变了）；已停止本次操作。换了原片请用独立新项目。')
+        video_size, video_mtime = config['video_identity']['size'], config['video_identity']['mtime_ns']
     if audio:
         from probe_media import probe
-        single_audio(probe(source), config.get('audio_stream', 0))
+        single_audio(probe(video), 0 if config.get('voice') else config.get('audio_stream', 0))
     after = source.stat()
     if (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (before.st_size, before.st_mtime_ns, before.st_ctime_ns):
         raise SourceChanged('原片在检查时发生变化；已停止本次操作。')
     approval = run / 'delivery_approved_v1/approval_manifest.json'
     if approval.exists():
         old = json.loads(approval.read_text())
-        if (old['source'], old['source_size'], old['source_mtime_ns']) != (
-                str(source), record['size'], record['mtime_ns']):
+        if (old['source'], old['source_size'], old['source_mtime_ns']) != (str(video), video_size, video_mtime):
             raise SourceChanged('原片与已冻结来源基线不一致；不会重写旧基线。')
-    return {'source': str(source), 'source_size': record['size'], 'source_mtime_ns': record['mtime_ns']}
+    return {'source': str(video), 'source_size': video_size, 'source_mtime_ns': video_mtime}
 
 
 # ---- 同帧数换源（2026-11-12《水电阶段》：口播换了新颜色/新声音版、帧数不变，返修删句要能继续走剪口播工具） ----
@@ -193,6 +205,9 @@ def replace_source(config, run, new, *, old=None, now=None):
     """检查通过后，把审核、交付的来源基线换成新文件；旧基线写进 转写/换源记录.json。返回新的 config。"""
     import os
     from datetime import datetime
+    if config.get('voice'):
+        raise SourceChanged('这个项目的倍速是在达芬奇里做的（原片＋1.2 倍速声音文件），还不支持换源：'
+                            '换了原片请用新项目重剪；只想改声音，剪完在达芬奇里修音（voice-polish）。')
     run = Path(run); new = Path(new).resolve(strict=True)
     manifest_path = run.parent / '转写/source_manifest.json'
     previous = json.loads(manifest_path.read_text())

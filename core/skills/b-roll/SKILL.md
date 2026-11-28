@@ -26,6 +26,7 @@ description: 剪辑第 2 步「配 B-roll」（由 thinkcut-edit 入口调用，
 | 她的说法 | 命令（由 Codex 执行） |
 |---|---|
 | 剪 B roll / 配 B-roll / 插画面 / 再配一次 | `plan` → 看第一层素材、填匹配；不足或用户要求补其他项目时 `plan --more` → `apply --matches <匹配文件>` 演练 → 同命令加 `--apply` 写入 |
+| （apply 报“没有叠加层下方的空闲主选轨”：主线只有口播一条画面轨） | `add-track` 演练 → 同命令加 `--apply`：在最上面加一条空画面轨“B-roll”并保存工程，不动片段，再重新 `apply`。已有能放的画面轨不加；上面有花字、人物抠像等叠加轨时不加（脚本只能加在最上面），请她在达芬奇里手动插（2026-11-28） |
 | 这处（播放头 / 时间码） | `at --playhead` / `at HH:MM:SS:FF`；不唯一时最多列3处供选 |
 | 这处换掉 | `adjust --spot <编号> --use 2 --apply`（或 `--use 3` / `--segment <素材段ID>`） |
 | 这处不要 | `adjust --spot <编号> --remove --apply` |

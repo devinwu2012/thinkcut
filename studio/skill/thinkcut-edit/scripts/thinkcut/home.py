@@ -619,6 +619,7 @@ def make_handler(root, ports=None):
             if p == '/api/chat': return self.send(talk.state())
             if p == '/settings': return self.send(settings.page(SESSION), 'text/html; charset=utf-8', cookie=True)
             if p == '/api/settings': return self.send(settings.info())
+            if p == '/api/settings/tools': return self.send(settings.tools_info())
             if p == '/api/cover':                  # 卡片上的封面小图
                 try: cv = cover_of(film_dir(root, q.get('id', '')))
                 except Oops: cv = None

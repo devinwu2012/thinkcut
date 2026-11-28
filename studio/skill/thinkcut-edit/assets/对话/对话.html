@@ -12,7 +12,7 @@
 #tcChatBtn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
 body.tc-chat-on{padding-right:var(--tc-chat-w,380px)}
 body.tc-chat-on #aiact{right:calc(var(--tc-chat-w,380px) + 16px)}
-body.tc-chat-on.tc-chat-over{padding-right:0}body.tc-chat-over #tcChat{box-shadow:var(--sh-pop)}body.tc-chat-on.tc-chat-over #aiact{right:16px}
+body.tc-chat-on.tc-chat-over{padding-right:0}body.tc-chat-over #tcChat{box-shadow:var(--sh-pop);top:var(--bar-h)}   /* 浮在页面上时从顶栏下面开始：顶栏（栏目、主按钮、对话开关）不被盖住 */body.tc-chat-on.tc-chat-over #aiact{right:16px}
 #tcChat{position:fixed;top:0;right:0;bottom:0;width:var(--tc-chat-w,380px);z-index:40;background:var(--side);box-shadow:calc(-1 * var(--hair-w)) 0 0 var(--hair2);display:flex;flex-direction:column;
   font-family:var(--font);font-size:var(--fs-13);line-height:var(--lh-13);color:var(--t1);-webkit-user-select:text;user-select:text;
   transform:translateX(calc(24px * var(--move)));opacity:0;visibility:hidden;transition:transform var(--dur-3) var(--ease),opacity var(--dur-2) var(--ease),visibility 0s linear var(--dur-3)}
@@ -43,6 +43,7 @@ body.tc-chat-on.tc-chat-over{padding-right:0}body.tc-chat-over #tcChat{box-shado
 #tcChat .who span{font-weight:var(--fw-r);color:var(--t3);font-size:var(--fs-11)}
 #tcChat .txt{word-break:break-word}#tcChat .txt p{margin:0 0 var(--sp-2)}#tcChat .txt p:last-child{margin:0}
 #tcChat .txt code{font-family:var(--font-mono);font-size:var(--fs-12);background:var(--sunk);border-radius:var(--r-s);padding:0 4px}
+#tcChat .txt table{border-collapse:collapse;margin:0 0 var(--sp-2);font-size:var(--fs-12);line-height:var(--lh-12)}#tcChat .txt th,#tcChat .txt td{border-bottom:var(--hairline);padding:2px var(--sp-2) 2px 0;text-align:left;font-weight:var(--fw-r)}#tcChat .txt th{color:var(--t3)}
 #tcChat .txt ul{margin:0 0 var(--sp-2);padding-left:20px}
 #tcChat .caret{display:inline-block;width:7px;height:14px;margin-left:2px;vertical-align:-2px;background:var(--s-ai);border-radius:var(--r-tip);animation:tcblink 1s steps(2) infinite}
 @keyframes tcblink{50%{opacity:0}}
@@ -81,6 +82,14 @@ body.tc-chat-on.tc-chat-over{padding-right:0}body.tc-chat-over #tcChat{box-shado
 #tcChat .drop b{font-size:var(--fs-13)}#tcChat .drop span{font-size:var(--fs-12);color:var(--t2)}
 #tcChat .confirm{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-4);background:var(--s-err-bg);color:var(--s-err-t);font-size:var(--fs-12);border-bottom:var(--hairline)}
 #tcChat .confirm span{flex:1}
+#tcChat .comp{position:relative}
+#tcChat .cmds{position:absolute;left:var(--sp-4);right:var(--sp-4);bottom:calc(100% - var(--sp-2));max-height:300px;overflow-y:auto;background:var(--card);border-radius:var(--r-l);box-shadow:var(--sh-pop);padding:4px;z-index:4}
+#tcChat .cmd{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline;gap:var(--sp-2);width:100%;border:0;background:transparent;text-align:left;padding:6px var(--sp-2);border-radius:var(--r-s);font:inherit;font-size:var(--fs-12);line-height:var(--lh-12);color:var(--t1);cursor:default}
+#tcChat .cmd b{font-weight:var(--fw-b);white-space:nowrap}#tcChat .cmd b i{font-style:normal;font-weight:var(--fw-r);color:var(--t3)}
+#tcChat .cmd span{color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tcChat .cmd em{font-style:normal;font-size:var(--fs-11);color:var(--t3);background:var(--fill);border-radius:var(--r-pill);padding:0 6px}
+#tcChat .cmd.on{background:var(--blue-tint)}#tcChat .cmd.on span{color:var(--t2)}
+#tcChat .cmds .cap{font-size:var(--fs-11);line-height:var(--lh-11);color:var(--t3);padding:4px var(--sp-2)}
 @media (max-width:760px){body.tc-chat-on{padding-right:0}#tcChat{width:100%!important}}
 </style>
 <aside id="tcChat" aria-label="AI 对话" aria-hidden="true">
@@ -91,8 +100,8 @@ body.tc-chat-on.tc-chat-over{padding-right:0}body.tc-chat-over #tcChat{box-shado
 <div class="confirm" id="tcConfirm" hidden><span>清空这段对话的记录？</span><button class="b ghost" id="tcNo" type="button">取消</button><button class="b" id="tcYes" type="button">清空</button></div>
 <div class="scope" id="tcScope"></div>
 <div class="msgs" id="tcMsgs" aria-live="polite"></div>
-<div class="comp"><div class="files" id="tcPend" style="align-self:stretch;width:auto;flex:none;max-height:180px;overflow-y:auto" hidden></div>
-<textarea id="tcText" rows="3" placeholder="跟 AI 说一句…（可以把文件拖进来）" aria-label="跟 AI 说的话"></textarea>
+<div class="comp"><div class="cmds" id="tcCmds" role="listbox" aria-label="斜杠命令" hidden></div><div class="files" id="tcPend" style="align-self:stretch;width:auto;flex:none;max-height:180px;overflow-y:auto" hidden></div>
+<textarea id="tcText" rows="3" placeholder="跟 AI 说一句…（可以把文件拖进来；输入 / 看命令）" aria-label="跟 AI 说的话"></textarea>
 <div class="cerr" id="tcErr" hidden></div>
 <div class="row" style="flex-wrap:nowrap"><button class="ib" id="tcAttach" type="button" title="添加文件（放进项目的 01_原始素材）" aria-label="添加文件"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 7.5-5.2 5.2a3 3 0 0 1-4.25-4.25L9 3a2 2 0 0 1 2.85 2.85l-5.4 5.4a1 1 0 0 1-1.4-1.4l4.9-4.9"/></svg></button>
 <span class="hint" id="tcHint">⏎ 发送　⇧⏎ 换行</span><button class="b pri" id="tcSend" type="button" title="发送（⏎）" aria-label="发送" style="width:28px;padding:0"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V3.5M3.75 7.5 8 3.25l4.25 4.25"/></svg></button>
@@ -107,7 +116,7 @@ const box=$('tcChat'),btn=$('tcChatBtn'),msgs=$('tcMsgs'),ta=$('tcText');
 const store={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
 let S=null,open=false,pend=[],timer=0,lastSig='',sending=false;
 const W=()=>Math.max(320,Math.min(640,+store.get('tc-chat-w')||380,innerWidth-420));
-function setW(){const w=W();document.documentElement.style.setProperty('--tc-chat-w',w+'px');document.body.classList.toggle('tc-chat-over',innerWidth-w<760)}   // 窗口太窄：浮在页面上面，不把页面挤坏
+function setW(){const w=W();document.documentElement.style.setProperty('--tc-chat-w',w+'px');document.body.classList.toggle('tc-chat-over',innerWidth-w<560)}   // 主区不够 560 才浮在页面上面（顶栏 560 以上都能按让位规矩排下）
 async function api(p,b){const o=b===undefined?{cache:'no-store'}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)};
   try{const r=await fetch(p,o);const t=await r.text();let x;try{x=JSON.parse(t)}catch{x={ok:false,error:`服务出错（${r.status}）`}}
     if(r.status===403&&x.code==='stale_page'){x.error='服务重启过：刷新一下页面再发（打的字不会丢）'}return x}catch{return {ok:false,error:'连不上服务：稍后再试'}}}
@@ -129,6 +138,9 @@ addEventListener('resize',()=>{if(open)setW()});
 // 文字：只认 **粗**、`代码`、- 列表、空行分段（AI 的话不当 HTML）
 function md(t){const blocks=String(t||'').trim().split(/\n{2,}/);return blocks.map(b=>{const ls=b.split('\n');
   const inl=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  if(ls.length>1&&ls.every(l=>/^\s*\|.*\|\s*$/.test(l))){const rows=ls.filter(l=>!/^\s*\|[\s:|-]+\|\s*$/.test(l)).map(l=>l.trim().slice(1,-1).split('|').map(c=>inl(c.trim())));
+    return '<table>'+rows.map((r,i)=>'<tr>'+r.map(c=>i?`<td>${c}</td>`:`<th>${c}</th>`).join('')+'</tr>').join('')+'</table>'}
+  if(/^#{1,4}\s/.test(ls[0])&&ls.length===1)return '<p><b>'+inl(ls[0].replace(/^#+\s*/,''))+'</b></p>';
   if(ls.every(l=>/^\s*[-•·]\s+/.test(l)))return '<ul>'+ls.map(l=>'<li>'+inl(l.replace(/^\s*[-•·]\s+/,''))+'</li>').join('')+'</ul>';
   return '<p>'+ls.map(inl).join('<br>')+'</p>'}).join('')}
 const hm=t=>String(t||'').slice(11,16),mb=n=>n>=1<<30?(n/(1<<30)).toFixed(2)+' GB':n>=1<<20?(n/(1<<20)).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
@@ -181,9 +193,25 @@ $('tcStop').onclick=async()=>{$('tcStop').disabled=true;const r=await api('/api/
 $('tcClear').onclick=()=>{$('tcConfirm').hidden=false;$('tcNo').focus()};$('tcNo').onclick=()=>{$('tcConfirm').hidden=true};
 $('tcYes').onclick=async()=>{const r=await api('/api/chat/clear',{});$('tcConfirm').hidden=true;if(!r.ok)err(r.error);lastSig='';poll(true)};
 const fit=()=>{ta.style.height='auto';ta.style.height=Math.min(180,Math.max(64,ta.scrollHeight))+'px'};
-ta.addEventListener('input',fit);
-ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();if(!S||!S.busy)send()}
-  else if(e.key==='Escape'){e.preventDefault();show(false)}});
+// 斜杠命令：输入 / 弹出这个引擎下能用的命令（服务给的表），↑↓ 选、⏎／Tab 用、Esc 关
+const TAG={app:'ThinkCut',ai:'AI 命令',skill:'技能'};let cmdList=[],cmdOn=0;
+function cmds(){const v=ta.value,m=/^\/(\S*)$/.exec(v),box=$('tcCmds');
+  if(!m||!S||!S.commands){box.hidden=true;cmdList=[];return}
+  const q=m[1].toLowerCase();cmdList=S.commands.filter(c=>c.name.startsWith(q)||q&&c.name.includes(q));
+  if(!cmdList.length){box.innerHTML='<div class="cap">没有这个命令：输入 /help 看能用的；普通的话别用 / 开头</div>';box.hidden=false;return}
+  cmdOn=Math.min(cmdOn,cmdList.length-1);
+  box.innerHTML=`<div class="cap">${esc((S.engine||{}).name||'AI')} 后台能用的命令</div>`+cmdList.map((c,i)=>`<button type="button" class="cmd ${i===cmdOn?'on':''}" data-i="${i}" role="option" title="${esc(c.desc)}"><b>/${esc(c.name)}${c.args?' <i>'+esc(c.args)+'</i>':''}</b><span>${esc(c.desc)}</span><em>${TAG[c.kind]||''}</em></button>`).join('');
+  box.hidden=false;box.querySelector('.cmd.on')?.scrollIntoView({block:'nearest'})}
+function pick(i){const c=cmdList[i];if(!c)return;$('tcCmds').hidden=true;
+  if(c.kind==='app'&&!c.args){ta.value='/'+c.name;return send()}ta.value='/'+c.name+' ';ta.focus();fit()}
+$('tcCmds').addEventListener('mousedown',e=>{const b=e.target.closest('.cmd');if(b){e.preventDefault();pick(+b.dataset.i)}});
+ta.addEventListener('input',()=>{fit();cmdOn=0;cmds()});
+ta.addEventListener('blur',()=>setTimeout(()=>{$('tcCmds').hidden=true},120));
+ta.addEventListener('keydown',e=>{const open=!$('tcCmds').hidden&&cmdList.length;
+  if(open&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();cmdOn=(cmdOn+(e.key==='ArrowDown'?1:cmdList.length-1))%cmdList.length;cmds();return}
+  if(open&&(e.key==='Tab'||(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229))){e.preventDefault();pick(cmdOn);return}
+  if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();if(!S||!S.busy||ta.value.trim().startsWith('/'))send()}
+  else if(e.key==='Escape'){e.preventDefault();if(!$('tcCmds').hidden){$('tcCmds').hidden=true}else show(false)}});
 // 文件：拖进来、或点回形针选；一个一个传（请求体就是文件），传好的跟着下一句话一起发给 AI
 function drawPend(){const p=$('tcPend');p.hidden=!pend.length;p.innerHTML=pend.map((f,i)=>`<div class="chip"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><div class="row" style="flex-wrap:nowrap"><span class="nm">${esc(f.name)}</span><span style="flex:1"></span><span class="sz ${f.state==='错'?'bad':''}">${f.state==='传'?mb(f.size)+' · '+Math.floor(f.pct)+'%':f.state==='好'?mb(f.size):'没传上'}</span><button class="ib" type="button" data-rm="${i}" aria-label="去掉" title="去掉（已放进项目的不删）" style="width:20px;height:20px">×</button></div>${f.state==='传'?`<div class="bar"><i style="width:${f.pct}%"></i></div>`:`<span class="sz ${f.state==='好'?'ok':'bad'}">${esc(f.state==='好'?(f.path!==('01_原始素材/'+f.name)?'同名已有，存成 '+f.path:'已放进 '+f.path):f.error)}</span>`}</div></div>`).join('')}
 $('tcPend').addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(b){pend.splice(+b.dataset.rm,1);drawPend()}});

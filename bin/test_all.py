@@ -27,7 +27,7 @@ def label(name): return '根目录' if name == '.' else name
 def test_commands(repo, name):
     py = sys.executable
     if name == '.':
-        cmds = [c for c in ([py, 'bin/test_placeholder.py'], ['bash', 'bin/test_sync_env.sh'], [py, 'bin/test_release.py'], [py, 'bin/test_merge_once.py'], [py, 'bin/test_thinkcut_config.py'], [py, 'bin/test_thinkcut_app.py'], [py, 'bin/test_legacy_names.py'], [py, 'bin/test_design.py']) if (repo / c[1]).exists()]
+        cmds = [c for c in ([py, 'bin/test_placeholder.py'], ['bash', 'bin/test_sync_env.sh'], [py, 'bin/test_release.py'], [py, 'bin/test_merge_once.py'], [py, 'bin/test_thinkcut_config.py'], [py, 'bin/test_thinkcut_app.py'], [py, 'bin/test_legacy_names.py'], [py, 'bin/test_design.py'], [py, 'bin/test_davinci_mcp.py'], [py, 'bin/test_broker_sandbox.py']) if (repo / c[1]).exists()]
     elif (repo / 'bin' / 'run_tests.sh').exists(): cmds = [['bash', 'bin/run_tests.sh']]
     elif (repo / 'bin' / 'test_project.py').exists(): cmds = [[py, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', 'bin/test_project.py']]
     else: cmds = []

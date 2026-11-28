@@ -13,6 +13,7 @@ from prepare_mvp_delivery import exclusive_lock, verify_package, digest
 from run_mvp import resolve_mcp_runtime, node_runtime
 
 from project_runtime import ROOT, RUN, NAME, CONFIG
+from speed_map import clip_range, clip_start_ok
 
 
 def sha(path):
@@ -115,8 +116,9 @@ def resolve_script_environment():
     return env
 
 
-def direct_timeline(project_name, final=None, need_timeline=True):
-    """当前工程的当前时间线。need_timeline=False 只确认连得上、工程对得上：新建的空工程还没有时间线时返回 None。"""
+def direct_timeline(project_name, final=None, need_timeline=True, with_project=False):
+    """当前工程的当前时间线。need_timeline=False 只确认连得上、工程对得上：新建的空工程还没有时间线时返回 None。
+    with_project=True 时返回 (工程, 时间线)。"""
     original_locale = locale.setlocale(locale.LC_ALL)
     try:
         env = resolve_script_environment()
@@ -145,17 +147,116 @@ def direct_timeline(project_name, final=None, need_timeline=True):
                            '在达芬奇里双击打开一条时间线后再试')
     if final is not None and timeline.GetName() != final:
         raise ValueError('达芬奇当前时间线不匹配：应为「' + final + '」')
-    return timeline
+    return (project, timeline) if with_project else timeline
+
+
+# 达芬奇 MCP 每改一次时间线自动另存的备份（“<名字>_archived_vNN”，回滚出来的“<名字>_rolled_back_<时分秒>”）；和 bin/davinci_mcp_policy.py 的 BACKUP 一样
+MCP_BACKUP = re.compile(r'^(.*)(?:_archived_v\d+|_rolled_back_\d{6})$')
 
 
 async def validate_timeline_inventory(session, before, allowed, final):
+    """交付前后对时间线清单：只许多出这次交付自己的。别的时间线的 MCP 备份（后台 AI 经达芬奇 MCP 改过别的线，2026-11-28 开 MCP）不算多出；
+    这次交付自己那几条线的备份照旧算——那说明交付途中有人经 MCP 改了它（交付拿着达芬奇写入锁，护栏这时拒 MCP 的写操作，正常不会有）。"""
     names = {row['name'] for row in (await call(session, 'timeline', 'list'))['timelines']}
-    extra = names - before - allowed
+    mine = set(allowed) | {final}
+    extra = {n for n in names - before - allowed if not ((m := MCP_BACKUP.match(n)) and m[1] not in mine)}
     if extra:
         raise ValueError('达芬奇里多出了时间线：' + '、'.join(sorted(extra)))
     clips = (await call(session, 'folder', 'get_clips', path='Master'))['clips']
     if final not in names or not any(c['name'] == final for c in clips):
         raise ValueError('交付主线不在 Master：' + final)
+
+
+# ---- 倍速在达芬奇里做（2026-11-27 起）：交付包 source 里有 speed 时，原片按换算的帧放进去再设速度 ----
+def package_speed(manifest):
+    """交付包要在达芬奇里设的速度；老交付包（没写 speed，口播源就是加速版）返回 None。"""
+    value = manifest['source'].get('speed')
+    return float(value) if value is not None else None
+
+
+async def clip_fps(session, item_id):
+    """原片在达芬奇里的帧率（媒体池“FPS”属性；iPhone 可变帧率的原片是标称 30）。"""
+    value = (await call(session, 'media_pool_item', 'get_clip_property', clip_id=item_id, key='FPS'))['properties']
+    return float(value)
+
+
+def clip_infos(segments, item_id, speed, fps, track_index=None):
+    rows = []
+    for s in segments:
+        start, end = (s['src_in'], s['src_out']) if speed is None else clip_range(s['src_in'], s['src_out'], speed, fps)
+        row = {'media_pool_item_id': item_id, 'start_frame': start, 'end_frame': end, 'record_frame': s['tl_in']}
+        if track_index is not None:
+            row['track_index'] = track_index
+        rows.append(row)
+    return rows
+
+
+def set_speeds(project_name, timeline_name, first, count, speed):
+    """给 V1 第 first 段起的 count 段设速度（连着的声音片段达芬奇自己跟着变）；变调校正打开，长度不变（不波纹）。
+    直接用达芬奇脚本接口设：经 MCP 设的话，它每次改动前会把整条时间线另存一份 “_archived_v01”（2026-11-27 试验田实测），交付就多出时间线。"""
+    if speed is None or count <= 0:
+        return
+    timeline = direct_timeline(project_name, final=timeline_name)
+    items = sorted(timeline.GetItemListInTrack('video', 1) or [], key=lambda item: item.GetStart())
+    if len(items) < first + count:
+        raise ValueError(f'设速度时 V1 只有 {len(items)} 段，应有 {first + count} 段')
+    options = {'Percentage': speed * 100, 'PitchCorrection': True, 'RippleTimeline': False}
+    for i in range(first, first + count):
+        if not hasattr(items[i], 'SetSpeed'):
+            raise RuntimeError('这个达芬奇版本不能用脚本设片段速度（要 21.1 以上）：升级达芬奇，或这条用 --speed 1 重新剪')
+        if not items[i].SetSpeed(dict(options)):
+            raise ValueError(f'给第 {i} 段设 {speed * 100:g}% 速度失败')
+
+
+async def check_source_position(session, kind, i, seg, speed, fps, label=''):
+    """读回第 i 段的来源位置：老交付包看左偏移＝src_in；倍速交付包看来源起点（原片帧，允许差 1 帧）和速度。"""
+    if speed is None:
+        offset = await call(session, 'timeline_item', 'get_left_offset', track_type=kind, track_index=1, item_index=i)
+        if offset['offset'] != seg['src_in']:
+            raise ValueError(f'{label}{kind} source offset differs at clip {i}')
+        return
+    expected = clip_range(seg['src_in'], seg['src_out'], speed, fps)[0]
+    frame = (await call(session, 'timeline_item', 'get_source_start_frame', track_type=kind, track_index=1, item_index=i))['frame']
+    if not clip_start_ok(frame, expected):
+        raise ValueError(f'{label}{kind} source start differs at clip {i}: {frame} vs {expected}')
+    got = (await call(session, 'timeline_item', 'get_speed', track_type=kind, track_index=1, item_index=i))['speed'] or {}
+    if abs(float(got.get('Percentage') or 0) - speed * 100) > 0.01 or got.get('PitchCorrection') is not True:
+        raise ValueError(f'{label}{kind} clip {i} speed is {got}, expected {speed * 100:g}% with pitch correction')
+
+
+# ---- 新主线的画幅沿用上一版主线（2026-11-27 261114 反馈单 新4：已有工程里重剪，新主线按工程默认建成 1920×1080） ----
+ANY_MAIN = re.compile(r'v(\d+)_主线_(\d{4}-\d{4})_[0-9a-f]{4}')
+FORMAT_KEYS = ('timelineResolutionWidth', 'timelineResolutionHeight', 'timelineInputResMismatchBehavior')
+
+
+def previous_main(project, final):
+    """同一个工程里上一版主线（版本号最大、同版本取最晚的；不认“未完成”的半成品）。没有返回 None。"""
+    rows = []
+    for i in range(project.GetTimelineCount()):
+        timeline = project.GetTimelineByIndex(i + 1); m = ANY_MAIN.fullmatch(timeline.GetName() or '')
+        if m and timeline.GetName() != final:
+            rows.append(((int(m[1]), m[2]), timeline))
+    return max(rows, key=lambda r: r[0])[1] if rows else None
+
+
+def match_previous_format(project_name, base, final):
+    """把刚建好的 base 时间线（当前时间线）设成和上一版主线一样的画幅（宽高、分辨率不符时怎么缩放），用时间线自己的设置、不改工程设置；
+    之后导出 DRT 写字幕再导入成主线，设置跟着带过去。没有上一版主线返回 None（照旧）；设不上就停。返回记录。"""
+    project, timeline = direct_timeline(project_name, final=base, with_project=True)
+    old = previous_main(project, final)
+    if old is None:
+        return None
+    want = {key: old.GetSetting(key) for key in FORMAT_KEYS}
+    have = {key: timeline.GetSetting(key) for key in FORMAT_KEYS}
+    if have != want:
+        timeline.SetSetting('useCustomSettings', '1')
+        for key in FORMAT_KEYS:
+            if want[key] and have[key] != want[key]:
+                timeline.SetSetting(key, want[key])
+        have = {key: timeline.GetSetting(key) for key in FORMAT_KEYS}
+        if [have[k] for k in FORMAT_KEYS[:2]] != [want[k] for k in FORMAT_KEYS[:2]]:
+            raise ValueError(f'新主线的画幅设不成上一版主线「{old.GetName()}」的 {want[FORMAT_KEYS[0]]}×{want[FORMAT_KEYS[1]]}（现在 {have[FORMAT_KEYS[0]]}×{have[FORMAT_KEYS[1]]}）')
+    return {'from': old.GetName(), 'width': int(want[FORMAT_KEYS[0]]), 'height': int(want[FORMAT_KEYS[1]]), 'scaling': want[FORMAT_KEYS[2]]}
 
 
 def validate_items(probe, segments, spec, source_id, source_path):
@@ -370,6 +471,7 @@ async def import_package(package, manifest, mapping, attempt):
     base = manifest['base_timeline_name']
     final = manifest['timeline_name']
     item_id = manifest['source']['media_pool_item_id']
+    speed = package_speed(manifest)
     async with stdio_client(params) as (reader, writer):
         async with ClientSession(reader, writer, read_timeout_seconds=timedelta(seconds=90)) as session:
             await session.initialize()
@@ -384,6 +486,7 @@ async def import_package(package, manifest, mapping, attempt):
             prop = await call(session, 'media_pool_item', 'get_clip_property', clip_id=item_id, key='File Path')
             if prop['properties'] != str(source):
                 raise ValueError('Media-pool source does not match package')
+            fps = await clip_fps(session, item_id) if speed is not None else None
             # A main line left by an attempt of this package that never passed is a half-built leftover:
             # set it aside (archived later) and rebuild. Once any attempt passed, the main line is a real
             # delivery the user may have hand-finished, so it always goes through the edit check below.
@@ -403,15 +506,15 @@ async def import_package(package, manifest, mapping, attempt):
             new_final = final not in names
             await frame_rate_preflight(session, manifest, final if not new_final else base if base in names else None)
             project_format_report = None
+            main_format = None
             if new_final:
                 await call(session, 'project_manager', 'save')
                 before = package / '导入前项目备份.drp'
                 if not before.exists():
                     await export_atomically(session, before, 'project_manager', 'export_project', name=manifest['project'])
                 if base not in names:
-                    first = segments[0]
-                    await call(session, 'media_pool', 'create_timeline_from_clips', name=base, if_exists='fail', clip_infos=[{
-                        'media_pool_item_id': item_id, 'start_frame': first['src_in'], 'end_frame': first['src_out'], 'record_frame': first['tl_in']}])
+                    await call(session, 'media_pool', 'create_timeline_from_clips', name=base, if_exists='fail',
+                               clip_infos=clip_infos(segments[:1], item_id, speed, fps))
                 else:
                     await call(session, 'timeline', 'set_current', name=base)
                 base_probe = await call(session, 'timeline', 'probe_timeline_structure', track_types=['video', 'audio'], include_markers=False)
@@ -422,21 +525,20 @@ async def import_package(package, manifest, mapping, attempt):
                 count = len(video)
                 if count > len(segments):
                     raise ValueError('Existing base timeline has too many clips')
+                set_speeds(manifest['project'], base, 0, count, speed)      # 上次中断在放片段和设速度之间：补设（设过的再设一遍不变）
                 for kind, existing in (('video', video), ('audio', audio)):
                     for i, item in enumerate(existing):
                         s = segments[i]
                         if (item['start'], item['end'], item.get('media_pool_item_id'), item.get('file_path')) != (
                                 base_probe['start_frame']+s['tl_in'], base_probe['start_frame']+s['tl_out'], item_id, str(source)):
                             raise ValueError(f'Existing base {kind} timeline differs at clip {i}')
-                        offset = await call(session, 'timeline_item', 'get_left_offset', track_type=kind, track_index=1, item_index=i)
-                        if offset['offset'] != s['src_in']:
-                            raise ValueError(f'Existing base {kind} source offset differs at clip {i}')
+                        await check_source_position(session, kind, i, s, speed, fps, 'Existing base ')
                 if count < len(segments):
-                    infos = [{'media_pool_item_id': item_id, 'start_frame': s['src_in'], 'end_frame': s['src_out'],
-                              'record_frame': s['tl_in'], 'track_index': 1} for s in segments[count:]]
+                    infos = clip_infos(segments[count:], item_id, speed, fps, track_index=1)
                     added = await call(session, 'media_pool', 'append_to_timeline', clip_infos=infos)
                     if added['count'] != len(infos):
                         raise ValueError('MCP appended fewer clips than expected')
+                    set_speeds(manifest['project'], base, count, len(infos), speed)
                 base_probe = await call(session, 'timeline', 'probe_timeline_structure', track_types=['video', 'audio'], include_markers=False)
                 for kind in ('video', 'audio'):
                     base_items = primary_items(base_probe, kind)
@@ -447,6 +549,7 @@ async def import_package(package, manifest, mapping, attempt):
                             base_probe['start_frame'] + seg['tl_in'], base_probe['start_frame'] + seg['tl_out'], item_id, str(source)):
                             raise ValueError(f'Base {kind} item {i} differs from approved source')
                 await call(session, 'project_manager', 'save')
+                main_format = match_previous_format(manifest['project'], base, final)
                 raw_drt = package / (base + '.drt')
                 await export_atomically(session, raw_drt, 'timeline', 'export_timeline_checked', format='DRT', require_temp_path=False)
                 final_drt = package / (final + '.drt')
@@ -473,9 +576,7 @@ async def import_package(package, manifest, mapping, attempt):
             validate_items(probe, segments, spec, item_id, source)
             for kind in ('video', 'audio'):
                 for i, s in enumerate(segments):
-                    offset = await call(session, 'timeline_item', 'get_left_offset', track_type=kind, track_index=1, item_index=i)
-                    if offset['offset'] != s['src_in']:
-                        raise ValueError(f'{kind} source offset differs at clip {i}')
+                    await check_source_position(session, kind, i, s, speed, fps)
             audio_ids = [item['timeline_item_id'] for item in probe['tracks']['audio']['tracks'][0]['items']]
             for i, audio_id in enumerate(audio_ids):
                 links = await call(session, 'timeline_item', 'get_linked_items', track_type='video', track_index=1, item_index=i)
@@ -484,7 +585,11 @@ async def import_package(package, manifest, mapping, attempt):
             fps = await call(session, 'timeline', 'get_setting', name='timelineFrameRate')
             if abs(float(fps['settings']) - manifest['fps'][0] / manifest['fps'][1]) > 0.001:
                 raise ValueError('Timeline frame rate differs from approved source')
-            if CONFIG.get('resolution') and CONFIG.get('existing_project_only') is not True:
+            if main_format:      # 沿用上一版主线的画幅：读回核对导入后的主线
+                size = [int(float((await call(session, 'timeline', 'get_setting', name=key))['settings'])) for key in FORMAT_KEYS[:2]]
+                if size != [main_format['width'], main_format['height']]:
+                    raise ValueError(f"新主线画幅 {size[0]}×{size[1]}，和上一版主线「{main_format['from']}」的 {main_format['width']}×{main_format['height']} 不一样")
+            elif CONFIG.get('resolution') and CONFIG.get('existing_project_only') is not True:
                 size = [int(float((await call(session, 'timeline', 'get_setting', name=key))['settings']))
                         for key in ('timelineResolutionWidth', 'timelineResolutionHeight')]
                 problem = resolution_problem(size, CONFIG)
@@ -496,9 +601,11 @@ async def import_package(package, manifest, mapping, attempt):
             readback = {'passed': True, 'status': 'complete', 'attempt': attempt, 'project_reopened': True, 'timeline': final, 'timeline_id': probe['id'],
                         'frames': manifest['frames'], 'video_clips': len(segments), 'audio_clips': len(segments),
                         'linked_pairs': len(segments), 'subtitle_cues': len(spec['subtitles']), 'source_offset_checks': len(segments)*2,
-                        'resolve_render_started': False}
+                        'resolve_render_started': False, **({'speed_percent': speed * 100} if speed is not None else {})}
             if project_format_report is not None:
                 readback['project_format_import'] = project_format_report
+            if main_format:
+                readback['main_format'] = main_format
             readback['archived_timelines'] = await archive_old_timelines(session, final)
             final_export = package / (final + '_Resolve回存.drt')
             await export_atomically(session, final_export, 'timeline', 'export_timeline_checked', format='DRT', require_temp_path=False)

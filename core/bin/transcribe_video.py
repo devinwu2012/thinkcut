@@ -65,8 +65,9 @@ def probe_duration(video, ffmpeg):
         raise ValueError("视频时长需大于 0 且不超过 2 小时（程序一次最多送豆包识别 2 小时）")
     stream_lines = [line for line in process.stderr.splitlines() if re.search(r"Stream #\d+:\d+", line)]
     audio_streams = [line for line in stream_lines if ": Audio:" in line]
-    if not any(": Video:" in line for line in stream_lines) or not audio_streams:
-        raise ValueError("文件必须包含视频和音频流")
+    # 2026-11-27 起剪口播送识别的是只有声音的 1.2 倍速声音文件（倍速在达芬奇里做），所以不再要求有画面
+    if not audio_streams:
+        raise ValueError("文件里没有声音")
     return seconds, len(audio_streams)
 
 

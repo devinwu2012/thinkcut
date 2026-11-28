@@ -182,6 +182,17 @@ class MattingTests(unittest.TestCase):
         projected=matte.projected(mask,props,2880,2160)
         self.assertTrue(np.all(projected[:,38:60]>250));self.assertTrue(np.all(projected[:,5:35]==0))
 
+    def test_v1_original_at_120_percent_is_matted_from_original_time(self):
+        """2026-11-27 起口播原片（30 帧）在达芬奇里设 120%：按原片时间取帧、加速成 29.97 帧再抠，不再当成“变速不能抠”跳过。"""
+        src=Mock();src.GetStart.return_value=100;src.GetEnd.return_value=700;src.GetClipEnabled.return_value=True
+        src.GetDuration.return_value=600;src.GetSourceStartFrame.return_value=300;src.GetSourceEndFrame.return_value=1020
+        src.GetSpeed.return_value={'Percentage':120.0,'PitchCorrection':True}
+        src.GetMediaPoolItem.return_value.GetClipProperty.side_effect=lambda k:{'FPS':'30.0','File Path':'原片.mov'}[k]
+        timeline=Mock();timeline.GetTrackCount.return_value=1;timeline.GetItemListInTrack.side_effect=lambda kind,n:[src]
+        rows=matte.visible_segments(timeline,200,260)
+        self.assertEqual(len(rows),1)
+        self.assertAlmostEqual(rows[0]['retime']['seconds'],10+100*1.2*1001/30000,places=5);self.assertEqual(rows[0]['retime']['speed'],1.2)
+
     def test_upper_picture_splits_and_suppresses_v1(self):
         src=Mock();src.GetStart.return_value=100;src.GetEnd.return_value=150;src.GetClipEnabled.return_value=True
         src.GetDuration.return_value=50;src.GetSourceStartFrame.return_value=20;src.GetSourceEndFrame.return_value=70;src.GetLeftOffset.return_value=20

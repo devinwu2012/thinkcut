@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ThinkCut 接入一台 Mac：把这里的 5 个技能入口（thinkcut-edit、thinkcut-project、thinkcut-cover、thinkcut-upload、thinkcut-feedback）链接给 Claude 和 Codex，
+# ThinkCut 接入一台 Mac：把这里的 5 个技能入口（thinkcut-edit、thinkcut-project、thinkcut-cover、thinkcut-upload、thinkcut-feedback）链接给 Claude 和 Codex（辅助技能 hyperframes 两个也两边补齐），
 # 再跑各项目自检（字幕和花字用 macOS 自带的冬青黑体，不用另装字体）。
 #   bash bin/setup_mac.sh           # 链接技能＋装上传工具＋恢复环境运行副本＋自检
 #   bash bin/setup_mac.sh --links   # 只链接技能（发版后 bin/release.py 自动跑这一步）
@@ -30,6 +30,20 @@ if [[ -f "$ROOT/bin/legacy_names.sh" ]]; then
   source "$ROOT/bin/legacy_names.sh"
   for pair in ${THINKCUT_LEGACY_SKILLS:-}; do link "${pair%%=*}" "$ROOT/${pair#*=}"; done
 fi
+# 辅助技能（2026-11-28：后台 AI 也带，见 studio/skill/thinkcut-edit/scripts/thinkcut/aitools.py 的 HELPER_SKILLS）：不在程序里，是你自己装的；
+# 哪边有就给另一边补个链接，Claude 和 Codex 两边一样。两边都没有只提醒，不算失败（有 HyperFrames 镜头才用得上）。
+for name in hyperframes hyperframes-cli; do
+  src=""
+  for d in "${HOME}/.codex/skills" "${HOME}/.claude/skills" "${HOME}/.agents/skills"; do
+    [[ -f "${d}/${name}/SKILL.md" ]] && { src=$(cd "${d}/${name}" && pwd -P); break; }
+  done
+  [[ -n "${src}" ]] || { echo "没找到辅助技能 ${name}（做 HyperFrames 动画时参考用，可以不装）"; continue; }
+  for dir in "${HOME}/.claude/skills" "${HOME}/.codex/skills"; do
+    [[ -f "${dir}/${name}/SKILL.md" ]] && continue
+    if [[ -e "${dir}/${name}" || -L "${dir}/${name}" ]]; then echo "已有同名的，未覆盖：${dir}/${name}"; continue; fi
+    mkdir -p "${dir}" && ln -s "${src}" "${dir}/${name}" && echo "链接 ${dir}/${name} → ${src}"
+  done
+done
 if [[ $only_links == 1 ]]; then [[ $failed == 0 ]] && echo "技能链接就绪" || echo "有技能没链上，见上面"; exit $failed; fi
 echo "--- 上传用的 yxer-safe（只存蚁小二草稿、拦发布命令；Key 要在这台 Mac 上单独设：yxer-safe key set）"
 bash "$ROOT/projects/bin/setup_mac.sh" || failed=1      # 2026-11-13 审查：以前总安装脚本不装它，新 Mac 上传时报找不到 yxer-safe

@@ -174,7 +174,7 @@ class MaterialTests(Base):
         self.assertEqual((self.dst / '口播.mov').read_bytes(), b'old', '同名不覆盖'); self.assertEqual((self.dst / '口播 (2).mov').read_bytes(), b'k' * 5000)
         self.assertEqual((self.dst / '一组B roll' / '1.mp4').read_bytes(), b'1' * 3000); self.assertFalse((self.dst / '一组B roll' / '.DS_Store').exists())
         self.assertTrue((src / '口播.mov').exists(), '原文件不动')
-        files = M.info(self.job)['files']; self.assertEqual({x['how'] for x in files}, {'登记路径'}); self.assertEqual(files[1]['size'], 3000)
+        files = M.info(self.job)['files']; self.assertEqual({x['how'] for x in files}, {'登记路径'}); self.assertEqual(sorted(x['size'] for x in files), [3000, 5000])      # 两份同时拷，谁先登记不一定（GitHub 测试机上顺序和本机相反，2026-11-27）
         with self.assertRaises(M.Oops): M.add_paths(self.job, '  ')
 
 

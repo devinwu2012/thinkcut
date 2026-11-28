@@ -56,6 +56,8 @@ class ArchiveTests(unittest.TestCase):
         session = FakeSession(['old','base','final','final_未完成_abcdef'],[{'name':'final'}])
         allowed = {'base','final','final_未完成_abcdef'}
         asyncio.run(importer.validate_timeline_inventory(session,{'old'},allowed,'final'))
+        session.timelines.append('old_archived_v03')                     # 别的线的 MCP 备份（后台 AI 经达芬奇 MCP 改过 old）：不算多出（2026-11-28）
+        asyncio.run(importer.validate_timeline_inventory(session,{'old'},allowed,'final'))
         session.timelines.append('final_archived_v01')
         with self.assertRaisesRegex(ValueError,'达芬奇里多出了时间线：final_archived_v01'):
             asyncio.run(importer.validate_timeline_inventory(session,{'old'},allowed,'final'))
