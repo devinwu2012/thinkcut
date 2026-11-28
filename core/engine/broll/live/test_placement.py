@@ -18,7 +18,7 @@ class PlacementTests(unittest.TestCase):
         self.assertEqual(result['method'],'direct');self.assertEqual(result['source_start_frame'],180)
 
     def test_render_reasons(self):
-        for change in ({'vfr':True},{'hdr':True},{'fps':59.94},{'fps':30}):
+        for change in ({'vfr':True},{'hdr':True},{'fps':30},{'fps':25}):           # 59.94 2026-11-28 起直接放（真达芬奇实测）
             with self.subTest(change=change):self.assertEqual(choose_placement(row(**change),0,100)['method'],'render')
 
     def test_photos_and_pool_external_ordinary_sources_use_original(self):
@@ -65,3 +65,46 @@ class PlacementTests(unittest.TestCase):
     def test_unknown_vfr_not_assumed_constant(self):
         c=row();del c['vfr']
         self.assertEqual(choose_placement(c,0,100)['method'],'render')
+
+
+class ColorManagedTests(unittest.TestCase):
+    """2026-11-28 用户定“工程开色彩管理”：开着时 HDR 素材交给达芬奇，直接引用原片；没开照旧转码。"""
+    def test_hdr_direct_when_color_managed(self):
+        from broll.live.placement import choose_placement, prepare_placement
+        c = {'segment': 's', 'kind': 'video', 'fps': [30000, 1001], 'vfr': False, 'hdr': True, 'in_media_pool': True}
+        self.assertEqual(choose_placement(c, 0, 30)['method'], 'render')
+        got = choose_placement(c, 0, 30, color_managed=True)
+        self.assertEqual(got['method'], 'direct'); self.assertIn('色彩管理', got['reason'])
+        self.assertEqual(prepare_placement(c, 0, 30, color_managed=True)['method'], 'direct')
+        vfr = dict(c, vfr=True, fps=[25, 1])                                    # 真可变帧率、不支持的帧率照旧转码
+        self.assertEqual(choose_placement(vfr, 0, 30, color_managed=True)['method'], 'render')
+
+    def test_iphone_5994_direct(self):
+        # 2026-11-28 真达芬奇实测：iPhone 59.94（ffprobe 报可变帧率，平均 59.898）直接放帧数、入点都准
+        from broll.live.placement import choose_placement
+        c = {'segment': 's', 'kind': 'video', 'fps': [602400, 10057], 'vfr': True, 'hdr': True, 'nominal_fps': [60000, 1001]}
+        got = choose_placement(c, 75, 90, color_managed=True)
+        self.assertEqual(got['method'], 'direct'); self.assertEqual(got['source_start_frame'], 150); self.assertEqual(got['source_frames'], 180)
+        self.assertEqual(choose_placement(dict(c, fps=[50, 1], vfr=False), 0, 30, color_managed=True)['method'], 'render')
+        self.assertEqual(choose_placement(dict(c, nominal_fps=None), 0, 30, color_managed=True)['method'], 'render')    # 老索引没记标称帧率：照旧转码
+
+    def test_color_managed_rule(self):
+        from broll.live.placement import color_managed_ok, COLOR_MANAGED
+        want = dict(COLOR_MANAGED)
+        self.assertTrue(color_managed_ok(want.get))
+        self.assertFalse(color_managed_ok(dict(want, timelineWorkingLuminanceMode='HDR 1000').get))     # 只开自动管理、工作亮度 HDR 1000：HDR 过曝，不算
+        self.assertFalse(color_managed_ok(dict(want, colorSpaceOutput='Rec.709 Gamma 2.4').get))         # 输出标准是 Rec.709-A
+        self.assertFalse(color_managed_ok({}.get))
+
+
+class RateRatioTests(unittest.TestCase):
+    def test_rate_ratio(self):
+        # 2026-11-28 真达芬奇：iPhone 59.94 读成 60，放进 29.97 时结束帧按 60/29.97 往上取整，90 帧要给 181 个源帧
+        import math
+        from types import SimpleNamespace
+        sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+        from engine.broll.live.resolve_adapter import Adapter
+        me = SimpleNamespace(main=SimpleNamespace(GetSetting=lambda k: '29.97'))
+        clip = lambda fps: SimpleNamespace(GetClipProperty=lambda k: fps)
+        r = Adapter.rate_ratio(me, clip(60.0)); self.assertEqual(math.ceil(90 * r - 1e-9), 181); self.assertEqual(math.ceil(151 * r - 1e-9), 303)
+        self.assertIsNone(Adapter.rate_ratio(me, clip(29.97))); self.assertIsNone(Adapter.rate_ratio(me, clip(None))); self.assertIsNone(Adapter.rate_ratio(me, clip(24.0 * 0)))

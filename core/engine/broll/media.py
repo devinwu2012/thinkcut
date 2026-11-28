@@ -90,6 +90,7 @@ def probe(path, kind='video'):
     if kind == 'video' and duration <= 0:raise RuntimeError('素材时长无效：'+str(path))
     return {'width':stream['width'],'height':stream['height'],'fps_num':fps.numerator,
             'fps_den':fps.denominator,'duration':duration,'vfr':vfr,'color_transfer':stream.get('color_transfer'),
+            'nominal_fps':[Fraction(stream.get('r_frame_rate') or '0/1').numerator,Fraction(stream.get('r_frame_rate') or '0/1').denominator] if kind=='video' else None,
             'has_audio':kind=='video' and any(s.get('codec_type')=='audio' for s in data['streams']),
             'hdr':stream.get('color_transfer') in ('arib-std-b67','smpte2084')}
 

@@ -814,7 +814,7 @@ def main():
     p = sp.add_parser('script-sync', help='把项目文案里的 标题、封面文字 写进 项目.json（title、cover_main）'); p.add_argument('directory')
     p = sp.add_parser('script', help='从项目文案 03_成片/<项目名>.md 取 标题／封面文字／口播正文'); p.add_argument('directory')
     p.add_argument('--part', choices=('标题', '封面', '封面文字', '口播', '口播正文', '简介', '标签', '话题', '小红书标题'), help='只取这一类；不写时全打出来并标明缺哪类')
-    for name in ('adopt', 'resolve-library', 'resolve-open', 'check', 'materials-check', 'accounts', 'cover-brief', 'cover-register', 'register-final', 'archive', 'archive-stills', 'seal', 'verify', 'upload', 'activities', 'copy-draft', 'copy-apply'):
+    for name in ('adopt', 'resolve-library', 'resolve-open', 'resolve-color', 'check', 'materials-check', 'accounts', 'cover-brief', 'cover-register', 'register-final', 'archive', 'archive-stills', 'seal', 'verify', 'upload', 'activities', 'copy-draft', 'copy-apply'):
         p = sp.add_parser(name); p.add_argument('directory')
         if name == 'resolve-library':
             p.add_argument('--migrate', action='store_true', help='工程是借用别的库建的（达芬奇开着时建的新片子）：迁回片子自己的库')
@@ -870,6 +870,9 @@ def main():
             if a.cmd == 'resolve-open':      # 2026-11-23 初稿模式实测：达芬奇开没开都能备好这条片子的工程，不问
                 import resolve_library
                 print(json.dumps(resolve_library.open_project(d), ensure_ascii=False, indent=2)); return
+            if a.cmd == 'resolve-color':     # 2026-11-28 用户定“工程开色彩管理”：给已有工程补上（新工程建的时候就开）
+                import resolve_library
+                print(json.dumps(resolve_library.enable_color_management(d), ensure_ascii=False, indent=2)); return
             if a.cmd == 'materials-check':
                 print(json.dumps(check_materials(d), ensure_ascii=False, indent=2)); return
             if a.cmd == 'accounts':

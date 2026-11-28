@@ -2,6 +2,7 @@
 
 No render, database switching, or opening a project on initial connection.
 """
+import math
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -204,15 +205,27 @@ class Adapter(ResolveIO):
             raise RuntimeError('B-roll片段导入读回不符：'+str(path))
         return imported[0]
 
+    def rate_ratio(self, media):
+        """源帧率÷时间线帧率（相差不到千分之一返回 None＝当一样）。照片、读不到帧率的返回 None。"""
+        try:
+            src = float(media.GetClipProperty('FPS') or 0); tl = float(self.main.GetSetting('timelineFrameRate') or 0)
+        except (TypeError, ValueError):
+            return None
+        if src <= 0 or tl <= 0 or abs(src/tl-1) < 0.001: return None
+        return src/tl
+
     def append_clip(self, media, kind, track, start, offset, length, allow_disabled=False):
         self.activate(self.main)
         if (not allow_disabled and not self.main.GetIsTrackEnabled(kind,track)) or self.main.GetIsTrackLocked(kind,track):
             raise ValueError('目标轨道已停用或锁定')
         if any(i.GetStart()<start+length and start<i.GetEnd() for i in self.main.GetItemListInTrack(kind,track) or []):
             raise ValueError('目标区间已有片段，不覆盖')
-        # 待实测：endFrame 半开、源帧域、mediaType=1/2、LeftOffset 读回。
+        # 源帧率和时间线不一样（59.94 的 iPhone 原片放进 29.97，2026-11-28 真达芬奇实测）：达芬奇按它自己读到的帧率（iPhone 报 60）
+        # 把源帧数换成时间线帧数再取整，所以 endFrame 要按这个比例往上取；入点就是源帧号（GetSourceStartFrame），LeftOffset 是换算后的小数。
+        ratio = self.rate_ratio(media)
+        src_len = math.ceil(length*ratio-1e-9) if ratio else length
         placed = self.write(self.p.GetMediaPool().AppendToTimeline, [dict(mediaPoolItem=media,
-            startFrame=offset, endFrame=offset+length, recordFrame=start, trackIndex=track,
+            startFrame=offset, endFrame=offset+src_len, recordFrame=start, trackIndex=track,
             mediaType=1 if kind=='video' else 2)])
         if not placed or len(placed)!=1:
             raise RuntimeError('精确放置未返回一个片段')
@@ -224,7 +237,8 @@ class Adapter(ResolveIO):
             and item.GetDuration()>0 and item.GetEnd()==start+item.GetDuration()
             and item.GetDuration()!=length):
             raise PhotoDurationMismatch(item,length,item.GetDuration())
-        if (item.GetStart(),item.GetEnd(),item.GetDuration())!=(start,start+length,length) or (not photo and item.GetLeftOffset()!=offset):
+        left_ok = photo or (item.GetSourceStartFrame()==offset if ratio else item.GetLeftOffset()==offset)
+        if (item.GetStart(),item.GetEnd(),item.GetDuration())!=(start,start+length,length) or not left_ok:
             raise RuntimeError('段 '+item.GetUniqueId()+'：放置范围或源入点读回不符；预期='+str((start,start+length,length,offset))+'，实际='+str((item.GetStart(),item.GetEnd(),item.GetDuration(),item.GetLeftOffset())))
         return item
 

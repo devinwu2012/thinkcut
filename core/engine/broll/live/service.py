@@ -150,6 +150,18 @@ class Session:
             self.ledger=delta['ledger']
         self.ledger['last_learned']=datetime.now().astimezone().isoformat();self.save()
 
+    def nominal(self, meta):
+        """老索引没记标称帧率（ffprobe 的 r_frame_rate）的视频：补探一次（一条 ffprobe），iPhone 59.94 素材才能直接放（2026-11-28）。"""
+        if meta.get('kind') != 'video' or meta.get('nominal_fps') or (meta.get('probe') or {}).get('nominal_fps'): return meta
+        try: meta['nominal_fps'] = media.probe(meta['file'])['nominal_fps']
+        except Exception: pass
+        return meta
+
+    def color_managed(self):
+        """工程开着达芬奇自动色彩管理没有（2026-11-28 用户定开）：开着就把 HDR 素材交给达芬奇，不转码。读不到当作没开（照旧转码）。"""
+        try: return placement.color_managed_ok(self.io.p.GetSetting)
+        except Exception: return False
+
     def model(self):
         return build_model(self.snapshot,self.ledger,self.profile,self.fx_record)
 
@@ -244,7 +256,7 @@ class Session:
                     if (row['spot'],n,candidate['segment']) not in eligible:
                         keep.append(candidate);continue
                     meta=self.catalog[candidate['segment']]
-                    how=placement.prepare_placement(meta,candidate.get('source_start',meta['usable_start']),shot['end']-cursor,timeline_fps=self.model()['fps'],folder_rules=self.profile.get('folder_lut_rules',self.config.get('folder_lut_rules',[])),lut_dirs=self.config.get('lut_dirs'))
+                    how=placement.prepare_placement(self.nominal(meta),candidate.get('source_start',meta['usable_start']),shot['end']-cursor,timeline_fps=self.model()['fps'],folder_rules=self.profile.get('folder_lut_rules',self.config.get('folder_lut_rules',[])),lut_dirs=self.config.get('lut_dirs'),color_managed=self.color_managed())
                     if how['method']=='skip':unavailable.append({'spot':row['spot'],'shot':n,'segment':candidate['segment'],'reasons':[how['reason']]})
                     else:keep.append(candidate)
                 shot['candidates']=keep;cursor=shot['end']
@@ -263,7 +275,7 @@ class Session:
         for p in outcome['placements']:
             if p['status']!='placed':continue
             parent=p['spot'];spot=parent if p.get('shot',1)==1 else parent+'-shot'+str(p['shot']);meta=self.catalog[p['segment']]
-            how=placement.prepare_placement(meta,p['source_start'],p['end']-p['start'],timeline_fps=self.model()['fps'],folder_rules=self.profile.get('folder_lut_rules',self.config.get('folder_lut_rules',[])),lut_dirs=self.config.get('lut_dirs'))
+            how=placement.prepare_placement(self.nominal(meta),p['source_start'],p['end']-p['start'],timeline_fps=self.model()['fps'],folder_rules=self.profile.get('folder_lut_rules',self.config.get('folder_lut_rules',[])),lut_dirs=self.config.get('lut_dirs'),color_managed=self.color_managed())
             if how['method']=='skip':
                 raise ValueError('spot '+spot+' / 段 '+p['segment']+'：候选准备状态已变化：'+how['reason'])
             path=meta['file'];offset=how['source_start_frame'];generated=False

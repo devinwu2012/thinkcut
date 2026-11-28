@@ -796,6 +796,23 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(p.sync_script(self.d, meta)['文案里没写、没动'], ['标题', '封面文字'])
         self.assertEqual(p.read_json(self.d / '项目.json')['title'], '开关插座装多高才顺手')
 
+    def test_color_management(self):
+        # 2026-11-28 用户定“工程开色彩管理”：新工程建好就开；已有工程 resolve-color 补上（只认当前开着的就是这条片子的）
+        import resolve_library as rl
+        pm, r = self._fake_resolve([{'DbType': 'Disk', 'DbName': '别的库'}], '别的库', {'别的库': {'别的片子': ['v1']}})
+        cur = pm.GetCurrentProject()
+        with self.assertRaisesRegex(RuntimeError, '不是《'): rl.enable_color_management(self.d, r)
+        self.assertEqual(cur.set, {})
+        cur.n = self.d.name
+        out = rl.enable_color_management(self.d, r)
+        self.assertEqual({k: cur.set.get(k) for k, _ in rl.COLOR_MANAGED}, dict(rl.COLOR_MANAGED)); self.assertTrue(rl.is_color_managed(cur))
+        self.assertEqual(cur.set['colorSpaceOutput'], 'Rec.709-A'); self.assertEqual(cur.set['timelineWorkingLuminanceMode'], 'SDR 100')
+        self.assertEqual(len(out['改了']), len(rl.COLOR_MANAGED)); self.assertEqual(pm.saved[-1], self.d.name)
+        self.assertEqual(rl.enable_color_management(self.d, r)['改了'], '本来就开着')
+        cur.SetSetting = lambda k, v: False
+        cur.set.clear()
+        with self.assertRaisesRegex(RuntimeError, '没设上'): rl.color_manage(cur)
+
     def _fake_resolve(self, dbs, now, projects):
         """达芬奇替身：dbs 库列表，now 当前库名，projects {库名: {工程名: [时间线…]}}；当前工程是 now 库里第一个。"""
         class TL:
@@ -808,6 +825,7 @@ class ProjectTests(unittest.TestCase):
             def GetTimelineCount(s): return len(s.tls)
             def IsRenderingInProgress(s): return s.rendering
             def SetSetting(s, k, v): s.set[k] = v; return True
+            def GetSetting(s, k=None): return s.set.get(k, '') if k else dict(s.set)
         class PM:
             def __init__(s):
                 s.dbs = [dict(x) for x in dbs]; s.tree = {k: {n: Proj(n, t) for n, t in v.items()} for k, v in projects.items()}
@@ -852,6 +870,7 @@ class ProjectTests(unittest.TestCase):
             self.assertEqual(meta['resolve']['database'], OLD); self.assertIn('--migrate', meta['resolve']['borrowed']['说明'])
             self.assertEqual((pm.db['DbName'], pm.cur.GetName(), pm.saved), ('261118 试验田', self.d.name, ['试验田工程', self.d.name]))
             self.assertEqual(pm.cur.set['timelineFrameRate'], '29.97')
+            self.assertTrue(rl.is_color_managed(pm.cur))                                   # 新工程开色彩管理（2026-11-28）
             self.assertEqual(pm.cur.set['perfCacheClipsLocation'], str(self.d / '02_制作/达芬奇缓存'))
             log = rl.switch_log(self.d)
             self.assertEqual((log[0]['原项目库'], log[0]['原工程'], log[0]['原时间线']), ('261118 试验田', '试验田工程', '试验田_审核线4'))

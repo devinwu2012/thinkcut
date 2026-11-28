@@ -10,6 +10,51 @@ SUB = '02_制作/达芬奇工程'
 CACHE = {'perfCacheClipsLocation': '02_制作/达芬奇缓存', 'colorGalleryStillsLocation': '02_制作/达芬奇工程/静帧'}
 
 
+# 达芬奇色彩管理（2026-11-28 用户定：“工程开色彩管理”）：DaVinci YRGB Color Managed、自动色彩管理、SDR（Rec.709）输出。
+# 达芬奇自己认每段素材的色彩（iPhone 的 HDR/HLG 也认），预览和导出都转对；B-roll 的 HDR 素材因此不用再转码成 709，直接引用原片。
+# 顺序有讲究：先换色彩科学，再开自动管理，再选 SDR（和 core/engine/fx/review.py 的 COLOR_SETTINGS 同一个顺序）。
+def _placement():
+    import sys
+    core = Path(__file__).resolve().parents[2] / 'core'
+    if str(core) not in sys.path: sys.path.insert(0, str(core))
+    from engine.broll.live import placement
+    return placement
+
+
+COLOR_MANAGED = _placement().COLOR_MANAGED        # 具体设哪几项、为什么，见 core/engine/broll/live/placement.py（B-roll 用同一条规则判断）
+
+
+def is_color_managed(p):
+    """这个工程开着那一套色彩管理没有（达芬奇自己认 HDR 素材，B-roll 直接用原片）。"""
+    return _placement().color_managed_ok(p.GetSetting)
+
+
+def color_manage(p):
+    """给当前工程开色彩管理并读回核对；设不上报 RuntimeError。返回改了哪些（已经开着返回空列表）。"""
+    if is_color_managed(p): return []
+    changed = []
+    for k, v in COLOR_MANAGED:
+        if str(p.GetSetting(k) or '') == v: continue
+        if not p.SetSetting(k, v): raise RuntimeError(f'达芬奇工程设置 {k}={v} 没设上')
+        changed.append(f'{k}={v}')
+    if not is_color_managed(p):
+        raise RuntimeError('达芬奇工程的色彩管理没设上（读回：' + '、'.join(f'{k}={p.GetSetting(k)!r}' for k in _placement().COLOR_CHECK) + '）')
+    return changed
+
+
+def enable_color_management(d, r=None):
+    """project.py resolve-color：给达芬奇里正开着的这条片子的工程开色彩管理、保存。只认当前开着的就是这条片子的工程（不替你切工程）。"""
+    d = Path(d).resolve(); r = r or connect(launch=False)
+    pm = r.GetProjectManager(); p = pm.GetCurrentProject()
+    if not p or p.GetName() != d.name:
+        raise RuntimeError(f'达芬奇里现在开着的不是《{d.name}》（是《{p.GetName() if p else "没有工程"}》）：先在达芬奇打开这条片子的工程再运行。')
+    if p.IsRenderingInProgress(): raise RuntimeError('达芬奇正在渲染，这次没动：等渲完再跑。')
+    before = {k: p.GetSetting(k) for k, _ in COLOR_MANAGED}
+    changed = color_manage(p)
+    if changed and not pm.SaveProject(): raise RuntimeError('工程保存失败。')
+    return {'工程': d.name, '原来': before, '改了': changed or '本来就开着', '说明': '达芬奇自己认素材的色彩（含 iPhone HDR），预览和导出都转成 Rec.709；B-roll 的 HDR 素材以后直接用原片'}
+
+
 def db(d):
     return {'DbType': 'Disk', 'DbName': Path(d).name}
 
@@ -204,9 +249,10 @@ def open_project(d, r=None, fps='29.97'):
     p = pm.CreateProject(name)
     if not p: raise RuntimeError(f'在项目库「{target["DbName"]}」里新建工程《{name}》失败（文件夹里可能已有同名工程）。')
     if not p.SetSetting('timelineFrameRate', fps): raise RuntimeError(f'新工程的帧率设不成 {fps}。')
+    color_manage(p)                    # 2026-11-28 用户定：新工程开色彩管理
     use_project_folder(p, d)
     if not pm.SaveProject(): raise RuntimeError('新工程保存失败。')
-    out['结果'] = f'新建了工程（帧率 {fps}，缓存和调色静帧在项目文件夹）'
+    out['结果'] = f'新建了工程（帧率 {fps}，开了色彩管理，缓存和调色静帧在项目文件夹）'
     return out
 
 
