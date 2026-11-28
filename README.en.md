@@ -94,7 +94,7 @@ python3 bin/thinkcut_config.py new <name>  # create your own profile ("IP")
 bash bin/build_app.sh --install           # optional: build ThinkCut.app (unsigned: right-click → Open the first time)
 ```
 
-Then open **Settings** (top right of the home page) to sign in to Claude Code / Codex — a Terminal window runs the official login and you sign in yourself — and paste the Doubao and Yixiaoer keys (stored in the Keychain, never shown or written to files). Never paste a key to the AI.
+Then open **Settings** (top right of the home page) to sign in to Claude Code / Codex — a Terminal window runs the official login and you sign in yourself — and paste the Doubao and Yixiaoer keys (stored in the Keychain, never shown or written to files). Never paste a key to the AI. Settings also has an **AI tools** check: which skills, command-line tools and MCP servers each AI can use in the background, what's missing and how to fix it.
 
 Offline tests (also run on GitHub Actions):
 
@@ -155,12 +155,12 @@ Click “Submit to AI” and the desk runs your chosen AI in the background, in 
   <img alt="Chat sidebar: you ask the AI to bring in three B-roll clips and organize them; it lists the renamed files, then summarizes what's waiting in each column with two option buttons." src="docs/screenshots/chat-light.png" width="880">
 </picture>
 
-Press **⌘K** for the chat sidebar. On a project it shares the project's session (“bring in the three B-roll clips on my Desktop”, “where are we?”); on the home page it handles creating projects and finding things. Exporting, publishing and finalizing are never done from chat — they only count when you click them on the page.
+Press **⌘K** for the chat sidebar. On a project it shares the project's session (“bring in the three B-roll clips on my Desktop”, “where are we?”); on the home page it handles creating projects and finding things. Type / for slash commands such as /goal (keep working until a goal is met), /compact, /context, ThinkCut's skills, /clear, /stop and /model; commands that change permissions or turn off the sandbox are refused. Exporting, publishing and finalizing are never done from chat — they only count when you click them on the page.
 
 ## Security
 
 - **Two gates only you can open:** exporting the full video (finalize the Review column) and publishing (you press publish in Yixiaoer; ThinkCut only saves drafts and blocks publish commands).
-- **Sandboxed AI:** the background AI can write only to the project folder and temp; its commands have no network (Claude Code's built-in sandbox; Codex with network off); no permission-bypass flags.
+- **Sandboxed AI:** the background AI can write only to the project folder and temp; its commands have no network (Claude Code's built-in sandbox; Codex with network off); no permission-bypass flags. The DaVinci Resolve MCP is available behind a guard: rendering/exporting, deleting, switching projects and installing plugins are blocked, and it won't write while another session is writing to Resolve.
 - **Keys stay out of reach:** keys live in the Keychain and the AI's environment can't read them. ThinkCut runs allow-listed programs on its behalf, limited to the project folder, scrubbing keys from output.
 - **Your files stay local:** source footage is never modified; hand edits in Resolve are never overwritten; deleting a project moves it to a recycle folder.
 
